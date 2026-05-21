@@ -1,4 +1,6 @@
-import * as webllm from "https://esm.sh/@mlc-ai/web-llm";
+import {
+  CreateMLCEngine
+} from "https://esm.run/@mlc-ai/web-llm";
 
 let engine = null;
 let initializingPromise = null;
@@ -40,12 +42,22 @@ async function initialize() {
   initializingPromise = (async () => {
     postMessage({
       type: "status",
-      text: "Initializing WebLLM...",
+      text: "Downloading model...",
     });
 
-    engine = new webllm.MLCEngine();
-
-    await engine.reload(MODEL);
+    engine = await CreateMLCEngine(
+      MODEL,
+      {
+        initProgressCallback: (progress) => {
+          postMessage({
+            type: "status",
+            text:
+              progress.text ||
+              `Loading ${Math.round(progress.progress * 100)}%`,
+          });
+        },
+      }
+    );
 
     postMessage({
       type: "status",

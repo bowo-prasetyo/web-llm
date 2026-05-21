@@ -86,12 +86,40 @@ async function generate(prompt) {
     content: prompt,
   });
 
+try {
   const response = await engine.chat.completions.create({
     messages: history,
     temperature: 0.7,
     max_tokens: 256,
   });
+} catch (err) {
 
+  if (
+    err.message.includes("Instance reference") ||
+    err.message.includes("GPUBuffer")
+  ) {
+
+    postMessage({
+      type: "status",
+      text: "Recovering GPU context...",
+    });
+
+    engine = null;
+    initializingPromise = null;
+
+    await initialize();
+
+    postMessage({
+      type: "status",
+      text: "GPU context restored",
+    });
+
+    return;
+  }
+
+  throw err;
+}
+  
   const answer = response.choices[0].message.content;
 
   history.push({
@@ -108,6 +136,8 @@ async function generate(prompt) {
     type: "response",
     text: answer,
   });
+
+  resetUnloadTimer();
 }
 
 self.onmessage = async (event) => {
@@ -130,3 +160,20 @@ self.onmessage = async (event) => {
     });
   }
 };
+
+let unloadTimer = null;
+
+function resetUnloadTimer() {
+  clearTimeout(unloadTimer);
+
+  unloadTimer = setTimeout(() => {
+    engine = null;
+    initializingPromise = null;
+
+    postMessage({
+      type: "status",
+      text: "Model unloaded to save memory",
+    });
+  }, 60000);
+};
+

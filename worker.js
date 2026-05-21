@@ -5,7 +5,8 @@ import {
 let engine = null;
 let initializingPromise = null;
 
-const MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+//const MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+const MODEL = "Qwen2.5-0.5B-Instruct-q4f32_1-MLC";
 
 async function saveToOPFS(filename, content) {
   const root = await navigator.storage.getDirectory();

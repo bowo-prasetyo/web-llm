@@ -1,9 +1,17 @@
 const { createApp, ref, onMounted, nextTick } = Vue;
 const { createRouter, createWebHashHistory } = VueRouter;
 
-const worker = new Worker("./worker.js", {
-  type: "module",
-});
+let worker = null;
+
+function getWorker() {
+  if (!worker) {
+    worker = new Worker("./worker.js", {
+      type: "module",
+    });
+  }
+
+  return worker;
+}
 
 const Home = {
   template: `
@@ -49,6 +57,7 @@ const Home = {
     const status = ref("Loading...");
     const messages = ref([]);
     const messagesContainer = ref(null);
+    const worker = getWorker();
 
     async function scrollBottom() {
       await nextTick();

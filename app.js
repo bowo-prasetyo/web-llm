@@ -135,6 +135,8 @@ const router = createRouter({
   routes,
 });
 
-createApp({})
+createApp({
+  template: `<router-view />`
+})
   .use(router)
   .mount("#app");

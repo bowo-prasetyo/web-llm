@@ -86,8 +86,10 @@ async function generate(prompt) {
     content: prompt,
   });
 
+  let response;
+  
 try {
-  const response = await engine.chat.completions.create({
+    response = await engine.chat.completions.create({
     messages: history,
     temperature: 0.7,
     max_tokens: 256,

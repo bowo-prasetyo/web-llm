@@ -11,9 +11,18 @@ let initializingPromise = null;
 let embedder = null;
 let vectorDB = [];
 
-//const MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-const MODEL = "Qwen2.5-0.5B-Instruct-q4f32_1-MLC";
-//const MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+let MODEL = null;
+
+let MODEL_CONFIG = {
+  max_tokens: 256,
+  temperature: 0.7,
+};
+
+let DEVICE_PROFILE = {
+  name: "Unknown",
+  lowEnd: false,
+  unstable: false,
+};
 
 async function saveToOPFS(filename, content) {
   const root = await navigator.storage.getDirectory();
@@ -42,30 +51,246 @@ async function readFromOPFS(filename) {
   }
 }
 
+async function detectBestModel() {
+
+  if (!navigator.gpu) {
+
+    DEVICE_PROFILE = {
+      name: "No WebGPU",
+      lowEnd: true,
+      unstable: true,
+    };
+
+    MODEL =
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+    MODEL_CONFIG = {
+      max_tokens: 128,
+      temperature: 0.7,
+    };
+
+    return;
+  }
+
+  const adapter =
+    await navigator.gpu.requestAdapter();
+
+  if (!adapter) {
+
+    DEVICE_PROFILE = {
+      name: "No GPU Adapter",
+      lowEnd: true,
+      unstable: true,
+    };
+
+    MODEL =
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+    return;
+  }
+
+  let info = {};
+
+  try {
+    info = await adapter.requestAdapterInfo();
+  } catch {
+    info = {};
+  }
+
+  const vendor =
+    (info.vendor || "").toLowerCase();
+
+  const architecture =
+    (info.architecture || "").toLowerCase();
+
+  const description =
+    (
+      info.description ||
+      info.device ||
+      ""
+    ).toLowerCase();
+
+  const gpuText =
+    `${vendor} ${architecture} ${description}`;
+
+  postMessage({
+    type: "status",
+    text: `GPU detected: ${gpuText}`,
+  });
+
+  // ------------------------------------------------
+  // Intel old iGPU detection
+  // ------------------------------------------------
+
+  const unstableIntel =
+    gpuText.includes("uhd graphics 620") ||
+    gpuText.includes("hd graphics") ||
+    gpuText.includes("intel") &&
+    (
+      gpuText.includes("620") ||
+      gpuText.includes("520") ||
+      gpuText.includes("530")
+    );
+
+  // ------------------------------------------------
+  // High-end GPU
+  // ------------------------------------------------
+
+  const highEnd =
+    gpuText.includes("rtx") ||
+    gpuText.includes("radeon") ||
+    gpuText.includes("apple") ||
+    gpuText.includes("adreno 7") ||
+    gpuText.includes("mali-g7");
+
+  // ------------------------------------------------
+  // Mid-range GPU
+  // ------------------------------------------------
+
+  const midRange =
+    gpuText.includes("iris") ||
+    gpuText.includes("xe") ||
+    gpuText.includes("adreno") ||
+    gpuText.includes("mali");
+
+  // ------------------------------------------------
+  // Decide model
+  // ------------------------------------------------
+
+  if (unstableIntel) {
+
+    DEVICE_PROFILE = {
+      name: gpuText,
+      lowEnd: true,
+      unstable: true,
+    };
+
+    MODEL =
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+    MODEL_CONFIG = {
+      max_tokens: 128,
+      temperature: 0.7,
+    };
+
+  } else if (highEnd) {
+
+    DEVICE_PROFILE = {
+      name: gpuText,
+      lowEnd: false,
+      unstable: false,
+    };
+
+    MODEL =
+      "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+
+    MODEL_CONFIG = {
+      max_tokens: 512,
+      temperature: 0.7,
+    };
+
+  } else if (midRange) {
+
+    DEVICE_PROFILE = {
+      name: gpuText,
+      lowEnd: false,
+      unstable: false,
+    };
+
+    MODEL =
+      "Qwen2.5-0.5B-Instruct-q4f32_1-MLC";
+
+    MODEL_CONFIG = {
+      max_tokens: 256,
+      temperature: 0.7,
+    };
+
+  } else {
+
+    DEVICE_PROFILE = {
+      name: gpuText,
+      lowEnd: true,
+      unstable: false,
+    };
+
+    MODEL =
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+    MODEL_CONFIG = {
+      max_tokens: 128,
+      temperature: 0.7,
+    };
+  }
+
+  postMessage({
+    type: "status",
+    text:
+      `Using model: ${MODEL}`,
+  });
+}
+
 async function initialize() {
+
   if (initializingPromise) {
     return initializingPromise;
   }
 
   initializingPromise = (async () => {
+
+    await detectBestModel();
+
     postMessage({
       type: "status",
-      text: "Downloading model...",
+      text:
+        `Loading AI model for device profile...`,
     });
 
-    engine = await CreateMLCEngine(
-      MODEL,
-      {
-        initProgressCallback: (progress) => {
+try {
+
+  engine = await CreateMLCEngine(
+    MODEL,
+    {
+      initProgressCallback: (progress) => {    
           postMessage({
             type: "status",
             text:
               progress.text ||
               `Loading ${Math.round(progress.progress * 100)}%`,
           });
-        },
-      }
-    );
+      },
+    }
+  );
+
+} catch (err) {
+
+  postMessage({
+    type: "status",
+    text:
+      "High-performance mode failed. Falling back...",
+  });
+
+  MODEL =
+    "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+  MODEL_CONFIG = {
+    max_tokens: 128,
+    temperature: 0.7,
+  };
+
+  engine = await CreateMLCEngine(
+    MODEL,
+    {
+      initProgressCallback: (progress) => {
+        postMessage({
+          type: "status",
+          text:
+            progress.text ||
+            `Fallback loading ${Math.round(progress.progress * 100)}%`,
+        });
+      },
+    }
+  );
+}        
 
     await loadVectorDB();
 
@@ -115,11 +340,18 @@ history.push({
   content: augmentedPrompt,
 });
 
-response = await engine.chat.completions.create({
-  messages: history,
-  temperature: 0.7,
-    max_tokens: 256,
+response =
+  await engine.chat.completions.create({
+
+    messages: history,
+
+    temperature:
+      MODEL_CONFIG.temperature,
+
+    max_tokens:
+      MODEL_CONFIG.max_tokens,
   });
+  
 } catch (err) {
 
   if (
@@ -142,11 +374,39 @@ response = await engine.chat.completions.create({
       text: "GPU context restored",
     });
 
-    return;
+    MODEL =
+  "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+MODEL_CONFIG = {
+  max_tokens: 64,
+  temperature: 0.7,
+};
+
+postMessage({
+  type: "status",
+  text:
+    "Switching to compatibility mode...",
+});
+
+await initialize();
+
+postMessage({
+  type: "status",
+  text:
+    "Compatibility mode enabled",
+});
+
+return;
   }
 
   throw err;
 }
+  
+  postMessage({
+  type: "status",
+  text:
+    `Ready (${DEVICE_PROFILE.name})`,
+});
   
   const answer = response.choices[0].message.content;
 

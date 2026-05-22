@@ -91,3 +91,12 @@ button:disabled {
   border-bottom: 1px solid #334155;
   font-size: 14px;
 }
+
+.footer-container {
+  border-top: 1px solid #334155;
+}
+
+.toolbar {
+  padding: 8px 16px;
+  background: #111827;
+}

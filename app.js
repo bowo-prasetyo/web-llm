@@ -34,7 +34,17 @@ const Home = {
         </div>
       </div>
 
-      <div class="footer">
+<div class="footer-container">
+
+  <div class="toolbar">
+    <input
+      type="file"
+      accept=".pdf,.txt,.md"
+      @change="uploadFile"
+    />
+  </div>
+
+  <div class="footer">
         <textarea
           v-model="prompt"
           placeholder="Ask something..."
@@ -49,6 +59,8 @@ const Home = {
         </button>
       </div>
     </div>
+          </div>
+
   `,
 
   setup() {

@@ -107,6 +107,59 @@ const Home = {
       });
     }
 
+    async function uploadFile(event) {
+  const file = event.target.files[0];
+
+  if (!file) {
+    return;
+  }
+
+  status.value = `Reading ${file.name}...`;
+
+  let text = "";
+
+  if (file.type === "application/pdf") {
+
+    const arrayBuffer =
+      await file.arrayBuffer();
+
+    const pdf =
+      await pdfjsLib.getDocument({
+        data: arrayBuffer,
+      }).promise;
+
+    for (
+      let pageNum = 1;
+      pageNum <= pdf.numPages;
+      pageNum++
+    ) {
+
+      const page =
+        await pdf.getPage(pageNum);
+
+      const content =
+        await page.getTextContent();
+
+      const strings =
+        content.items.map(
+          item => item.str
+        );
+
+      text += strings.join(" ") + "\n";
+    }
+
+  } else {
+
+    text = await file.text();
+  }
+
+  worker.postMessage({
+    type: "ingest",
+    filename: file.name,
+    text,
+  });
+}
+    
     worker.onmessage = (event) => {
       const data = event.data;
 
@@ -140,6 +193,7 @@ const Home = {
       messages,
       messagesContainer,
       send,
+      uploadFile,
     };
   },
 };

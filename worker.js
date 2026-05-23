@@ -564,7 +564,8 @@ async function generate(prompt) {
     
       history.push({
         role: "user",
-        content: "Continue",
+        content:
+          "Continue your previous answer only."
       });
     
       let continuation = "";
@@ -928,7 +929,24 @@ function looksIncomplete(text) {
 
   const trimmed = text.trim();
 
-  return !/[.!?。！？]$/.test(trimmed);
+  // Clearly cut mid-word
+  if (
+    /[a-zA-Z0-9]$/.test(trimmed) &&
+    trimmed.length > 200
+  ) {
+    return true;
+  }
+
+  // Ends with continuation indicators
+  if (
+    trimmed.endsWith("...") ||
+    trimmed.endsWith(":") ||
+    trimmed.endsWith(",")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function isCorrupted(text) {

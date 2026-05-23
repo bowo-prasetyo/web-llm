@@ -30,6 +30,7 @@ let RUNTIME_FLAGS = {
 };
 
 let ENGINE_OPTIONS = {};
+let RETRYING_AFTER_CRASH = false;
 
 async function saveToOPFS(filename, content) {
   const root = await navigator.storage.getDirectory();
@@ -489,7 +490,8 @@ async function generate(prompt) {
   });
 
   const answer = response.choices[0].message.content;
-
+  RETRYING_AFTER_CRASH = false;
+  
   const corruptionPattern =
     /[以甫育無通用人民开花]/u;
   
@@ -514,14 +516,59 @@ async function generate(prompt) {
   
     engine = null;
     initializingPromise = null;
-  
+      
+    await saveToOPFS(
+      "gpu-instability.flag",
+      "1"
+    );
+    
+    ENGINE_OPTIONS = {
+      device: "wasm"
+    };
+    
+    MODEL =
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+    
+    MODEL_CONFIG = {
+      max_tokens: 48,
+      temperature: 0.2,
+      contextWindowSize: 256,
+    };
+    
+    engine = null;
+    initializingPromise = null;
+    
+    postMessage({
+      type: "status",
+      text:
+        "Switching to CPU compatibility mode...",
+    });
+    
+    await initialize();
+    
+    postMessage({
+      type: "status",
+      text:
+        "CPU compatibility mode enabled",
+    });
+    
+    // Retry generation once
+    if (!RETRYING_AFTER_CRASH) {
+    
+      RETRYING_AFTER_CRASH = true;
+    
+      return await generate(prompt);
+    }
+    
     postMessage({
       type: "error",
       text:
-        "GPU inference became unstable. Reloading in compatibility mode.",
+        "Compatibility mode also failed.",
     });
-  
+    
+    RETRYING_AFTER_CRASH = false;
     return;
+    
   }
     
   await saveToOPFS(

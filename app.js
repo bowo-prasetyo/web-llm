@@ -160,9 +160,26 @@ const Home = {
   });
 }
     
-    worker.onmessage = (event) => {
+    worker.onmessage = async (event) => {
       const data = event.data;
-
+      
+      if (data.type === "fatal") {
+    
+        worker.terminate();
+    
+        worker = new Worker("worker.js", {
+          type: "module"
+        });
+    
+        setupWorkerListeners();
+    
+        worker.postMessage({
+          type: "init"
+        });
+    
+        return;
+      }
+          
       switch (data.type) {
         case "status":
           status.value = data.text;

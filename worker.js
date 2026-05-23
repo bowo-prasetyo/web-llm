@@ -14,6 +14,7 @@ let LAST_STREAM_TIME = 0;
 let STALL_TIMEOUT = null;
 let REQUEST_COUNTER = 0;
 let ACTIVE_GENERATION = false;
+let SESSION_HISTORY = [];
 
 let engine = null;
 let initializingPromise = null;
@@ -386,14 +387,8 @@ async function generate(prompt) {
     MODEL_CONFIG.max_tokens =
       computeMaxTokens();
   
-    const historyText = await readFromOPFS("chat-history.json");
-  
-    let history = [];
-  
-    if (historyText) {
-      history = JSON.parse(historyText);
-    }
-  
+    let history = [...SESSION_HISTORY];
+    
     let response;
   
     try {
@@ -659,11 +654,8 @@ async function generate(prompt) {
       content: answer,
     });
       
-    await saveToOPFS(
-      "chat-history.json",
-      JSON.stringify(history, null, 2)
-    );
-  
+    SESSION_HISTORY = [...history];
+    
     RETRYING_AFTER_CRASH = false;
     
     postMessage({

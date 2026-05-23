@@ -504,13 +504,12 @@ async function generate(prompt) {
     tooManySymbols
   ) {
   
-    // Already retried once?
     if (RETRYING_AFTER_CRASH) {
   
       postMessage({
         type: "error",
         text:
-          "Compatibility mode failed. Browser WebGPU/WASM backend is unstable.",
+          "Compatibility mode failed.",
       });
   
       RETRYING_AFTER_CRASH = false;
@@ -560,7 +559,28 @@ async function generate(prompt) {
         "CPU compatibility mode enabled",
     });
   
-    return await generate(prompt);
+    // RETRY ONLY INFERENCE
+    response =
+      await engine.chat.completions.create({
+  
+        messages: history,
+  
+        temperature: MODEL_CONFIG.temperature,
+  
+        max_tokens: MODEL_CONFIG.max_tokens,
+      });
+  
+    const retryAnswer =
+      response.choices[0].message.content;
+  
+    RETRYING_AFTER_CRASH = false;
+  
+    postMessage({
+      type: "response",
+      text: retryAnswer,
+    });
+  
+    return;
   }
     
   await saveToOPFS(

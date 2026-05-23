@@ -523,63 +523,19 @@ async function generate(prompt) {
       type: "status",
       text: "GPU instability detected",
     });
-  
+      
     await saveToOPFS(
       "gpu-instability.flag",
       "1"
     );
-  
-    ENGINE_OPTIONS = {
-      device: "wasm"
-    };
-  
-    MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-  
-    MODEL_CONFIG = {
-      max_tokens: 48,
-      temperature: 0.2,
-      contextWindowSize: 256,
-    };
-  
-    engine = null;
-    initializingPromise = null;
-  
+    
     postMessage({
-      type: "status",
+      type: "fatal",
       text:
-        "Switching to CPU compatibility mode...",
+        "GPU became unstable. Restarting in CPU compatibility mode.",
     });
-  
-    await initialize();
-  
-    postMessage({
-      type: "status",
-      text:
-        "CPU compatibility mode enabled",
-    });
-  
-    // RETRY ONLY INFERENCE
-    response =
-      await engine.chat.completions.create({
-  
-        messages: history,
-  
-        temperature: MODEL_CONFIG.temperature,
-  
-        max_tokens: MODEL_CONFIG.max_tokens,
-      });
-  
-    const retryAnswer =
-      response.choices[0].message.content;
-  
-    RETRYING_AFTER_CRASH = false;
-  
-    postMessage({
-      type: "response",
-      text: retryAnswer,
-    });
-  
+    
+    self.close();
     return;
   }
     

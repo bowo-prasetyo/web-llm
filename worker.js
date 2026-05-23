@@ -82,9 +82,9 @@ async function detectBestModel() {
       SMALLEST_MODEL;
   
     MODEL_CONFIG = {
-      max_tokens: 32,
-      temperature: 0.2,
-      contextWindowSize: 128,
+      max_tokens: 128,
+      temperature: 0.3,
+      contextWindowSize: 2048,
     };
   
     postMessage({
@@ -111,11 +111,11 @@ async function detectBestModel() {
       SMALLEST_MODEL;
 
     MODEL_CONFIG = {
-      max_tokens: 64,
+      max_tokens: 128,
       temperature: 0.3,
-      contextWindowSize: 256,
+      contextWindowSize: 2048,
     };
-
+    
     return;
   }
 
@@ -140,11 +140,11 @@ async function detectBestModel() {
       SMALLEST_MODEL;
 
     MODEL_CONFIG = {
-      max_tokens: 64,
+      max_tokens: 128,
       temperature: 0.3,
-      contextWindowSize: 256,
+      contextWindowSize: 2048,
     };
-
+    
     return;
   }
 
@@ -252,7 +252,7 @@ async function detectBestModel() {
     MODEL_CONFIG = {
       max_tokens: 256,
       temperature: 0.5,
-      contextWindowSize: 1024,
+      contextWindowSize: 2048,
     };
 
     return;
@@ -271,9 +271,9 @@ async function detectBestModel() {
       SMALLEST_MODEL;
 
     MODEL_CONFIG = {
-      max_tokens: 96,
+      max_tokens: 128,
       temperature: 0.3,
-      contextWindowSize: 512,
+      contextWindowSize: 2048,
     };
 
     return;
@@ -293,7 +293,7 @@ async function detectBestModel() {
   MODEL_CONFIG = {
     max_tokens: 128,
     temperature: 0.3,
-    contextWindowSize: 512,
+    contextWindowSize: 2048,
   };
 }
 

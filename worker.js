@@ -222,7 +222,12 @@ async function detectBestModel() {
       temperature: 0.7,
     };
   }
-
+  
+  postMessage({
+    type: "status",
+    text: JSON.stringify(info),
+  });
+  
   postMessage({
     type: "status",
     text: `Using model: ${MODEL}`,

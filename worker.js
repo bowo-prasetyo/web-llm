@@ -29,6 +29,8 @@ let RUNTIME_FLAGS = {
   safeMode: false,
 };
 
+let ENGINE_OPTIONS = {};
+
 async function saveToOPFS(filename, content) {
   const root = await navigator.storage.getDirectory();
 
@@ -82,8 +84,10 @@ async function detectBestModel() {
       contextWindowSize: 256,
     };
 
-    RUNTIME_FLAGS.safeMode = true;
-
+    ENGINE_OPTIONS = {
+      device: "wasm"
+    };
+        
     postMessage({
       type: "status",
       text: "Using persistent compatibility mode",
@@ -314,6 +318,8 @@ async function initialize() {
       engine = await CreateMLCEngine(
         MODEL,
         {
+          ...ENGINE_OPTIONS,
+      
           contextWindowSize:
             MODEL_CONFIG.contextWindowSize,
           initProgressCallback: (progress) => {
@@ -328,30 +334,43 @@ async function initialize() {
 
     } catch (err) {
 
-      postMessage({
-        type: "status",
-        text: "High-performance mode failed. Falling back...",
-      });
+      const gpuCrash =
+        err.message.includes("DXGI_ERROR") ||
+        err.message.includes("Device was lost") ||
+        err.message.includes("device removed") ||
+        err.message.includes("GPUBuffer");
 
-      MODEL =
-        "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+      if (gpuCrash) {
 
-      MODEL_CONFIG = {
-        max_tokens: 128,
-        temperature: 0.7,
-      };
-
-      engine = await CreateMLCEngine(
-        MODEL, {
-          initProgressCallback: (progress) => {
-            postMessage({
-              type: "status",
-              text: progress.text ||
-                `Fallback loading ${Math.round(progress.progress * 100)}%`,
-            });
-          },
-        }
-      );
+        await saveToOPFS(
+          "gpu-instability.flag",
+          "1"
+        );
+      
+        ENGINE_OPTIONS = {
+          device: "wasm"
+        };
+      
+        MODEL =
+          "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+      
+        MODEL_CONFIG = {
+          max_tokens: 48,
+          temperature: 0.2,
+          contextWindowSize: 256,
+        };
+      
+        engine = null;
+        initializingPromise = null;
+      
+        postMessage({
+          type: "error",
+          text:
+            "GPU became unstable. Switched to CPU compatibility mode. Reload page.",
+        });
+      
+        return;
+      }
     }
 
     await loadVectorDB();

@@ -122,14 +122,14 @@ async function detectBestModel() {
   // ------------------------------------------------
   // Intel modern iGPU detection
   // ------------------------------------------------
-    
+
   const modernIntel =
     gpuText.includes("xe");
 
   // ------------------------------------------------
   // Intel old iGPU detection
   // ------------------------------------------------
-  
+
   const unstableIntel =
     gpuText.includes("intel") &&
     !modernIntel;
@@ -137,7 +137,7 @@ async function detectBestModel() {
   // ------------------------------------------------
   // Mid-range GPU
   // ------------------------------------------------
-  
+
   const midRange =
     modernIntel ||
     gpuText.includes("adreno") ||
@@ -153,7 +153,7 @@ async function detectBestModel() {
     gpuText.includes("apple") ||
     gpuText.includes("adreno 7") ||
     gpuText.includes("mali-g7");
-    
+
   // ------------------------------------------------
   // Decide model
   // ------------------------------------------------
@@ -225,8 +225,7 @@ async function detectBestModel() {
 
   postMessage({
     type: "status",
-    text:
-      `Using model: ${MODEL}`,
+    text: `Using model: ${MODEL}`,
   });
 }
 
@@ -242,56 +241,50 @@ async function initialize() {
 
     postMessage({
       type: "status",
-      text:
-        `Loading AI model for device profile...`,
+      text: `Loading AI model for device profile...`,
     });
 
-try {
+    try {
 
-  engine = await CreateMLCEngine(
-    MODEL,
-    {
-      initProgressCallback: (progress) => {    
-          postMessage({
-            type: "status",
-            text:
-              progress.text ||
-              `Loading ${Math.round(progress.progress * 100)}%`,
-          });
-      },
+      engine = await CreateMLCEngine(
+        MODEL, {
+          initProgressCallback: (progress) => {
+            postMessage({
+              type: "status",
+              text: progress.text ||
+                `Loading ${Math.round(progress.progress * 100)}%`,
+            });
+          },
+        }
+      );
+
+    } catch (err) {
+
+      postMessage({
+        type: "status",
+        text: "High-performance mode failed. Falling back...",
+      });
+
+      MODEL =
+        "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+      MODEL_CONFIG = {
+        max_tokens: 128,
+        temperature: 0.7,
+      };
+
+      engine = await CreateMLCEngine(
+        MODEL, {
+          initProgressCallback: (progress) => {
+            postMessage({
+              type: "status",
+              text: progress.text ||
+                `Fallback loading ${Math.round(progress.progress * 100)}%`,
+            });
+          },
+        }
+      );
     }
-  );
-
-} catch (err) {
-
-  postMessage({
-    type: "status",
-    text:
-      "High-performance mode failed. Falling back...",
-  });
-
-  MODEL =
-    "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-
-  MODEL_CONFIG = {
-    max_tokens: 128,
-    temperature: 0.7,
-  };
-
-  engine = await CreateMLCEngine(
-    MODEL,
-    {
-      initProgressCallback: (progress) => {
-        postMessage({
-          type: "status",
-          text:
-            progress.text ||
-            `Fallback loading ${Math.round(progress.progress * 100)}%`,
-        });
-      },
-    }
-  );
-}        
 
     await loadVectorDB();
 
@@ -315,110 +308,99 @@ async function generate(prompt) {
     history = JSON.parse(historyText);
   }
 
-  history.push({
-    role: "user",
-    content: prompt,
-  });
-
-  // Keep only recent history
-const MAX_HISTORY =
-  DEVICE_PROFILE.lowEnd
-    ? 6
-    : 20;
-
-history = history.slice(-MAX_HISTORY);
-  
   let response;
-  
-try {
-const relevantChunks =
-  await searchRelevantChunks(prompt);
 
-const context =
-  relevantChunks
-    .map(item => item.text)
-    .join("\n\n");
+  try {
 
-const augmentedPrompt =
-  context
-    ? `Context:\n${context}\n\nQuestion:\n${prompt}`
-    : prompt;
+    const relevantChunks =
+      await searchRelevantChunks(prompt);
 
-history.push({
-  role: "user",
-  content: augmentedPrompt,
-});
+    const context =
+      relevantChunks
+      .map(item => item.text)
+      .join("\n\n");
 
-history = history.slice(-MAX_HISTORY);
-  
-response =
-  await engine.chat.completions.create({
+    const augmentedPrompt =
+      context ?
+      `Context:\n${context}\n\nQuestion:\n${prompt}` :
+      prompt;
 
-    messages: history,
-
-    temperature:
-      MODEL_CONFIG.temperature,
-
-    max_tokens:
-      MODEL_CONFIG.max_tokens,
-  });
-  
-} catch (err) {
-
-  if (
-    err.message.includes("Instance reference") ||
-    err.message.includes("GPUBuffer")
-  ) {
-
-    postMessage({
-      type: "status",
-      text: "Recovering GPU context...",
+    history.push({
+      role: "user",
+      content: augmentedPrompt,
     });
 
-    engine = null;
-    initializingPromise = null;
+    // Keep only recent history
+    const MAX_HISTORY =
+      DEVICE_PROFILE.lowEnd ?
+      6 :
+      20;
 
-    await initialize();
+    history = history.slice(-MAX_HISTORY);
 
-    postMessage({
-      type: "status",
-      text: "GPU context restored",
-    });
+    response =
+      await engine.chat.completions.create({
 
-    MODEL =
-  "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+        messages: history,
 
-MODEL_CONFIG = {
-  max_tokens: 64,
-  temperature: 0.7,
-};
+        temperature: MODEL_CONFIG.temperature,
 
-postMessage({
-  type: "status",
-  text:
-    "Switching to compatibility mode...",
-});
+        max_tokens: MODEL_CONFIG.max_tokens,
+      });
 
-await initialize();
+  } catch (err) {
 
-postMessage({
-  type: "status",
-  text:
-    "Compatibility mode enabled",
-});
+    if (
+      err.message.includes("Instance reference") ||
+      err.message.includes("GPUBuffer")
+    ) {
 
-return;
+      postMessage({
+        type: "status",
+        text: "Recovering GPU context...",
+      });
+
+      engine = null;
+      initializingPromise = null;
+
+      await initialize();
+
+      postMessage({
+        type: "status",
+        text: "GPU context restored",
+      });
+
+      MODEL =
+        "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+      MODEL_CONFIG = {
+        max_tokens: 64,
+        temperature: 0.7,
+      };
+
+      postMessage({
+        type: "status",
+        text: "Switching to compatibility mode...",
+      });
+
+      await initialize();
+
+      postMessage({
+        type: "status",
+        text: "Compatibility mode enabled",
+      });
+
+      return;
+    }
+
+    throw err;
   }
 
-  throw err;
-}
-  
   postMessage({
-  type: "status",
-  text:
-    `Ready (${DEVICE_PROFILE.name})`,
-});
-  
+    type: "status",
+    text: `Ready (${DEVICE_PROFILE.name})`,
+  });
+
   const answer = response.choices[0].message.content;
 
   await saveToOPFS(
@@ -524,9 +506,7 @@ function chunkText(
   const chunks = [];
 
   for (
-    let i = 0;
-    i < text.length;
-    i += chunkSize
+    let i = 0; i < text.length; i += chunkSize
   ) {
 
     chunks.push(
@@ -579,8 +559,7 @@ async function ingestDocument(
 
   postMessage({
     type: "status",
-    text:
-      `Embedding ${chunks.length} chunks...`,
+    text: `Embedding ${chunks.length} chunks...`,
   });
 
   for (const chunk of chunks) {
@@ -599,8 +578,7 @@ async function ingestDocument(
 
   postMessage({
     type: "status",
-    text:
-      `${filename} indexed successfully`,
+    text: `${filename} indexed successfully`,
   });
 }
 
@@ -630,4 +608,3 @@ async function searchRelevantChunks(
 
   return scored.slice(0, topK);
 }
-

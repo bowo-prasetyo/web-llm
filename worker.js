@@ -9,6 +9,11 @@ import {
 //const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const SMALLEST_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
 
+let IS_GENERATING = false;
+let LAST_STREAM_TIME = 0;
+let STALL_TIMEOUT = null;
+let REQUEST_COUNTER = 0;
+
 let engine = null;
 let initializingPromise = null;
 let embedder = null;
@@ -373,6 +378,9 @@ async function initialize() {
 async function generate(prompt) {
   await initialize();
 
+  MODEL_CONFIG.max_tokens =
+    computeMaxTokens();
+
   const historyText = await readFromOPFS("chat-history.json");
 
   let history = [];
@@ -410,26 +418,38 @@ async function generate(prompt) {
       20;
 
     history = history.slice(-MAX_HISTORY);
-
+    
+    IS_GENERATING = true;
+    
     let partial = "";
+    let lastChunkAt = Date.now();
+    
+    postMessage({
+      type: "thinking",
+    });
     
     const completion =
       await engine.chat.completions.create({
     
         messages: history,
     
-        temperature: MODEL_CONFIG.temperature,
+        temperature:
+          MODEL_CONFIG.temperature,
     
-        max_tokens: MODEL_CONFIG.max_tokens,
+        max_tokens:
+          MODEL_CONFIG.max_tokens,
     
         stream: true,
       });
     
-    postMessage({
-      type: "thinking",
-    });
+    resetStallTimer();
+    const requestId = ++REQUEST_COUNTER;
     
     for await (const chunk of completion) {
+
+      if (requestId !== REQUEST_COUNTER) {
+        return;
+      }
     
       const delta =
         chunk.choices?.[0]?.delta?.content || "";
@@ -440,11 +460,25 @@ async function generate(prompt) {
     
       partial += delta;
     
+      lastChunkAt = Date.now();
+    
+      resetStallTimer();
+    
       postMessage({
         type: "stream",
         text: partial,
       });
+      
+      postMessage({
+        type: "token",
+        count:
+          partial.split(/\s+/).length,
+      });
     }
+    
+    clearTimeout(STALL_TIMEOUT);
+    
+    IS_GENERATING = false; 
     
     response = {
       choices: [
@@ -489,17 +523,73 @@ async function generate(prompt) {
     text: `Ready (${DEVICE_PROFILE.name})`,
   });
 
-  const answer = response.choices[0].message.content;
+  let answer =
+    response.choices[0].message.content;
+
+  if (
+    looksIncomplete(answer) &&
+    answer.length > 80
+  ) {
+  
+    postMessage({
+      type: "status",
+      text: "Continuing response...",
+    });
+  
+    history.push({
+      role: "assistant",
+      content: answer,
+    });
+  
+    history.push({
+      role: "user",
+      content: "Continue",
+    });
+  
+    let continuation = "";
+  
+    const continuationStream =
+      await engine.chat.completions.create({
+  
+        messages: history,
+  
+        temperature:
+          MODEL_CONFIG.temperature,
+  
+        max_tokens:
+          Math.floor(
+            MODEL_CONFIG.max_tokens * 0.5
+          ),
+  
+        stream: true,
+      });
+  
+    for await (
+      const chunk of continuationStream
+    ) {
+  
+      const delta =
+        chunk.choices?.[0]?.delta?.content || "";
+  
+      if (!delta) {
+        continue;
+      }
+  
+      continuation += delta;
+  
+      postMessage({
+        type: "stream",
+        text:
+          answer + continuation,
+      });
+    }
+  
+    answer += continuation;
+  }
+    
   RETRYING_AFTER_CRASH = false;
   
-  const suspiciousOutput =
-  answer.length > 80 &&
-  (
-    /(以.{0,2}){12,}/u.test(answer) ||
-    /(�){5,}/.test(answer)
-  );
-  
-  if (suspiciousOutput) {
+  if (isCorrupted(answer)) {
   
     // Already retried once?
     if (RETRYING_AFTER_CRASH) {
@@ -738,4 +828,74 @@ async function searchRelevantChunks(
   );
 
   return scored.slice(0, topK);
+}
+
+function resetStallTimer() {
+
+  clearTimeout(STALL_TIMEOUT);
+
+  STALL_TIMEOUT = setTimeout(() => {
+
+    if (!IS_GENERATING) {
+      return;
+    }
+
+    postMessage({
+      type: "status",
+      text: "Generation stalled",
+    });
+
+    postMessage({
+      type: "error",
+      text:
+        "Model stopped responding during generation.",
+    });
+
+    IS_GENERATING = false;
+
+  }, 25000);
+}
+
+function looksIncomplete(text) {
+
+  if (!text) {
+    return true;
+  }
+
+  const trimmed = text.trim();
+
+  return !/[.!?。！？]$/.test(trimmed);
+}
+
+function isCorrupted(text) {
+
+  if (!text) {
+    return true;
+  }
+
+  const strangeChars =
+    text.match(
+      /[以育无人民膛通用�]/g
+    ) || [];
+
+  const ratio =
+    strangeChars.length / text.length;
+
+  return (
+    text.length > 40 &&
+    ratio > 0.25
+  );
+}
+
+function computeMaxTokens() {
+
+  if (DEVICE_PROFILE.lowEnd) {
+    return 96;
+  }
+
+  if (MODEL.includes("1.5B")) {
+    return 512;
+  }
+
+  return 256;
 }

@@ -24,6 +24,11 @@ let DEVICE_PROFILE = {
   unstable: false,
 };
 
+let RUNTIME_FLAGS = {
+  gpuCrashed: false,
+  safeMode: false,
+};
+
 async function saveToOPFS(filename, content) {
   const root = await navigator.storage.getDirectory();
 
@@ -53,6 +58,44 @@ async function readFromOPFS(filename) {
 
 async function detectBestModel() {
 
+  // ------------------------------------------------
+  // Tier 4 — Previously unstable
+  // ------------------------------------------------
+
+  const unstableFlag =
+    await readFromOPFS("gpu-instability.flag");
+
+  if (unstableFlag === "1") {
+
+    DEVICE_PROFILE = {
+      name: "Compatibility Mode",
+      lowEnd: true,
+      unstable: true,
+    };
+
+    MODEL =
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+    MODEL_CONFIG = {
+      max_tokens: 48,
+      temperature: 0.3,
+      contextWindowSize: 256,
+    };
+
+    RUNTIME_FLAGS.safeMode = true;
+
+    postMessage({
+      type: "status",
+      text: "Using persistent compatibility mode",
+    });
+
+    return;
+  }
+
+  // ------------------------------------------------
+  // No WebGPU
+  // ------------------------------------------------
+
   if (!navigator.gpu) {
 
     DEVICE_PROFILE = {
@@ -65,15 +108,22 @@ async function detectBestModel() {
       "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 
     MODEL_CONFIG = {
-      max_tokens: 128,
-      temperature: 0.7,
+      max_tokens: 64,
+      temperature: 0.3,
+      contextWindowSize: 256,
     };
 
     return;
   }
 
+  // ------------------------------------------------
+  // Request Adapter
+  // ------------------------------------------------
+
   const adapter =
-    await navigator.gpu.requestAdapter();
+    await navigator.gpu.requestAdapter({
+      powerPreference: "low-power",
+    });
 
   if (!adapter) {
 
@@ -86,8 +136,18 @@ async function detectBestModel() {
     MODEL =
       "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 
+    MODEL_CONFIG = {
+      max_tokens: 64,
+      temperature: 0.3,
+      contextWindowSize: 256,
+    };
+
     return;
   }
+
+  // ------------------------------------------------
+  // Adapter Info
+  // ------------------------------------------------
 
   let info = {};
 
@@ -96,6 +156,8 @@ async function detectBestModel() {
   } catch {
     info = {};
   }
+
+  console.log("GPU INFO:", info);
 
   const vendor =
     (info.vendor || "").toLowerCase();
@@ -115,66 +177,44 @@ async function detectBestModel() {
 
   postMessage({
     type: "status",
-    text: `GPU detected: ${gpuText}`,
+    text: `GPU detected: ${gpuText || "Unknown GPU"}`,
   });
 
-
   // ------------------------------------------------
-  // Intel modern iGPU detection
-  // ------------------------------------------------
-
-  const modernIntel =
-    gpuText.includes("xe");
-
-  // ------------------------------------------------
-  // Intel old iGPU detection
+  // Tier 1 — Known Modern GPU
   // ------------------------------------------------
 
-  const unstableIntel =
-    gpuText.includes("intel") &&
-    !modernIntel;
-
-  // ------------------------------------------------
-  // Mid-range GPU
-  // ------------------------------------------------
-
-  const midRange =
-    modernIntel ||
-    gpuText.includes("adreno") ||
-    gpuText.includes("mali");
-
-  // ------------------------------------------------
-  // High-end GPU
-  // ------------------------------------------------
-
-  const highEnd =
+  const modernGPU =
     gpuText.includes("rtx") ||
     gpuText.includes("radeon") ||
     gpuText.includes("apple") ||
+    gpuText.includes("arc") ||
     gpuText.includes("adreno 7") ||
     gpuText.includes("mali-g7");
 
   // ------------------------------------------------
-  // Decide model
+  // Tier 2 — Known Midrange
   // ------------------------------------------------
 
-  if (unstableIntel) {
+  const midrangeGPU =
+    gpuText.includes("iris") ||
+    gpuText.includes("xe") ||
+    gpuText.includes("adreno") ||
+    gpuText.includes("mali");
 
-    DEVICE_PROFILE = {
-      name: gpuText,
-      lowEnd: true,
-      unstable: true,
-    };
+  // ------------------------------------------------
+  // Tier 3 — Unknown GPU
+  // ------------------------------------------------
 
-    MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+  const unknownGPU =
+    gpuText.trim() === "";
 
-    MODEL_CONFIG = {
-      max_tokens: 64,
-      temperature: 0.3,
-    };
+  // ------------------------------------------------
+  // Tier Selection
+  // ------------------------------------------------
 
-  } else if (highEnd) {
+  // Tier 1
+  if (modernGPU) {
 
     DEVICE_PROFILE = {
       name: gpuText,
@@ -188,9 +228,14 @@ async function detectBestModel() {
     MODEL_CONFIG = {
       max_tokens: 512,
       temperature: 0.7,
+      contextWindowSize: 2048,
     };
 
-  } else if (midRange) {
+    return;
+  }
+
+  // Tier 2
+  if (midrangeGPU) {
 
     DEVICE_PROFILE = {
       name: gpuText,
@@ -199,17 +244,22 @@ async function detectBestModel() {
     };
 
     MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f32_1-MLC";
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 
     MODEL_CONFIG = {
       max_tokens: 256,
-      temperature: 0.7,
+      temperature: 0.5,
+      contextWindowSize: 1024,
     };
 
-  } else {
+    return;
+  }
+
+  // Tier 3
+  if (unknownGPU) {
 
     DEVICE_PROFILE = {
-      name: gpuText,
+      name: "Unknown GPU",
       lowEnd: true,
       unstable: false,
     };
@@ -218,17 +268,30 @@ async function detectBestModel() {
       "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 
     MODEL_CONFIG = {
-      max_tokens: 128,
-      temperature: 0.7,
+      max_tokens: 96,
+      temperature: 0.3,
+      contextWindowSize: 512,
     };
+
+    return;
   }
-  
-  console.log("info: ", JSON.stringify(info));
-  
-  postMessage({
-    type: "status",
-    text: `Using model: ${MODEL}`,
-  });
+
+  // Conservative fallback
+
+  DEVICE_PROFILE = {
+    name: gpuText,
+    lowEnd: true,
+    unstable: false,
+  };
+
+  MODEL =
+    "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+  MODEL_CONFIG = {
+    max_tokens: 128,
+    temperature: 0.3,
+    contextWindowSize: 512,
+  };
 }
 
 async function initialize() {
@@ -252,9 +315,7 @@ async function initialize() {
         MODEL,
         {
           contextWindowSize:
-            DEVICE_PROFILE.unstable
-              ? 512
-              : 2048,
+            MODEL_CONFIG.contextWindowSize,
           initProgressCallback: (progress) => {
             postMessage({
               type: "status",
@@ -410,6 +471,40 @@ async function generate(prompt) {
 
   const answer = response.choices[0].message.content;
 
+  const corruptionPattern =
+    /[以甫育無通用人民开花]/u;
+  
+  const tooManySymbols =
+    (answer.match(/[^\x00-\x7F]/g) || []).length > 30;
+  
+  if (
+    answer.length > 50 &&
+    corruptionPattern.test(answer) &&
+    tooManySymbols
+  ) {
+  
+    postMessage({
+      type: "status",
+      text: "GPU instability detected",
+    });
+  
+    await saveToOPFS(
+      "gpu-instability.flag",
+      "1"
+    );
+  
+    engine = null;
+    initializingPromise = null;
+  
+    postMessage({
+      type: "error",
+      text:
+        "GPU inference became unstable. Reloading in compatibility mode.",
+    });
+  
+    return;
+  }
+    
   await saveToOPFS(
     "chat-history.json",
     JSON.stringify(history, null, 2)

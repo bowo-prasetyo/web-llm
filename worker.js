@@ -29,7 +29,6 @@ let RUNTIME_FLAGS = {
   safeMode: false,
 };
 
-let ENGINE_OPTIONS = {};
 let RETRYING_AFTER_CRASH = false;
 
 async function saveToOPFS(filename, content) {
@@ -69,34 +68,30 @@ async function detectBestModel() {
     await readFromOPFS("gpu-instability.flag");
 
   if (unstableFlag === "1") {
-
+  
     DEVICE_PROFILE = {
-      name: "Compatibility Mode",
+      name: "Safe GPU Mode",
       lowEnd: true,
       unstable: true,
     };
-
+  
     MODEL =
       "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-
+  
     MODEL_CONFIG = {
-      max_tokens: 48,
-      temperature: 0.3,
-      contextWindowSize: 256,
+      max_tokens: 32,
+      temperature: 0.2,
+      contextWindowSize: 128,
     };
-
-    ENGINE_OPTIONS = {
-      device: "wasm"
-    };
-        
+  
     postMessage({
       type: "status",
-      text: "Using persistent compatibility mode",
+      text: "Using persistent safe GPU mode",
     });
-
+  
     return;
   }
-
+    
   // ------------------------------------------------
   // No WebGPU
   // ------------------------------------------------
@@ -319,8 +314,6 @@ async function initialize() {
       engine = await CreateMLCEngine(
         MODEL,
         {
-          ...ENGINE_OPTIONS,
-      
           contextWindowSize:
             MODEL_CONFIG.contextWindowSize,
           initProgressCallback: (progress) => {
@@ -341,37 +334,26 @@ async function initialize() {
         err.message.includes("device removed") ||
         err.message.includes("GPUBuffer");
 
-      if (gpuCrash) {
-
-        await saveToOPFS(
-          "gpu-instability.flag",
-          "1"
-        );
+        if (gpuCrash) {
+        
+          await saveToOPFS(
+            "gpu-instability.flag",
+            "1"
+          );
+        
+          engine = null;
+          initializingPromise = null;
+        
+          postMessage({
+            type: "fatal",
+            text:
+              "GPU became unstable. Restarting in safe GPU mode.",
+          });
+        
+          self.close();
+          return;
+        }
       
-        ENGINE_OPTIONS = {
-          device: "wasm"
-        };
-      
-        MODEL =
-          "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-      
-        MODEL_CONFIG = {
-          max_tokens: 48,
-          temperature: 0.2,
-          contextWindowSize: 256,
-        };
-      
-        engine = null;
-        initializingPromise = null;
-      
-        postMessage({
-          type: "error",
-          text:
-            "GPU became unstable. Switched to CPU compatibility mode. Reload page.",
-        });
-      
-        return;
-      }
     }
 
     await loadVectorDB();
@@ -438,46 +420,26 @@ async function generate(prompt) {
 
   } catch (err) {
 
-    if (
+    const gpuCrash =
       err.message.includes("Instance reference") ||
-      err.message.includes("GPUBuffer")
-    ) {
-
+      err.message.includes("GPUBuffer") ||
+      err.message.includes("DXGI_ERROR") ||
+      err.message.includes("Device was lost");
+    
+    if (gpuCrash) {
+    
+      await saveToOPFS(
+        "gpu-instability.flag",
+        "1"
+      );
+    
       postMessage({
-        type: "status",
-        text: "Recovering GPU context...",
+        type: "fatal",
+        text:
+          "GPU inference crashed. Restarting in safe GPU mode.",
       });
-
-      engine = null;
-      initializingPromise = null;
-
-      await initialize();
-
-      postMessage({
-        type: "status",
-        text: "GPU context restored",
-      });
-
-      MODEL =
-        "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-
-      MODEL_CONFIG = {
-        max_tokens: 64,
-        temperature: 0.7,
-      };
-
-      postMessage({
-        type: "status",
-        text: "Switching to compatibility mode...",
-      });
-
-      await initialize();
-
-      postMessage({
-        type: "status",
-        text: "Compatibility mode enabled",
-      });
-
+    
+      self.close();
       return;
     }
 
@@ -492,16 +454,18 @@ async function generate(prompt) {
   const answer = response.choices[0].message.content;
   RETRYING_AFTER_CRASH = false;
   
-  const corruptionPattern =
-    /[以甫育無通用人民开花]/u;
+  const repeatedGarbage =
+    /(以.{0,2}){8,}/u.test(answer);
   
-  const tooManySymbols =
-    (answer.match(/[^\x00-\x7F]/g) || []).length > 30;
+  const abnormalDensity =
+    answer.length > 40 &&
+    (
+      answer.match(/[以育无人民通用]/g)?.length || 0
+    ) > answer.length * 0.3;
   
   if (
-    answer.length > 50 &&
-    corruptionPattern.test(answer) &&
-    tooManySymbols
+    repeatedGarbage ||
+    abnormalDensity
   ) {
   
     if (RETRYING_AFTER_CRASH) {

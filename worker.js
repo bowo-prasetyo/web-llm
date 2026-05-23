@@ -383,6 +383,12 @@ async function generate(prompt) {
       computeMaxTokens();
   
     let history = [...SESSION_HISTORY];
+
+    // Keep only recent history
+    const MAX_HISTORY =
+      DEVICE_PROFILE.lowEnd ?
+      6 :
+      20;
     
     let response;
     let finishReason = null;
@@ -406,12 +412,6 @@ async function generate(prompt) {
         role: "user",
         content: augmentedPrompt,
       });
-  
-      // Keep only recent history
-      const MAX_HISTORY =
-        DEVICE_PROFILE.lowEnd ?
-        6 :
-        20;
   
       history = history.slice(-MAX_HISTORY);
       

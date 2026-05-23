@@ -118,19 +118,30 @@ async function detectBestModel() {
     text: `GPU detected: ${gpuText}`,
   });
 
+
+  // ------------------------------------------------
+  // Intel modern iGPU detection
+  // ------------------------------------------------
+    
+  const modernIntel =
+    gpuText.includes("xe");
+
   // ------------------------------------------------
   // Intel old iGPU detection
   // ------------------------------------------------
-
+  
   const unstableIntel =
-    gpuText.includes("uhd graphics 620") ||
-    gpuText.includes("hd graphics") ||
     gpuText.includes("intel") &&
-    (
-      gpuText.includes("620") ||
-      gpuText.includes("520") ||
-      gpuText.includes("530")
-    );
+    !modernIntel;
+
+  // ------------------------------------------------
+  // Mid-range GPU
+  // ------------------------------------------------
+  
+  const midRange =
+    modernIntel ||
+    gpuText.includes("adreno") ||
+    gpuText.includes("mali");
 
   // ------------------------------------------------
   // High-end GPU
@@ -142,17 +153,7 @@ async function detectBestModel() {
     gpuText.includes("apple") ||
     gpuText.includes("adreno 7") ||
     gpuText.includes("mali-g7");
-
-  // ------------------------------------------------
-  // Mid-range GPU
-  // ------------------------------------------------
-
-  const midRange =
-    gpuText.includes("iris") ||
-    gpuText.includes("xe") ||
-    gpuText.includes("adreno") ||
-    gpuText.includes("mali");
-
+    
   // ------------------------------------------------
   // Decide model
   // ------------------------------------------------

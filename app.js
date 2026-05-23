@@ -239,7 +239,12 @@ const Home = {
           scrollBottom();
         
           break;
-        
+                  
+        case "token":
+          status.value =
+            `Generating... ${data.count} tokens`;
+          break;
+                    
         case "response":
         
           // convert streaming message into final message

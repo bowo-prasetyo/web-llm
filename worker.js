@@ -247,7 +247,12 @@ async function initialize() {
     try {
 
       engine = await CreateMLCEngine(
-        MODEL, {
+        MODEL,
+        {
+          contextWindowSize:
+            DEVICE_PROFILE.unstable
+              ? 512
+              : 2048,
           initProgressCallback: (progress) => {
             postMessage({
               type: "status",

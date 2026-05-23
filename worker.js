@@ -223,10 +223,7 @@ async function detectBestModel() {
     };
   }
   
-  postMessage({
-    type: "status",
-    text: JSON.stringify(info),
-  });
+  console.log("info: ", JSON.stringify(info));
   
   postMessage({
     type: "status",

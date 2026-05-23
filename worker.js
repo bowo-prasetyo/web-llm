@@ -425,6 +425,7 @@ async function generate(prompt) {
       history = history.slice(-MAX_HISTORY);
       
       IS_GENERATING = true;
+      LAST_STREAM_TIME = 0;
       
       let partial = "";
       let lastChunkAt = Date.now();
@@ -465,7 +466,9 @@ async function generate(prompt) {
         if (!delta) {
           continue;
         }
-      
+
+        LAST_STREAM_TIME = Date.now();
+        
         partial += delta;
       
         lastChunkAt = Date.now();
@@ -599,6 +602,9 @@ async function generate(prompt) {
         if (!delta) {
           continue;
         }
+
+        LAST_STREAM_TIME = Date.now();
+        resetStallTimer();
     
         continuation += delta;
     
@@ -882,9 +888,27 @@ function resetStallTimer() {
 
   clearTimeout(STALL_TIMEOUT);
 
+  // Longer timeout for first token
+  const timeout =
+    LAST_STREAM_TIME === 0
+      ? 60000   // waiting first token
+      : 25000;  // waiting next token
+
   STALL_TIMEOUT = setTimeout(() => {
 
     if (!IS_GENERATING) {
+      return;
+    }
+
+    // Ignore if token recently arrived
+    const elapsed =
+      Date.now() - LAST_STREAM_TIME;
+
+    if (
+      LAST_STREAM_TIME !== 0 &&
+      elapsed < 20000
+    ) {
+      resetStallTimer();
       return;
     }
 
@@ -901,7 +925,7 @@ function resetStallTimer() {
 
     IS_GENERATING = false;
 
-  }, 25000);
+  }, timeout);
 }
 
 function looksIncomplete(text) {

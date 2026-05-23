@@ -13,6 +13,7 @@ let IS_GENERATING = false;
 let LAST_STREAM_TIME = 0;
 let STALL_TIMEOUT = null;
 let REQUEST_COUNTER = 0;
+let ACTIVE_GENERATION = false;
 
 let engine = null;
 let initializingPromise = null;
@@ -376,270 +377,302 @@ async function initialize() {
 }
 
 async function generate(prompt) {
-  await initialize();
-
-  MODEL_CONFIG.max_tokens =
-    computeMaxTokens();
-
-  const historyText = await readFromOPFS("chat-history.json");
-
-  let history = [];
-
-  if (historyText) {
-    history = JSON.parse(historyText);
-  }
-
-  let response;
-
   try {
-
-    const relevantChunks =
-      await searchRelevantChunks(prompt);
-
-    const context =
-      relevantChunks
-      .map(item => item.text)
-      .join("\n\n");
-
-    const augmentedPrompt =
-      context ?
-      `Context:\n${context}\n\nQuestion:\n${prompt}` :
-      prompt;
-
-    history.push({
-      role: "user",
-      content: augmentedPrompt,
-    });
-
-    // Keep only recent history
-    const MAX_HISTORY =
-      DEVICE_PROFILE.lowEnd ?
-      6 :
-      20;
-
-    history = history.slice(-MAX_HISTORY);
+  
+    ACTIVE_GENERATION = true;
     
-    IS_GENERATING = true;
-    
-    let partial = "";
-    let lastChunkAt = Date.now();
-    
-    postMessage({
-      type: "thinking",
-    });
-    
-    const completion =
-      await engine.chat.completions.create({
-    
-        messages: history,
-    
-        temperature:
-          MODEL_CONFIG.temperature,
-    
-        max_tokens:
-          MODEL_CONFIG.max_tokens,
-    
-        stream: true,
+    await initialize();
+  
+    MODEL_CONFIG.max_tokens =
+      computeMaxTokens();
+  
+    const historyText = await readFromOPFS("chat-history.json");
+  
+    let history = [];
+  
+    if (historyText) {
+      history = JSON.parse(historyText);
+    }
+  
+    let response;
+  
+    try {
+  
+      const relevantChunks =
+        await searchRelevantChunks(prompt);
+  
+      const context =
+        relevantChunks
+        .map(item => item.text)
+        .join("\n\n");
+  
+      const augmentedPrompt =
+        context ?
+        `Context:\n${context}\n\nQuestion:\n${prompt}` :
+        prompt;
+  
+      history.push({
+        role: "user",
+        content: augmentedPrompt,
       });
-    
-    resetStallTimer();
-    const requestId = ++REQUEST_COUNTER;
-    
-    for await (const chunk of completion) {
-
-      if (requestId !== REQUEST_COUNTER) {
-        return;
-      }
-    
-      const delta =
-        chunk.choices?.[0]?.delta?.content || "";
-    
-      if (!delta) {
-        continue;
-      }
-    
-      partial += delta;
-    
-      lastChunkAt = Date.now();
-    
-      resetStallTimer();
-    
-      postMessage({
-        type: "stream",
-        text: partial,
-      });
+  
+      // Keep only recent history
+      const MAX_HISTORY =
+        DEVICE_PROFILE.lowEnd ?
+        6 :
+        20;
+  
+      history = history.slice(-MAX_HISTORY);
+      
+      IS_GENERATING = true;
+      
+      let partial = "";
+      let lastChunkAt = Date.now();
       
       postMessage({
-        type: "token",
-        count:
-          partial.split(/\s+/).length,
+        type: "thinking",
       });
-    }
-    
-    clearTimeout(STALL_TIMEOUT);
-    
-    IS_GENERATING = false; 
-    
-    response = {
-      choices: [
-        {
-          message: {
-            content: partial
-          }
+      
+      ensureEngine();
+      
+      const completion =
+        await engine.chat.completions.create({
+      
+          messages: history,
+      
+          temperature:
+            MODEL_CONFIG.temperature,
+      
+          max_tokens:
+            MODEL_CONFIG.max_tokens,
+      
+          stream: true,
+        });
+      
+      resetStallTimer();
+      const requestId = ++REQUEST_COUNTER;
+      
+      for await (const chunk of completion) {
+  
+        if (requestId !== REQUEST_COUNTER) {
+          ACTIVE_GENERATION = false;
+          return;
         }
-      ]
-    };
+      
+        const delta =
+          chunk.choices?.[0]?.delta?.content || "";
+      
+        if (!delta) {
+          continue;
+        }
+      
+        partial += delta;
+      
+        lastChunkAt = Date.now();
+      
+        resetStallTimer();
+      
+        postMessage({
+          type: "stream",
+          text: partial,
+        });
         
-  } catch (err) {
-
-    const gpuCrash =
-      err.message.includes("Instance reference") ||
-      err.message.includes("GPUBuffer") ||
-      err.message.includes("DXGI_ERROR") ||
-      err.message.includes("Device was lost");
-    
-    if (gpuCrash) {
-    
-      await saveToOPFS(
-        "gpu-instability.flag",
-        "1"
-      );
-    
-      postMessage({
-        type: "fatal",
-        text:
-          "GPU inference crashed. Restarting in safe GPU mode.",
-      });
-    
-      self.close();
-      return;
+        postMessage({
+          type: "token",
+          count:
+            partial.split(/\s+/).length,
+        });
+      }
+      
+      clearTimeout(STALL_TIMEOUT);
+      
+      IS_GENERATING = false; 
+      
+      response = {
+        choices: [
+          {
+            message: {
+              content: partial
+            }
+          }
+        ]
+      };
+          
+    } catch (err) {
+  
+      const gpuCrash =
+        err.message.includes("Instance reference") ||
+        err.message.includes("GPUBuffer") ||
+        err.message.includes("DXGI_ERROR") ||
+        err.message.includes("Device was lost");
+      
+      if (gpuCrash) {
+      
+        await saveToOPFS(
+          "gpu-instability.flag",
+          "1"
+        );
+      
+        postMessage({
+          type: "fatal",
+          text:
+            "GPU inference crashed. Restarting in safe GPU mode.",
+        });
+      
+        self.close();
+        ACTIVE_GENERATION = false;
+        return;
+      }
+  
+      ACTIVE_GENERATION = false;
+      throw err;
     }
-
-    throw err;
-  }
-
-  postMessage({
-    type: "status",
-    text: `Ready (${DEVICE_PROFILE.name})`,
-  });
-
-  let answer =
-    response.choices[0].message.content;
-
-  if (
-    looksIncomplete(answer) &&
-    answer.length > 80
-  ) {
   
     postMessage({
       type: "status",
-      text: "Continuing response...",
+      text: `Ready (${DEVICE_PROFILE.name})`,
     });
+  
+    let answer =
+      response.choices[0].message.content;
+  
+    if (
+      looksIncomplete(answer) &&
+      answer.length > 80
+    ) {
+  
+      if (!engine) {
+      
+        postMessage({
+          type: "status",
+          text:
+            "Continuation skipped",
+        });
+      
+        ACTIVE_GENERATION = false;
+      
+        return;
+      }
+          
+      postMessage({
+        type: "status",
+        text: "Continuing response...",
+      });
+    
+      history.push({
+        role: "assistant",
+        content: answer,
+      });
+    
+      history.push({
+        role: "user",
+        content: "Continue",
+      });
+    
+      let continuation = "";
+  
+      ensureEngine();
+      
+      const continuationStream =
+        await engine.chat.completions.create({
+    
+          messages: history,
+    
+          temperature:
+            MODEL_CONFIG.temperature,
+    
+          max_tokens:
+            Math.floor(
+              MODEL_CONFIG.max_tokens * 0.5
+            ),
+    
+          stream: true,
+        });
+    
+      for await (
+        const chunk of continuationStream
+      ) {
+    
+        const delta =
+          chunk.choices?.[0]?.delta?.content || "";
+    
+        if (!delta) {
+          continue;
+        }
+    
+        continuation += delta;
+    
+        postMessage({
+          type: "stream",
+          text:
+            answer + continuation,
+        });
+      }
+    
+      answer += continuation;
+    }
+      
+    RETRYING_AFTER_CRASH = false;
+    
+    if (isCorrupted(answer)) {
+    
+      // Already retried once?
+      if (RETRYING_AFTER_CRASH) {
+    
+        postMessage({
+          type: "error",
+          text:
+            "Model produced corrupted output.",
+        });
+    
+        RETRYING_AFTER_CRASH = false;
+        ACTIVE_GENERATION = false;
+        
+        return;
+      }
+    
+      RETRYING_AFTER_CRASH = true;
+    
+      postMessage({
+        type: "status",
+        text:
+          "Corrupted output detected. Retrying safely...",
+      });
+    
+      // Keep same engine alive
+      MODEL_CONFIG.temperature = 0.1;
+      MODEL_CONFIG.max_tokens = 32;
+      
+      return await generate(
+        "Answer briefly and clearly: " + prompt
+      );
+    }
   
     history.push({
       role: "assistant",
       content: answer,
     });
-  
-    history.push({
-      role: "user",
-      content: "Continue",
-    });
-  
-    let continuation = "";
-  
-    const continuationStream =
-      await engine.chat.completions.create({
-  
-        messages: history,
-  
-        temperature:
-          MODEL_CONFIG.temperature,
-  
-        max_tokens:
-          Math.floor(
-            MODEL_CONFIG.max_tokens * 0.5
-          ),
-  
-        stream: true,
-      });
-  
-    for await (
-      const chunk of continuationStream
-    ) {
-  
-      const delta =
-        chunk.choices?.[0]?.delta?.content || "";
-  
-      if (!delta) {
-        continue;
-      }
-  
-      continuation += delta;
-  
-      postMessage({
-        type: "stream",
-        text:
-          answer + continuation,
-      });
-    }
-  
-    answer += continuation;
-  }
-    
-  RETRYING_AFTER_CRASH = false;
-  
-  if (isCorrupted(answer)) {
-  
-    // Already retried once?
-    if (RETRYING_AFTER_CRASH) {
-  
-      postMessage({
-        type: "error",
-        text:
-          "Model produced corrupted output.",
-      });
-  
-      RETRYING_AFTER_CRASH = false;
-  
-      return;
-    }
-  
-    RETRYING_AFTER_CRASH = true;
-  
-    postMessage({
-      type: "status",
-      text:
-        "Corrupted output detected. Retrying safely...",
-    });
-  
-    // Keep same engine alive
-    MODEL_CONFIG.temperature = 0.1;
-    MODEL_CONFIG.max_tokens = 32;
-  
-    return await generate(
-      "Answer briefly and clearly: " + prompt
+      
+    await saveToOPFS(
+      "chat-history.json",
+      JSON.stringify(history, null, 2)
     );
-  }
-
-  history.push({
-    role: "assistant",
-    content: answer,
-  });
-    
-  await saveToOPFS(
-    "chat-history.json",
-    JSON.stringify(history, null, 2)
-  );
-
-  RETRYING_AFTER_CRASH = false;
   
-  postMessage({
-    type: "response",
-    text: answer,
-  });
-
-  resetUnloadTimer();
+    RETRYING_AFTER_CRASH = false;
+    
+    postMessage({
+      type: "response",
+      text: answer,
+    });
+  }
+  finally {
+  
+    ACTIVE_GENERATION = false;
+  
+    clearTimeout(STALL_TIMEOUT);
+  
+    resetUnloadTimer();
+  }  
 }
 
 self.onmessage = async (event) => {
@@ -673,9 +706,18 @@ self.onmessage = async (event) => {
 let unloadTimer = null;
 
 function resetUnloadTimer() {
+
   clearTimeout(unloadTimer);
 
   unloadTimer = setTimeout(() => {
+
+    // NEVER unload during generation
+    if (ACTIVE_GENERATION) {
+
+      resetUnloadTimer();
+      return;
+    }
+
     engine = null;
     initializingPromise = null;
 
@@ -683,6 +725,7 @@ function resetUnloadTimer() {
       type: "status",
       text: "Model unloaded to save memory",
     });
+
   }, 60000);
 };
 
@@ -903,4 +946,13 @@ function computeMaxTokens() {
   }
 
   return 256;
+}
+
+function ensureEngine() {
+
+  if (!engine) {
+    throw new Error(
+      "Inference engine unavailable"
+    );
+  }
 }

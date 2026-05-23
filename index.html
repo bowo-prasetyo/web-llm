@@ -13,14 +13,17 @@
 <body>
   <div id="app"></div>
 
-<script
-  src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs"
-  type="module"
-></script>
-<script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
-</script>
+  <script type="module">
+  
+  import * as pdfjsLib from
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+  
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+  
+  window.pdfjsLib = pdfjsLib;
+  
+  </script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

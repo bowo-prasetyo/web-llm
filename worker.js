@@ -6,6 +6,9 @@ import {
   pipeline
 } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
+//const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+const SMALLEST_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+
 let engine = null;
 let initializingPromise = null;
 let embedder = null;
@@ -76,7 +79,7 @@ async function detectBestModel() {
     };
   
     MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+      SMALLEST_MODEL;
   
     MODEL_CONFIG = {
       max_tokens: 32,
@@ -105,7 +108,7 @@ async function detectBestModel() {
     };
 
     MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+      SMALLEST_MODEL;
 
     MODEL_CONFIG = {
       max_tokens: 64,
@@ -134,7 +137,7 @@ async function detectBestModel() {
     };
 
     MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+      SMALLEST_MODEL;
 
     MODEL_CONFIG = {
       max_tokens: 64,
@@ -244,7 +247,7 @@ async function detectBestModel() {
     };
 
     MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+      SMALLEST_MODEL;
 
     MODEL_CONFIG = {
       max_tokens: 256,
@@ -265,7 +268,7 @@ async function detectBestModel() {
     };
 
     MODEL =
-      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+      SMALLEST_MODEL;
 
     MODEL_CONFIG = {
       max_tokens: 96,
@@ -285,7 +288,7 @@ async function detectBestModel() {
   };
 
   MODEL =
-    "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+    SMALLEST_MODEL;
 
   MODEL_CONFIG = {
     max_tokens: 128,

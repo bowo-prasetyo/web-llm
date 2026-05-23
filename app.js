@@ -1,5 +1,13 @@
-const { createApp, ref, onMounted, nextTick } = Vue;
-const { createRouter, createWebHashHistory } = VueRouter;
+const {
+  createApp,
+  ref,
+  onMounted,
+  nextTick
+} = Vue;
+const {
+  createRouter,
+  createWebHashHistory
+} = VueRouter;
 
 let worker = null;
 
@@ -69,7 +77,7 @@ const Home = {
     const status = ref("Loading...");
     const messages = ref([]);
     const messagesContainer = ref(null);
-    const worker = getWorker();
+    let worker = getWorker();
 
     async function scrollBottom() {
       await nextTick();
@@ -108,78 +116,80 @@ const Home = {
     }
 
     async function uploadFile(event) {
-  const file = event.target.files[0];
+      const file = event.target.files[0];
 
-  if (!file) {
-    return;
-  }
+      if (!file) {
+        return;
+      }
 
-  status.value = `Reading ${file.name}...`;
+      status.value = `Reading ${file.name}...`;
 
-  let text = "";
+      let text = "";
 
-  if (file.type === "application/pdf") {
+      if (file.type === "application/pdf") {
 
-    const arrayBuffer =
-      await file.arrayBuffer();
+        const arrayBuffer =
+          await file.arrayBuffer();
 
-    const pdf =
-      await pdfjsLib.getDocument({
-        data: arrayBuffer,
-      }).promise;
+        const pdf =
+          await pdfjsLib.getDocument({
+            data: arrayBuffer,
+          }).promise;
 
-    for (
-      let pageNum = 1;
-      pageNum <= pdf.numPages;
-      pageNum++
-    ) {
+        for (
+          let pageNum = 1; pageNum <= pdf.numPages; pageNum++
+        ) {
 
-      const page =
-        await pdf.getPage(pageNum);
+          const page =
+            await pdf.getPage(pageNum);
 
-      const content =
-        await page.getTextContent();
+          const content =
+            await page.getTextContent();
 
-      const strings =
-        content.items.map(
-          item => item.str
-        );
+          const strings =
+            content.items.map(
+              item => item.str
+            );
 
-      text += strings.join(" ") + "\n";
+          text += strings.join(" ") + "\n";
+        }
+
+      } else {
+
+        text = await file.text();
+      }
+
+      worker.postMessage({
+        type: "ingest",
+        filename: file.name,
+        text,
+      });
     }
 
-  } else {
-
-    text = await file.text();
-  }
-
-  worker.postMessage({
-    type: "ingest",
-    filename: file.name,
-    text,
-  });
-}
-    
-    worker.onmessage = async (event) => {
+    async function onWorkerMessage(event) {
       const data = event.data;
-      
+
       if (data.type === "fatal") {
-    
+
+        status.value = data.text;
+
+        loading.value = false;
+
         worker.terminate();
-    
-        worker = new Worker("worker.js", {
+
+        worker = new Worker("./worker.js", {
           type: "module"
         });
-    
-        setupWorkerListeners();
-    
+
+        worker.onmessage = onWorkerMessage;
+
         worker.postMessage({
           type: "init"
         });
-    
+
         return;
       }
-          
+
       switch (data.type) {
         case "status":
           status.value = data.text;
@@ -195,7 +205,9 @@ const Home = {
           loading.value = false;
           break;
       }
-    };
+    }
+    
+    worker.onmessage = onWorkerMessage;
 
     onMounted(() => {
       worker.postMessage({
@@ -215,12 +227,10 @@ const Home = {
   },
 };
 
-const routes = [
-  {
-    path: "/",
-    component: Home,
-  },
-];
+const routes = [{
+  path: "/",
+  component: Home,
+}, ];
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -228,7 +238,7 @@ const router = createRouter({
 });
 
 createApp({
-  template: `<router-view />`
-})
+    template: `<router-view />`
+  })
   .use(router)
   .mount("#app");

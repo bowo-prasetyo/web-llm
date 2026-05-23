@@ -447,6 +447,7 @@ async function generate(prompt) {
       
       resetStallTimer();
       const requestId = ++REQUEST_COUNTER;
+      let finishReason = null;
       
       for await (const chunk of completion) {
   
@@ -457,15 +458,15 @@ async function generate(prompt) {
       
         const delta =
           chunk.choices?.[0]?.delta?.content || "";
-      
+        finishReason =
+          chunk.choices?.[0]?.finish_reason;
+                
         if (!delta) {
           continue;
         }
 
         LAST_STREAM_TIME = Date.now();
-        
         partial += delta;
-      
         lastChunkAt = Date.now();
       
         resetStallTimer();
@@ -533,11 +534,8 @@ async function generate(prompt) {
   
     let answer =
       response.choices[0].message.content;
-  
-    if (
-      looksIncomplete(answer) &&
-      answer.length > 80
-    ) {
+    
+    if (finishReason === "length") {
   
       if (!engine) {
       
@@ -565,10 +563,10 @@ async function generate(prompt) {
       history.push({
         role: "user",
         content:
-          "Continue your previous answer only."
+          "Continue exactly from where you stopped. Do not repeat previous sentences."
       });
     
-      let continuation = "";
+      let cleanContinuation = "";
   
       ensureEngine();
       
@@ -587,7 +585,7 @@ async function generate(prompt) {
     
           stream: true,
         });
-    
+          
       for await (
         const chunk of continuationStream
       ) {
@@ -602,16 +600,19 @@ async function generate(prompt) {
         LAST_STREAM_TIME = Date.now();
         resetStallTimer();
     
-        continuation += delta;
-    
+        const candidate =
+          cleanContinuation + delta;
+        const cleaned =
+          removeOverlap(answer, candidate);
+        cleanContinuation = cleaned;
+        
         postMessage({
           type: "stream",
-          text:
-            answer + continuation,
+          text: answer + cleaned,
         });
       }
-    
-      answer += continuation;
+      
+      answer += cleanContinuation;
     }
       
     RETRYING_AFTER_CRASH = false;
@@ -989,4 +990,33 @@ function ensureEngine() {
       "Inference engine unavailable"
     );
   }
+}
+
+function removeOverlap(original, continuation) {
+
+  const maxOverlap = Math.min(
+    200,
+    original.length,
+    continuation.length
+  );
+
+  for (
+    let len = maxOverlap;
+    len > 20;
+    len--
+  ) {
+
+    const end =
+      original.slice(-len);
+
+    const start =
+      continuation.slice(0, len);
+
+    if (end === start) {
+
+      return continuation.slice(len);
+    }
+  }
+
+  return continuation;
 }

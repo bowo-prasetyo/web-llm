@@ -36,7 +36,13 @@ const Home = {
         <div
           v-for="(message, index) in messages"
           :key="index"
-          :class="['message', message.role]"
+          :class="[
+            'message',
+            message.role === 'assistant-stream'
+              ? 'assistant'
+              : message.role
+          ]"
+
         >
           {{ message.content }}
         </div>
@@ -77,6 +83,7 @@ const Home = {
     const status = ref("Loading...");
     const messages = ref([]);
     const messagesContainer = ref(null);
+    const streamingText = ref("");
     let worker = getWorker();
 
     async function scrollBottom() {
@@ -194,12 +201,70 @@ const Home = {
         case "status":
           status.value = data.text;
           break;
-
-        case "response":
-          addMessage("assistant", data.text);
-          loading.value = false;
+        
+        case "thinking":
+        
+          status.value = "AI is thinking...";
+        
+          streamingText.value = "";
+        
           break;
-
+        
+        case "stream":
+        
+          status.value = "Generating response...";
+        
+          streamingText.value = data.text;
+        
+          // live update last assistant message
+        
+          const last =
+            messages.value[messages.value.length - 1];
+        
+          if (
+            last &&
+            last.role === "assistant-stream"
+          ) {
+        
+            last.content = data.text;
+        
+          } else {
+        
+            messages.value.push({
+              role: "assistant-stream",
+              content: data.text,
+            });
+          }
+        
+          scrollBottom();
+        
+          break;
+        
+        case "response":
+        
+          // convert streaming message into final message
+        
+          const lastMessage =
+            messages.value[messages.value.length - 1];
+        
+          if (
+            lastMessage &&
+            lastMessage.role === "assistant-stream"
+          ) {
+        
+            lastMessage.role = "assistant";
+        
+          } else {
+        
+            addMessage("assistant", data.text);
+          }
+        
+          status.value = "Ready";
+        
+          loading.value = false;
+        
+          break;
+                
         case "error":
           addMessage("assistant", "Error: " + data.text);
           loading.value = false;

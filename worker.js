@@ -34,11 +34,6 @@ let DEVICE_PROFILE = {
   unstable: false,
 };
 
-let RUNTIME_FLAGS = {
-  gpuCrashed: false,
-  safeMode: false,
-};
-
 let RETRYING_AFTER_CRASH = false;
 
 async function saveToOPFS(filename, content) {
@@ -238,7 +233,7 @@ async function detectBestModel() {
     MODEL_CONFIG = {
       max_tokens: 512,
       temperature: 0.7,
-      contextWindowSize: 2048,
+      contextWindowSize: 4096,
     };
 
     return;
@@ -259,7 +254,7 @@ async function detectBestModel() {
     MODEL_CONFIG = {
       max_tokens: 256,
       temperature: 0.5,
-      contextWindowSize: 2048,
+      contextWindowSize: 4096,
     };
 
     return;
@@ -390,6 +385,7 @@ async function generate(prompt) {
     let history = [...SESSION_HISTORY];
     
     let response;
+    let finishReason = null;
   
     try {
   
@@ -423,7 +419,6 @@ async function generate(prompt) {
       LAST_STREAM_TIME = 0;
       
       let partial = "";
-      let lastChunkAt = Date.now();
       
       postMessage({
         type: "thinking",
@@ -447,12 +442,10 @@ async function generate(prompt) {
       
       resetStallTimer();
       const requestId = ++REQUEST_COUNTER;
-      let finishReason = null;
       
       for await (const chunk of completion) {
   
         if (requestId !== REQUEST_COUNTER) {
-          ACTIVE_GENERATION = false;
           return;
         }
       
@@ -467,7 +460,6 @@ async function generate(prompt) {
 
         LAST_STREAM_TIME = Date.now();
         partial += delta;
-        lastChunkAt = Date.now();
       
         resetStallTimer();
       
@@ -519,11 +511,9 @@ async function generate(prompt) {
         });
       
         self.close();
-        ACTIVE_GENERATION = false;
         return;
       }
   
-      ACTIVE_GENERATION = false;
       throw err;
     }
   
@@ -544,9 +534,7 @@ async function generate(prompt) {
           text:
             "Continuation skipped",
         });
-      
-        ACTIVE_GENERATION = false;
-      
+            
         return;
       }
           
@@ -565,10 +553,11 @@ async function generate(prompt) {
         content:
           "Continue exactly from where you stopped. Do not repeat previous sentences."
       });
-    
+
+      IS_GENERATING = true;
+      resetStallTimer();
+      
       let cleanContinuation = "";
-  
-      ensureEngine();
       
       const continuationStream =
         await engine.chat.completions.create({
@@ -613,6 +602,9 @@ async function generate(prompt) {
       }
       
       answer += cleanContinuation;
+
+      IS_GENERATING = false;
+      clearTimeout(STALL_TIMEOUT);
     }
       
     RETRYING_AFTER_CRASH = false;
@@ -629,7 +621,6 @@ async function generate(prompt) {
         });
     
         RETRYING_AFTER_CRASH = false;
-        ACTIVE_GENERATION = false;
         
         return;
       }
@@ -656,7 +647,14 @@ async function generate(prompt) {
       content: answer,
     });
       
-    SESSION_HISTORY = [...history];
+    SESSION_HISTORY =
+      history
+        .filter(msg =>
+          !msg.content.includes(
+            "Continue exactly from where you stopped"
+          )
+        )
+        .slice(-MAX_HISTORY);
     
     RETRYING_AFTER_CRASH = false;
     
@@ -920,34 +918,6 @@ function resetStallTimer() {
     IS_GENERATING = false;
 
   }, timeout);
-}
-
-function looksIncomplete(text) {
-
-  if (!text) {
-    return true;
-  }
-
-  const trimmed = text.trim();
-
-  // Clearly cut mid-word
-  if (
-    /[a-zA-Z0-9]$/.test(trimmed) &&
-    trimmed.length > 200
-  ) {
-    return true;
-  }
-
-  // Ends with continuation indicators
-  if (
-    trimmed.endsWith("...") ||
-    trimmed.endsWith(":") ||
-    trimmed.endsWith(",")
-  ) {
-    return true;
-  }
-
-  return false;
 }
 
 function isCorrupted(text) {

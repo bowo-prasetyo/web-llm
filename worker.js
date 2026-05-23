@@ -169,8 +169,8 @@ async function detectBestModel() {
       "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 
     MODEL_CONFIG = {
-      max_tokens: 128,
-      temperature: 0.7,
+      max_tokens: 64,
+      temperature: 0.3,
     };
 
   } else if (highEnd) {
@@ -319,6 +319,14 @@ async function generate(prompt) {
     content: prompt,
   });
 
+  // Keep only recent history
+const MAX_HISTORY =
+  DEVICE_PROFILE.lowEnd
+    ? 6
+    : 20;
+
+history = history.slice(-MAX_HISTORY);
+  
   let response;
   
 try {
@@ -340,6 +348,8 @@ history.push({
   content: augmentedPrompt,
 });
 
+history = history.slice(-MAX_HISTORY);
+  
 response =
   await engine.chat.completions.create({
 

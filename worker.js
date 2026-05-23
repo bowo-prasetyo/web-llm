@@ -454,26 +454,22 @@ async function generate(prompt) {
   const answer = response.choices[0].message.content;
   RETRYING_AFTER_CRASH = false;
   
-  const repeatedGarbage =
-    /(以.{0,2}){8,}/u.test(answer);
+  const suspiciousOutput =
+  answer.length > 80 &&
+  (
+    /(以.{0,2}){12,}/u.test(answer) ||
+    /(�){5,}/.test(answer)
+  );
   
-  const abnormalDensity =
-    answer.length > 40 &&
-    (
-      answer.match(/[以育无人民通用]/g)?.length || 0
-    ) > answer.length * 0.3;
+  if (suspiciousOutput) {
   
-  if (
-    repeatedGarbage ||
-    abnormalDensity
-  ) {
-  
+    // Already retried once?
     if (RETRYING_AFTER_CRASH) {
   
       postMessage({
         type: "error",
         text:
-          "Compatibility mode failed.",
+          "Model produced corrupted output.",
       });
   
       RETRYING_AFTER_CRASH = false;
@@ -485,22 +481,17 @@ async function generate(prompt) {
   
     postMessage({
       type: "status",
-      text: "GPU instability detected",
-    });
-      
-    await saveToOPFS(
-      "gpu-instability.flag",
-      "1"
-    );
-    
-    postMessage({
-      type: "fatal",
       text:
-        "GPU became unstable. Restarting in CPU compatibility mode.",
+        "Corrupted output detected. Retrying safely...",
     });
-    
-    self.close();
-    return;
+  
+    // Keep same engine alive
+    MODEL_CONFIG.temperature = 0.1;
+    MODEL_CONFIG.max_tokens = 32;
+  
+    return await generate(
+      "Answer briefly and clearly: " + prompt
+    );
   }
     
   await saveToOPFS(

@@ -411,16 +411,51 @@ async function generate(prompt) {
 
     history = history.slice(-MAX_HISTORY);
 
-    response =
+    let partial = "";
+    
+    const completion =
       await engine.chat.completions.create({
-
+    
         messages: history,
-
+    
         temperature: MODEL_CONFIG.temperature,
-
+    
         max_tokens: MODEL_CONFIG.max_tokens,
+    
+        stream: true,
       });
-
+    
+    postMessage({
+      type: "thinking",
+    });
+    
+    for await (const chunk of completion) {
+    
+      const delta =
+        chunk.choices?.[0]?.delta?.content || "";
+    
+      if (!delta) {
+        continue;
+      }
+    
+      partial += delta;
+    
+      postMessage({
+        type: "stream",
+        text: partial,
+      });
+    }
+    
+    response = {
+      choices: [
+        {
+          message: {
+            content: partial
+          }
+        }
+      ]
+    };
+        
   } catch (err) {
 
     const gpuCrash =

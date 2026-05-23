@@ -621,6 +621,11 @@ async function generate(prompt) {
       "Answer briefly and clearly: " + prompt
     );
   }
+
+  history.push({
+    role: "assistant",
+    content: answer,
+  });
     
   await saveToOPFS(
     "chat-history.json",

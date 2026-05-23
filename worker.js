@@ -504,6 +504,22 @@ async function generate(prompt) {
     tooManySymbols
   ) {
   
+    // Already retried once?
+    if (RETRYING_AFTER_CRASH) {
+  
+      postMessage({
+        type: "error",
+        text:
+          "Compatibility mode failed. Browser WebGPU/WASM backend is unstable.",
+      });
+  
+      RETRYING_AFTER_CRASH = false;
+  
+      return;
+    }
+  
+    RETRYING_AFTER_CRASH = true;
+  
     postMessage({
       type: "status",
       text: "GPU instability detected",
@@ -514,61 +530,37 @@ async function generate(prompt) {
       "1"
     );
   
-    engine = null;
-    initializingPromise = null;
-      
-    await saveToOPFS(
-      "gpu-instability.flag",
-      "1"
-    );
-    
     ENGINE_OPTIONS = {
       device: "wasm"
     };
-    
+  
     MODEL =
       "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-    
+  
     MODEL_CONFIG = {
       max_tokens: 48,
       temperature: 0.2,
       contextWindowSize: 256,
     };
-    
+  
     engine = null;
     initializingPromise = null;
-    
+  
     postMessage({
       type: "status",
       text:
         "Switching to CPU compatibility mode...",
     });
-    
+  
     await initialize();
-    
+  
     postMessage({
       type: "status",
       text:
         "CPU compatibility mode enabled",
     });
-    
-    // Retry generation once
-    if (!RETRYING_AFTER_CRASH) {
-    
-      RETRYING_AFTER_CRASH = true;
-    
-      return await generate(prompt);
-    }
-    
-    postMessage({
-      type: "error",
-      text:
-        "Compatibility mode also failed.",
-    });
-    
-    RETRYING_AFTER_CRASH = false;
-    return;
-    
+  
+    return await generate(prompt);
   }
     
   await saveToOPFS(
@@ -576,6 +568,8 @@ async function generate(prompt) {
     JSON.stringify(history, null, 2)
   );
 
+  RETRYING_AFTER_CRASH = false;
+  
   postMessage({
     type: "response",
     text: answer,

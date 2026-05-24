@@ -527,7 +527,7 @@ async function generate(prompt) {
   
     let answer =
       response.choices[0].message.content;
-    
+
     while (
       finishReason === "length" &&
       continuationCount < MAX_CONTINUATIONS
@@ -541,35 +541,45 @@ async function generate(prompt) {
           `Continuing response (${continuationCount})...`,
       });
     
+      // IMPORTANT:
+      // assistant message first
       history.push({
         role: "assistant",
         content: answer,
       });
-      
+    
+      // THEN user continuation request
+      history.push({
+        role: "user",
+        content:
+          "Continue exactly from where you stopped without repeating previous text.",
+      });
+    
+      history =
+        history.slice(-MAX_HISTORY);
+    
       let cleanContinuation = "";
     
       IS_GENERATING = true;
-      resetStallTimer();
-
-      const continuationStream =
-        await engine.chat.completions.create({
-      
-          messages: history,
-      
-          temperature:
-            MODEL_CONFIG.temperature,
-      
-          max_tokens:
-            maxTokens,
-      
-          stream: true,
-      });
-            
-      finishReason = null;
-      IS_GENERATING = true;
       LAST_STREAM_TIME = 0;
       resetStallTimer();
-            
+    
+      const continuationStream =
+        await engine.chat.completions.create({
+    
+          messages: history,
+    
+          temperature:
+            MODEL_CONFIG.temperature,
+    
+          max_tokens:
+            maxTokens,
+    
+          stream: true,
+      });
+    
+      finishReason = null;
+    
       for await (const chunk of continuationStream) {
     
         const delta =
@@ -586,7 +596,7 @@ async function generate(prompt) {
         resetStallTimer();
     
         cleanContinuation += delta;
-        
+    
         if (
           cleanContinuation.length < 300
         ) {
@@ -596,7 +606,7 @@ async function generate(prompt) {
               cleanContinuation
             );
         }
-        
+    
         postMessage({
           type: "stream",
           text:
@@ -607,9 +617,12 @@ async function generate(prompt) {
       IS_GENERATING = false;
     
       answer += cleanContinuation;
-    
-      history =
-        history.slice(-MAX_HISTORY);
+        
+      history.push({
+        role: "assistant",
+        content: cleanContinuation,
+      });
+
     }
       
     RETRYING_AFTER_CRASH = false;
@@ -645,13 +658,9 @@ async function generate(prompt) {
       return await generate(
         "Answer briefly and clearly: " + prompt
       );
-    }
-  
-    history.push({
-      role: "assistant",
-      content: answer,
-    });
 
+    }
+        
     SESSION_HISTORY =
       history.slice(-MAX_HISTORY);
     

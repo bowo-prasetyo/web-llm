@@ -305,23 +305,23 @@ const Home = {
           loading.value = false;
           break;
       }
-
-      async function changeModel() {
-      
-        if (!selectedModel.value) {
-          return;
-        }
-      
-        loading.value = true;
-      
-        status.value =
-          `Loading ${selectedModel.value}...`;
-      
-        worker.postMessage({
-          type: "set-model",
-          model: selectedModel.value,
-        });
+    }
+  
+    async function changeModel() {
+    
+      if (!selectedModel.value) {
+        return;
       }
+    
+      loading.value = true;
+    
+      status.value =
+        `Loading ${selectedModel.value}...`;
+    
+      worker.postMessage({
+        type: "set-model",
+        model: selectedModel.value,
+      });
     }
     
     worker.onmessage = onWorkerMessage;
@@ -331,7 +331,7 @@ const Home = {
         type: "init",
       });
     });
-
+  
     return {
       prompt,
       loading,

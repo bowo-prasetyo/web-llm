@@ -498,10 +498,9 @@ const Home = {
     onMounted(() => {
     
       loadSettings();
-    
       worker.postMessage({
-        type: "models",
-      });
+        type: "init",
+      });    
     });
         
     return {

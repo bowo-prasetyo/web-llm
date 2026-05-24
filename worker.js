@@ -6,6 +6,19 @@ import {
   pipeline
 } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
+const SYSTEM_PROMPT = `
+You are a precise and truthful AI assistant.
+
+Rules:
+- Prefer correctness over sounding conversational.
+- If uncertain, say you are uncertain.
+- Do not invent facts.
+- Maintain logical consistency across the conversation.
+- Do not change previous correct answers unless necessary.
+- Keep answers concise and accurate.
+- Avoid unnecessary self-reflection like "I think I made a mistake" unless actually correcting an error.
+`;
+
 //const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const SMALLEST_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
 const HARD_TIMEOUT_MS = 180000;
@@ -395,7 +408,13 @@ async function generate(prompt) {
     const maxTokens =
       computeMaxTokens();
     
-    let history = [...SESSION_HISTORY];
+    let history = [
+      {
+        role: "system",
+        content: SYSTEM_PROMPT,
+      },
+      ...SESSION_HISTORY
+    ];
 
     // Keep only recent history
     const MAX_HISTORY =

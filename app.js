@@ -51,6 +51,23 @@ const Home = {
 <div class="footer-container">
 
   <div class="toolbar">
+  
+    <select
+      v-model="selectedModel"
+      @change="changeModel"
+    >
+      <option disabled value="">
+        Select Model
+      </option>
+  
+      <option
+        v-for="model in models"
+        :key="model"
+        :value="model"
+      >
+        {{ model }}
+      </option>
+    </select>
     <input
       type="file"
       accept=".pdf,.txt,.md"
@@ -84,6 +101,8 @@ const Home = {
     const messages = ref([]);
     const messagesContainer = ref(null);
     const streamingText = ref("");
+    const models = ref([]);
+    const selectedModel = ref("");
     let worker = getWorker();
 
     async function scrollBottom() {
@@ -269,11 +288,39 @@ const Home = {
           loading.value = false;
         
           break;
-                
+
+        case "models":
+          models.value = data.models;
+        
+          if (!selectedModel.value &&
+              data.models.length) {
+        
+            selectedModel.value =
+              data.models[0];
+          }          
+          break;
+                    
         case "error":
           addMessage("assistant", "Error: " + data.text);
           loading.value = false;
           break;
+      }
+
+      async function changeModel() {
+      
+        if (!selectedModel.value) {
+          return;
+        }
+      
+        loading.value = true;
+      
+        status.value =
+          `Loading ${selectedModel.value}...`;
+      
+        worker.postMessage({
+          type: "set-model",
+          model: selectedModel.value,
+        });
       }
     }
     
@@ -293,6 +340,9 @@ const Home = {
       messagesContainer,
       send,
       uploadFile,
+      models,
+      selectedModel,
+      changeModel,
     };
   },
 };

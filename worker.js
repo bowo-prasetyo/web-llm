@@ -617,15 +617,29 @@ async function generate(prompt) {
       IS_GENERATING = false;
     
       answer += cleanContinuation;
-        
-      history.push({
-        role: "assistant",
-        content: cleanContinuation,
-      });
 
     }
       
     RETRYING_AFTER_CRASH = false;
+
+    history.push({
+      role: "assistant",
+      content: answer,
+    });
+        
+    SESSION_HISTORY =
+      history
+        .filter(msg =>
+          !msg.content.includes(
+            "Continue exactly from where you stopped"
+          )
+        )
+        .slice(-MAX_HISTORY);
+    
+    postMessage({
+      type: "response",
+      text: answer,
+    });
     
     if (isCorrupted(answer)) {
     
@@ -660,16 +674,9 @@ async function generate(prompt) {
       );
 
     }
-        
-    SESSION_HISTORY =
-      history.slice(-MAX_HISTORY);
     
     RETRYING_AFTER_CRASH = false;
-    
-    postMessage({
-      type: "response",
-      text: answer,
-    });
+
   }
   finally {
   

@@ -375,10 +375,6 @@ async function initialize() {
 }
 
 async function generate(prompt) {
-  const originalTemperature =
-    MODEL_CONFIG.temperature;
-  const originalMaxTokens =
-    MODEL_CONFIG.max_tokens;
   
   try {
 
@@ -452,24 +448,27 @@ async function generate(prompt) {
       const requestId = ++REQUEST_COUNTER;
       
       for await (const chunk of completion) {
-  
+        
         if (requestId !== REQUEST_COUNTER) {
           return;
         }
+
+        const choice = chunk.choices?.[0];
+
+        if (choice?.finish_reason) {
+          finishReason = choice.finish_reason;
+        }
       
-        const delta =
-          chunk.choices?.[0]?.delta?.content || "";
-        finishReason =
-          chunk.choices?.[0]?.finish_reason;
-                
+        const delta = choice?.delta?.content || "";
+      
         if (!delta) {
           continue;
         }
-
-        LAST_STREAM_TIME = Date.now();
-        partial += delta;
       
+        LAST_STREAM_TIME = Date.now();
         resetStallTimer();
+      
+        partial += delta;
       
         postMessage({
           type: "stream",
@@ -586,20 +585,22 @@ async function generate(prompt) {
       finishReason = null;
     
       for await (const chunk of continuationStream) {
-    
-        const delta =
-          chunk.choices?.[0]?.delta?.content || "";
-    
-        finishReason =
-          chunk.choices?.[0]?.finish_reason;
-    
+
+        const choice = chunk.choices?.[0];
+
+        if (choice?.finish_reason) {
+          finishReason = choice.finish_reason;
+        }
+      
+        const delta = choice?.delta?.content || "";
+      
         if (!delta) {
           continue;
         }
-    
+      
         LAST_STREAM_TIME = Date.now();
         resetStallTimer();
-    
+      
         cleanContinuation += delta;
     
         if (
@@ -617,6 +618,12 @@ async function generate(prompt) {
           text:
             answer + cleanContinuation,
         });
+        
+        postMessage({
+          type: "token",
+          count:
+            cleanContinuation.split(/\s+/).length,
+        });
       }
     
       IS_GENERATING = false;
@@ -624,8 +631,6 @@ async function generate(prompt) {
       answer += cleanContinuation;
 
     }
-      
-    RETRYING_AFTER_CRASH = false;
 
     history.push({
       role: "assistant",
@@ -651,8 +656,6 @@ async function generate(prompt) {
           text:
             "Model produced corrupted output.",
         });
-    
-        RETRYING_AFTER_CRASH = false;
         
         return;
       }
@@ -666,13 +669,30 @@ async function generate(prompt) {
       });
     
       // Keep same engine alive
+      const originalTemperature =
+        MODEL_CONFIG.temperature;
+      const originalMaxTokens =
+        MODEL_CONFIG.max_tokens;
+      const originalHistory = SESSION_HISTORY;
+      
       MODEL_CONFIG.temperature = 0.1;
       MODEL_CONFIG.max_tokens = 32;
+      SESSION_HISTORY = [];
       
-      return await generate(
-        "Answer briefly and clearly: " + prompt
-      );
-
+      try {
+        
+        return await generate(
+          "Answer briefly and clearly: " + prompt
+        );
+        
+      }
+      finally {
+        
+        MODEL_CONFIG.temperature = originalTemperature;
+        MODEL_CONFIG.max_tokens = originalMaxTokens;  
+        SESSION_HISTORY = originalHistory;
+        
+      }
     }
     
     RETRYING_AFTER_CRASH = false;
@@ -686,8 +706,6 @@ async function generate(prompt) {
   finally {
   
     ACTIVE_GENERATION = false;
-    MODEL_CONFIG.temperature = originalTemperature;
-    MODEL_CONFIG.max_tokens = originalMaxTokens;  
   
     clearTimeout(STALL_TIMEOUT);
     resetUnloadTimer();

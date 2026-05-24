@@ -604,10 +604,18 @@ async function generate(prompt) {
       });
     
       finishReason = null;
-      tokenCount = 0;
     
       for await (const chunk of continuationStream) {
 
+        if (
+          Date.now() - generationStart >
+          HARD_TIMEOUT_MS
+        ) {
+          throw new Error(
+            "Generation exceeded maximum time"
+          );
+        }
+                
         const choice = chunk.choices?.[0];
 
         if (choice?.finish_reason) {
@@ -773,13 +781,8 @@ function resetUnloadTimer() {
   unloadTimer = setTimeout(() => {
 
     // NEVER unload during generation
-    if (ACTIVE_GENERATION) {
-    
-      unloadTimer = setTimeout(
-        resetUnloadTimer,
-        300000
-      );
-    
+    if (IS_GENERATING || ACTIVE_GENERATION) {
+      resetUnloadTimer();
       return;
     }
         

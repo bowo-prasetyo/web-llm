@@ -838,6 +838,13 @@ self.onmessage = async (event) => {
           data.text
         );
         break;
+
+      case "models":      
+        postMessage({
+          type: "models",
+          models: AVAILABLE_MODELS,
+        });      
+        break;
     }
   } catch (err) {
     postMessage({

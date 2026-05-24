@@ -424,7 +424,7 @@ const Home = {
     
       getWorker().postMessage({
         type: "set-config",
-        config: settings.value,
+        config: { ...settings.value },
       });
     }
             

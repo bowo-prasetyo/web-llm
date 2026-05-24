@@ -19,6 +19,7 @@ let SESSION_HISTORY = [];
 let engine = null;
 let initializingPromise = null;
 let embedder = null;
+let embedderPromise = null;
 let vectorDB = [];
 
 let MODEL = null;
@@ -333,7 +334,7 @@ async function initialize() {
         }
       );
 
-    catch (err) {
+    } catch (err) {
     
       const message = err?.message || "";
     
@@ -401,6 +402,7 @@ async function generate(prompt) {
     
     let response;
     let finishReason = null;
+    let tokenCount = 0;
   
     try {
   
@@ -451,7 +453,6 @@ async function generate(prompt) {
       
       resetStallTimer();
       const requestId = ++REQUEST_COUNTER;
-      let tokenCount = 0;
       
       for await (const chunk of completion) {
         
@@ -503,12 +504,14 @@ async function generate(prompt) {
       };
           
     } catch (err) {
-  
+
+      const message = err?.message || "";
+      
       const gpuCrash =
-        err.message.includes("Instance reference") ||
-        err.message.includes("GPUBuffer") ||
-        err.message.includes("DXGI_ERROR") ||
-        err.message.includes("Device was lost");
+        message.includes("Instance reference") ||
+        message.includes("GPUBuffer") ||
+        message.includes("DXGI_ERROR") ||
+        message.includes("Device was lost");
       
       if (gpuCrash) {
       
@@ -759,9 +762,15 @@ function resetUnloadTimer() {
 
     // NEVER unload during generation
     if (ACTIVE_GENERATION) {
+    
+      unloadTimer = setTimeout(
+        resetUnloadTimer,
+        300000
+      );
+    
       return;
     }
-
+        
     engine = null;
     initializingPromise = null;
 
@@ -791,8 +800,14 @@ async function saveVectorDB() {
 
 async function initializeEmbedder() {
 
+  // Already loaded
   if (embedder) {
-    return;
+    return embedder;
+  }
+
+  // Already loading
+  if (embedderPromise) {
+    return embedderPromise;
   }
 
   postMessage({
@@ -800,15 +815,36 @@ async function initializeEmbedder() {
     text: "Loading embedding model...",
   });
 
-  embedder = await pipeline(
-    "feature-extraction",
-    "Xenova/all-MiniLM-L6-v2"
-  );
+  embedderPromise = (async () => {
 
-  postMessage({
-    type: "status",
-    text: "Embedding model loaded",
-  });
+    try {
+
+      const model = await pipeline(
+        "feature-extraction",
+        "Xenova/all-MiniLM-L6-v2"
+      );
+
+      embedder = model;
+
+      postMessage({
+        type: "status",
+        text: "Embedding model loaded",
+      });
+
+      return embedder;
+
+    } catch (err) {
+
+      // IMPORTANT:
+      // allow retry after failure
+      embedderPromise = null;
+
+      throw err;
+    }
+
+  })();
+
+  return embedderPromise;
 }
 
 function chunkText(
@@ -861,7 +897,7 @@ function cosineSimilarity(a, b) {
   const denom = magA * magB;
   
   if (denom === 0) {
-    return Number.MAX_SAFE_INTEGER;
+    return 0;
   }
   
   return dot / denom;
@@ -881,6 +917,10 @@ async function ingestDocument(
     text: `Embedding ${chunks.length} chunks...`,
   });
 
+  vectorDB = vectorDB.filter(
+    item => item.filename !== filename
+  );
+    
   for (const chunk of chunks) {
 
     const embedding =
@@ -980,7 +1020,7 @@ function isCorrupted(text) {
 
   const strangeChars =
     text.match(
-      /[以育无人民膛通用�]/g
+      /�|�{2,}|[\x00-\x08\x0E-\x1F]/g
     ) || [];
 
   const ratio =

@@ -53,8 +53,8 @@ const Home = {
   <div class="toolbar">
   
     <select
-      v-model="selectedModel"
-      @change="changeModel"
+      v-model="settings.model"
+      @change="applySettings"
     >
       <option disabled value="">
         Select Model
@@ -68,6 +68,51 @@ const Home = {
         {{ model }}
       </option>
     </select>
+    <div class="settings-panel">
+    
+      <label>
+        Temperature
+    
+        <input
+          type="number"
+          step="0.1"
+          min="0"
+          max="2"
+          v-model.number="settings.temperature"
+        />
+      </label>
+    
+      <label>
+        Max Tokens
+    
+        <input
+          type="number"
+          min="16"
+          max="2048"
+          step="16"
+          v-model.number="settings.max_tokens"
+        />
+      </label>
+    
+      <label>
+        Context Window
+    
+        <input
+          type="number"
+          min="512"
+          max="8192"
+          step="512"
+          v-model.number="settings.contextWindowSize"
+        />
+      </label>
+    
+    </div>
+    <button
+      @click="applySettings"
+      :disabled="modelLoading || loading"
+    >
+      Apply Settings
+    </button>
     <input
       type="file"
       accept=".pdf,.txt,.md"
@@ -107,7 +152,12 @@ const Home = {
     const messagesContainer = ref(null);
     const streamingText = ref("");
     const models = ref([]);
-    const selectedModel = ref("");
+    const settings = ref({
+      model: "",
+      temperature: 0.7,
+      max_tokens: 256,
+      contextWindowSize: 4096,
+    });
     let worker = getWorker();
 
     async function scrollBottom() {
@@ -306,8 +356,11 @@ const Home = {
           if (!selectedModel.value &&
               data.models.length) {
         
-            selectedModel.value =
-              data.models[0];
+              if (!settings.value.model) {
+              
+                settings.value.model =
+                  data.models[0];
+              }
           }          
           break;
                     
@@ -318,26 +371,65 @@ const Home = {
       }
     }
   
-    async function changeModel() {
+    async function applySettings() {
     
-      if (!selectedModel.value) {
+      if (!settings.value.model) {
         return;
       }
     
       modelLoading.value = true;
-      
+    
+      saveSettings();
+    
       status.value =
-        `Loading ${selectedModel.value}...`;
+        `Loading ${settings.value.model}...`;
     
       worker.postMessage({
-        type: "set-model",
-        model: selectedModel.value,
+        type: "set-config",
+        config: settings.value,
       });
     }
+        
+    function saveSettings() {
     
+      localStorage.setItem(
+        "webllm-settings",
+        JSON.stringify(settings.value)
+      );
+    }
+    
+    function loadSettings() {
+    
+      const saved =
+        localStorage.getItem("webllm-settings");
+    
+      if (!saved) {
+        return;
+      }
+    
+      try {
+    
+        const parsed = JSON.parse(saved);
+    
+        settings.value = {
+          ...settings.value,
+          ...parsed,
+        };
+    
+      } catch (err) {
+    
+        console.error(
+          "Failed loading settings",
+          err
+        );
+      }
+    }
+        
     worker.onmessage = onWorkerMessage;
 
     onMounted(() => {
+      loadSettings();
+      
       worker.postMessage({
         type: "init",
       });
@@ -352,8 +444,10 @@ const Home = {
       send,
       uploadFile,
       models,
-      selectedModel,
-      changeModel,
+      settings,
+      applySettings,
+      saveSettings,
+      loadSettings,
     };
   },
 };

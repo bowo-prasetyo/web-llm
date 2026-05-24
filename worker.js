@@ -685,15 +685,15 @@ async function generate(prompt) {
       role: "assistant",
       content: answer,
     });
-        
-    SESSION_HISTORY =
-      history
-        .filter(msg =>
-          !msg.content.includes(
-            "Continue exactly from where you stopped"
-          )
+i
+    SESSION_HISTORY = history
+      .filter(msg =>
+        msg.role !== "system" &&
+        !msg.content.includes(
+          "Continue exactly from where you stopped"
         )
-        .slice(-MAX_HISTORY);
+      )
+      .slice(-MAX_HISTORY);
     
     if (isCorrupted(answer)) {
     

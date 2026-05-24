@@ -359,17 +359,18 @@ const Home = {
         case "models":
           models.value = data.models;
         
-          if (!selectedModel.value &&
-              data.models.length) {
+          if (
+            !settings.value.model ||
+            !data.models.includes(
+              settings.value.model
+            )
+          ) {
         
-              if (!settings.value.model) {
-              
-                settings.value.model =
-                  data.models[0];
-              }
-          }          
-          break;
-                    
+            settings.value.model =
+              data.models[0];
+          }
+          break; 
+                  
         case "error":
           addMessage("assistant", "Error: " + data.text);
           loading.value = false;
@@ -494,13 +495,14 @@ const Home = {
     worker.onmessage = onWorkerMessage;
 
     onMounted(() => {
+    
       loadSettings();
-      
+    
       worker.postMessage({
-        type: "init",
+        type: "models",
       });
     });
-  
+        
     return {
       prompt,
       loading,

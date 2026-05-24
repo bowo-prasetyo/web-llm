@@ -375,6 +375,11 @@ async function initialize() {
 }
 
 async function generate(prompt) {
+  const originalTemperature =
+    MODEL_CONFIG.temperature;
+  const originalMaxTokens =
+    MODEL_CONFIG.max_tokens;
+  
   try {
 
     continuationCount = 0;
@@ -636,11 +641,6 @@ async function generate(prompt) {
         )
         .slice(-MAX_HISTORY);
     
-    postMessage({
-      type: "response",
-      text: answer,
-    });
-    
     if (isCorrupted(answer)) {
     
       // Already retried once?
@@ -676,14 +676,20 @@ async function generate(prompt) {
     }
     
     RETRYING_AFTER_CRASH = false;
+    
+    postMessage({
+      type: "response",
+      text: answer,
+    });
 
   }
   finally {
   
     ACTIVE_GENERATION = false;
+    MODEL_CONFIG.temperature = originalTemperature;
+    MODEL_CONFIG.max_tokens = originalMaxTokens;  
   
     clearTimeout(STALL_TIMEOUT);
-  
     resetUnloadTimer();
   }  
 }

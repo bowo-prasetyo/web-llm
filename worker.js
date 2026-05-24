@@ -21,6 +21,12 @@ Rules:
 
 //const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const SMALLEST_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+const AVAILABLE_MODELS = [
+  "Llama-3.2-1B-Instruct-q4f32_1-MLC",
+  "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
+  "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
+];
+
 const HARD_TIMEOUT_MS = 180000;
 
 let IS_GENERATING = false;
@@ -38,6 +44,7 @@ let embedderPromise = null;
 let vectorDB = [];
 
 let MODEL = null;
+let USER_SELECTED_MODEL = null;
 
 let MODEL_CONFIG = {
   max_tokens: 256,
@@ -83,6 +90,34 @@ async function readFromOPFS(filename) {
 
 async function detectBestModel() {
 
+  // ------------------------------------------------
+  // User Selected Model Override
+  // ------------------------------------------------
+  
+  if (USER_SELECTED_MODEL) {
+  
+    MODEL = USER_SELECTED_MODEL;
+  
+    DEVICE_PROFILE = {
+      name: "Manual Selection",
+      lowEnd: false,
+      unstable: false,
+    };
+  
+    MODEL_CONFIG = {
+      max_tokens: 256,
+      temperature: 0.7,
+      contextWindowSize: 4096,
+    };
+  
+    postMessage({
+      type: "status",
+      text: `Using manually selected model: ${MODEL}`,
+    });
+  
+    return;
+  }
+    
   // ------------------------------------------------
   // Tier 4 — Previously unstable
   // ------------------------------------------------
@@ -798,9 +833,30 @@ self.onmessage = async (event) => {
   try {
     switch (data.type) {
       case "init":
-        await initialize();
+        postMessage({
+          type: "models",
+          models: AVAILABLE_MODELS,
+        });
+      
+        await initialize();      
         break;
 
+      case "set-model":
+        USER_SELECTED_MODEL = data.model;
+      
+        // unload existing engine
+        engine = null;
+        initializingPromise = null;
+      
+        postMessage({
+          type: "status",
+          text: `Switching model to ${data.model}...`,
+        });
+      
+        await initialize();
+      
+        break;
+              
       case "generate":
         await generate(data.prompt);
         break;

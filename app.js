@@ -364,13 +364,19 @@ const Home = {
             !data.models.includes(
               settings.value.model
             )
-          ) {
-        
+          ) {        
             settings.value.model =
               data.models[0];
           }
-          break; 
-                  
+            
+          await applySettings();
+          
+          postMessage({
+            type: "models",
+            models: AVAILABLE_MODELS,
+          });
+          break;
+                    
         case "error":
           addMessage("assistant", "Error: " + data.text);
           loading.value = false;

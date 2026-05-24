@@ -657,16 +657,18 @@ async function generate(prompt) {
     
       // Already retried once?
       if (RETRYING_AFTER_CRASH) {
-    
+
+        RETRYING_AFTER_CRASH = false;
+      
         postMessage({
           type: "error",
           text:
             "Model produced corrupted output.",
         });
-        
+      
         return;
       }
-    
+            
       RETRYING_AFTER_CRASH = true;
     
       postMessage({

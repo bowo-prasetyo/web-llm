@@ -84,7 +84,11 @@ const Home = {
 
         <button
           @click="send"
-          :disabled="loading || !prompt.trim()"
+          :disabled="
+            loading ||
+            modelLoading ||
+            !prompt.trim()
+          "
         >
           Send
         </button>
@@ -97,6 +101,7 @@ const Home = {
   setup() {
     const prompt = ref("");
     const loading = ref(false);
+    const modelLoading = ref(false);
     const status = ref("Loading...");
     const messages = ref([]);
     const messagesContainer = ref(null);
@@ -126,7 +131,7 @@ const Home = {
     async function send() {
       const text = prompt.value.trim();
 
-      if (!text || loading.value) {
+      if (!text || loading.value || modelLoading.value) {
         return;
       }
 
@@ -219,6 +224,12 @@ const Home = {
       switch (data.type) {
         case "status":
           status.value = data.text;
+          if (
+            data.text.includes("Model loaded successfully") ||
+            data.text.startsWith("Ready")
+          ) {          
+            modelLoading.value = false;
+          }
           break;
         
         case "thinking":
@@ -313,8 +324,8 @@ const Home = {
         return;
       }
     
-      loading.value = true;
-    
+      modelLoading.value = true;
+      
       status.value =
         `Loading ${selectedModel.value}...`;
     

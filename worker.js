@@ -756,14 +756,12 @@ async function generate(prompt) {
     });
 
     SESSION_HISTORY = history
+      .filter(msg => msg.role !== "system")
       .filter(msg =>
-        msg.role !== "system" &&
-        !msg.content.includes(
-          "Continue exactly from where you stopped"
-        )
+        !msg.content.includes("Continue exactly from where you stopped")
       )
       .slice(-MAX_HISTORY);
-    
+        
     postMessage({
       type: "response",
       text: answer,

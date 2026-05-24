@@ -757,8 +757,6 @@ function resetUnloadTimer() {
 
     // NEVER unload during generation
     if (ACTIVE_GENERATION) {
-
-      resetUnloadTimer();
       return;
     }
 

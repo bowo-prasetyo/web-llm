@@ -35,6 +35,8 @@ let DEVICE_PROFILE = {
 };
 
 let RETRYING_AFTER_CRASH = false;
+let continuationCount = 0;
+const MAX_CONTINUATIONS = 3;
 
 async function saveToOPFS(filename, content) {
   const root = await navigator.storage.getDirectory();
@@ -525,40 +527,30 @@ async function generate(prompt) {
     let answer =
       response.choices[0].message.content;
     
-    if (finishReason === "length") {
-  
-      if (!engine) {
-      
-        postMessage({
-          type: "status",
-          text:
-            "Continuation skipped",
-        });
-            
-        return;
-      }
-          
+    while (
+      finishReason === "length" &&
+      continuationCount < MAX_CONTINUATIONS
+    ) {
+    
+      continuationCount++;
+    
       postMessage({
         type: "status",
-        text: "Continuing response...",
-      });
-    
-      history.push({
-        role: "assistant",
-        content: answer,
+        text:
+          `Continuing response (${continuationCount})...`,
       });
     
       history.push({
         role: "user",
         content:
-          "Continue exactly from where you stopped. Do not repeat previous sentences."
+          "Continue exactly from where you stopped. Do not repeat previous text.",
       });
-
+    
+      let cleanContinuation = "";
+    
       IS_GENERATING = true;
       resetStallTimer();
-      
-      let cleanContinuation = "";
-      
+    
       const continuationStream =
         await engine.chat.completions.create({
     
@@ -566,45 +558,54 @@ async function generate(prompt) {
     
           temperature:
             MODEL_CONFIG.temperature,
-    
+
           max_tokens:
-            Math.floor(
-              MODEL_CONFIG.max_tokens * 0.5
-            ),
+            MODEL_CONFIG.max_tokens,
     
           stream: true,
         });
-          
-      for await (
-        const chunk of continuationStream
-      ) {
+    
+      finishReason = null;
+    
+      for await (const chunk of continuationStream) {
     
         const delta =
           chunk.choices?.[0]?.delta?.content || "";
     
+        finishReason =
+          chunk.choices?.[0]?.finish_reason;
+    
         if (!delta) {
           continue;
         }
-
+    
         LAST_STREAM_TIME = Date.now();
         resetStallTimer();
     
         const candidate =
           cleanContinuation + delta;
-        const cleaned =
+    
+        cleanContinuation =
           removeOverlap(answer, candidate);
-        cleanContinuation = cleaned;
-        
+    
         postMessage({
           type: "stream",
-          text: answer + cleaned,
+          text:
+            answer + cleanContinuation,
         });
       }
-      
-      answer += cleanContinuation;
-
+    
       IS_GENERATING = false;
-      clearTimeout(STALL_TIMEOUT);
+    
+      answer += cleanContinuation;
+    
+      history.push({
+        role: "assistant",
+        content: cleanContinuation,
+      });
+    
+      history =
+        history.slice(-MAX_HISTORY);
     }
       
     RETRYING_AFTER_CRASH = false;
@@ -724,7 +725,7 @@ function resetUnloadTimer() {
       text: "Model unloaded to save memory",
     });
 
-  }, 60000);
+  }, 300000);
 };
 
 async function loadVectorDB() {

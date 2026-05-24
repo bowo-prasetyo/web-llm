@@ -206,7 +206,7 @@ const Home = {
       prompt.value = "";
       loading.value = true;
 
-      worker.postMessage({
+      getWorker().postMessage({
         type: "generate",
         prompt: text,
       });
@@ -256,7 +256,7 @@ const Home = {
         text = await file.text();
       }
 
-      worker.postMessage({
+      getWorker().postMessage({
         type: "ingest",
         filename: file.name,
         text,
@@ -279,7 +279,7 @@ const Home = {
         // Replace the module-level worker so getWorker() stays consistent
         worker = replaceWorker(onWorkerMessage);
 
-        worker.postMessage({
+        getWorker().postMessage({
           type: "init"
         });
 
@@ -422,7 +422,7 @@ const Home = {
       status.value =
         `Loading ${settings.value.model}...`;
     
-      worker.postMessage({
+      getWorker().postMessage({
         type: "set-config",
         config: settings.value,
       });
@@ -502,12 +502,12 @@ const Home = {
       };
     }
         
-    worker.onmessage = onWorkerMessage;
+    getWorker().onmessage = onWorkerMessage;
 
     onMounted(() => {
     
       loadSettings();
-      worker.postMessage({
+      getWorker().postMessage({
         type: "init",
       });    
     });

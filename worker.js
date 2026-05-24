@@ -469,6 +469,12 @@ async function generate(prompt) {
       
           max_tokens:
             maxTokens,
+
+          stop: [
+            "\nUser:",
+            "\nHuman:",
+            "\nAssistant:",
+          ],
       
           stream: true,
         });
@@ -571,6 +577,7 @@ async function generate(prompt) {
   
     let answer =
       response.choices[0].message.content;
+    let totalGeneratedChars = answer.length;
 
     while (
       finishReason === "length" &&
@@ -618,22 +625,19 @@ async function generate(prompt) {
     
           max_tokens:
             maxTokens,
-    
+
+          stop: [
+            "\nUser:",
+            "\nHuman:",
+            "\nAssistant:",
+          ],
+      
           stream: true,
       });
     
       finishReason = null;
     
       for await (const chunk of continuationStream) {
-
-        if (
-          Date.now() - generationStart >
-          HARD_TIMEOUT_MS
-        ) {
-          throw new Error(
-            "Generation exceeded maximum time"
-          );
-        }
                 
         const choice = chunk.choices?.[0];
 
@@ -676,16 +680,41 @@ async function generate(prompt) {
       }
     
       IS_GENERATING = false;
+
+      if (isRepeating(answer + cleanContinuation)) {
+
+        postMessage({
+          type: "status",
+          text:
+            "Stopping repetitive continuation",
+        });
+      
+        break;
+      }
     
       answer += cleanContinuation;
+      totalGeneratedChars += cleanContinuation.length;
 
+      if (totalGeneratedChars > 4000) {
+        break;
+      }
+
+      if (
+        Date.now() - generationStart >
+        HARD_TIMEOUT_MS
+      ) {
+        throw new Error(
+          "Generation exceeded maximum time"
+        );
+      }
+      
     }
 
     history.push({
       role: "assistant",
       content: answer,
     });
-i
+
     SESSION_HISTORY = history
       .filter(msg =>
         msg.role !== "system" &&
@@ -1110,4 +1139,22 @@ function removeOverlap(original, continuation) {
   }
 
   return continuation;
+}
+
+function isRepeating(text) {
+
+  const sentences =
+    text.split(/[.!?]\s+/);
+
+  if (sentences.length < 6) {
+    return false;
+  }
+
+  const last =
+    sentences.slice(-3);
+
+  const unique =
+    new Set(last);
+
+  return unique.size < 2;
 }

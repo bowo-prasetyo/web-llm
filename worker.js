@@ -8,6 +8,7 @@ import {
 
 //const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const SMALLEST_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+const HARD_TIMEOUT_MS = 180000;
 
 let IS_GENERATING = false;
 let LAST_STREAM_TIME = 0;
@@ -15,6 +16,7 @@ let STALL_TIMEOUT = null;
 let REQUEST_COUNTER = 0;
 let ACTIVE_GENERATION = false;
 let SESSION_HISTORY = [];
+
 
 let engine = null;
 let initializingPromise = null;
@@ -384,6 +386,7 @@ async function generate(prompt) {
   
   try {
 
+    const generationStart = Date.now();
     continuationCount = 0;
     ACTIVE_GENERATION = true;
     
@@ -455,7 +458,16 @@ async function generate(prompt) {
       const requestId = ++REQUEST_COUNTER;
       
       for await (const chunk of completion) {
-        
+
+        if (
+          Date.now() - generationStart >
+          HARD_TIMEOUT_MS
+        ) {
+          throw new Error(
+            "Generation exceeded maximum time"
+          );
+        }
+                
         if (requestId !== REQUEST_COUNTER) {
           return;
         }
@@ -972,11 +984,10 @@ function resetStallTimer() {
 
   clearTimeout(STALL_TIMEOUT);
 
-  // Longer timeout for first token
   const timeout =
     LAST_STREAM_TIME === 0
-      ? 60000   // waiting first token
-      : 25000;  // waiting next token
+      ? 90000
+      : 45000;
 
   STALL_TIMEOUT = setTimeout(() => {
 
@@ -984,30 +995,26 @@ function resetStallTimer() {
       return;
     }
 
-    // Ignore if token recently arrived
     const elapsed =
       Date.now() - LAST_STREAM_TIME;
 
+    // token arrived recently
     if (
       LAST_STREAM_TIME !== 0 &&
-      elapsed < 20000
+      elapsed < 40000
     ) {
       resetStallTimer();
       return;
     }
 
+    // only warning
     postMessage({
       type: "status",
-      text: "Generation stalled",
-    });
-
-    postMessage({
-      type: "error",
       text:
-        "Model stopped responding during generation.",
+        "Generation is taking longer than usual...",
     });
 
-    IS_GENERATING = false;
+    // DO NOT terminate here
 
   }, timeout);
 }

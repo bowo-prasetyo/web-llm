@@ -370,11 +370,6 @@ const Home = {
           }
             
           await applySettings();
-          
-          postMessage({
-            type: "models",
-            models: AVAILABLE_MODELS,
-          });
           break;
                     
         case "error":

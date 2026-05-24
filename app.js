@@ -113,6 +113,11 @@ const Home = {
     >
       Apply Settings
     </button>
+    <button
+      @click="resetSettings"
+    >
+      Reset Defaults
+    </button>
     <input
       type="file"
       accept=".pdf,.txt,.md"
@@ -152,6 +157,7 @@ const Home = {
     const messagesContainer = ref(null);
     const streamingText = ref("");
     const models = ref([]);
+    const lastAppliedModel = ref("");
     const settings = ref({
       model: "",
       temperature: 0.7,
@@ -370,11 +376,32 @@ const Home = {
           break;
       }
     }
-  
+
     async function applySettings() {
     
       if (!settings.value.model) {
         return;
+      }
+    
+      // Only apply defaults
+      // when model changes
+      if (
+        settings.value.model !==
+        lastAppliedModel.value
+      ) {
+    
+        const defaults =
+          getModelDefaults(
+            settings.value.model
+          );
+    
+        settings.value = {
+          ...settings.value,
+          ...defaults,
+        };
+    
+        lastAppliedModel.value =
+          settings.value.model;
       }
     
       modelLoading.value = true;
@@ -389,7 +416,7 @@ const Home = {
         config: settings.value,
       });
     }
-        
+            
     function saveSettings() {
     
       localStorage.setItem(
@@ -424,6 +451,45 @@ const Home = {
         );
       }
     }
+
+    function resetSettings() {
+    
+      settings.value = {
+        model: models.value[0] || "",
+        temperature: 0.3,
+        max_tokens: 128,
+        contextWindowSize: 2048,
+      };
+    
+      saveSettings();
+    }
+
+    function getModelDefaults(model) {
+    
+      if (model.includes("0.5B")) {
+    
+        return {
+          temperature: 0.2,
+          max_tokens: 64,
+          contextWindowSize: 2048,
+        };
+      }
+    
+      if (model.includes("1.5B")) {
+    
+        return {
+          temperature: 0.3,
+          max_tokens: 128,
+          contextWindowSize: 4096,
+        };
+      }
+    
+      return {
+        temperature: 0.7,
+        max_tokens: 256,
+        contextWindowSize: 4096,
+      };
+    }
         
     worker.onmessage = onWorkerMessage;
 
@@ -448,6 +514,7 @@ const Home = {
       applySettings,
       saveSettings,
       loadSettings,
+      resetSettings,
     };
   },
 };

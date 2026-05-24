@@ -44,7 +44,7 @@ let embedderPromise = null;
 let vectorDB = [];
 
 let MODEL = null;
-let USER_SELECTED_MODEL = null;
+let USER_CONFIG = null;
 
 let MODEL_CONFIG = {
   max_tokens: 256,
@@ -93,23 +93,28 @@ async function detectBestModel() {
   // ------------------------------------------------
   // User Selected Model Override
   // ------------------------------------------------
+
+  if (USER_CONFIG) {
   
-  if (USER_SELECTED_MODEL) {
-  
-    MODEL = USER_SELECTED_MODEL;
+    MODEL = USER_CONFIG.model;
   
     DEVICE_PROFILE = {
       name: "Manual Selection",
       lowEnd: false,
       unstable: false,
     };
-  
+
     MODEL_CONFIG = {
-      max_tokens: 256,
-      temperature: 0.7,
-      contextWindowSize: 4096,
+      max_tokens:
+        USER_CONFIG.max_tokens,
+    
+      temperature:
+        USER_CONFIG.temperature,
+    
+      contextWindowSize:
+        USER_CONFIG.contextWindowSize,
     };
-  
+      
     postMessage({
       type: "status",
       text: `Using manually selected model: ${MODEL}`,
@@ -841,8 +846,8 @@ self.onmessage = async (event) => {
         await initialize();      
         break;
 
-      case "set-model":
-        USER_SELECTED_MODEL = data.model;
+      case "set-config":
+        USER_CONFIG = data.config;
       
         // unload existing engine
         engine = null;
@@ -850,7 +855,7 @@ self.onmessage = async (event) => {
       
         postMessage({
           type: "status",
-          text: `Switching model to ${data.model}...`,
+          text: `Loading ${data.config.model}...`,
         });
       
         await initialize();

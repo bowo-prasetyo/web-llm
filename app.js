@@ -21,6 +21,15 @@ function getWorker() {
   return worker;
 }
 
+function replaceWorker(onmessage) {
+  if (worker) {
+    try { worker.terminate(); } catch (_) {}
+  }
+  worker = new Worker("./worker.js", { type: "module" });
+  worker.onmessage = onmessage;
+  return worker;
+}
+
 const Home = {
   template: `
     <div class="container">
@@ -129,7 +138,7 @@ const Home = {
         <textarea
           v-model="prompt"
           placeholder="Ask something..."
-          @keydown.enter.prevent="send"
+          @keydown.enter.exact.prevent="send"
         ></textarea>
 
         <button
@@ -164,7 +173,8 @@ const Home = {
       max_tokens: 256,
       contextWindowSize: 4096,
     });
-    let worker = getWorker();
+    // Always use the module-level worker via getWorker() — never snapshot it
+    // into a local variable, as fatal restarts replace the module-level ref.
 
     async function scrollBottom() {
       await nextTick();
@@ -251,6 +261,9 @@ const Home = {
         filename: file.name,
         text,
       });
+
+      // Reset so re-uploading the same file triggers onChange again
+      event.target.value = "";
     }
 
     async function onWorkerMessage(event) {
@@ -261,14 +274,10 @@ const Home = {
         status.value = data.text;
 
         loading.value = false;
+        modelLoading.value = false;
 
-        worker.terminate();
-
-        worker = new Worker("./worker.js", {
-          type: "module"
-        });
-
-        worker.onmessage = onWorkerMessage;
+        // Replace the module-level worker so getWorker() stays consistent
+        worker = replaceWorker(onWorkerMessage);
 
         worker.postMessage({
           type: "init"
@@ -506,6 +515,7 @@ const Home = {
     return {
       prompt,
       loading,
+      modelLoading,
       status,
       messages,
       messagesContainer,

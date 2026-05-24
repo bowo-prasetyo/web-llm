@@ -794,7 +794,16 @@ self.onmessage = async (event) => {
       case "set-config":
       
         USER_CONFIG = data.config;
-      
+
+        // Clear history so the new model starts with a clean slate
+        SESSION_HISTORY = [];
+
+        // If an initialize() is already in flight, wait for it to settle
+        // before tearing down, to avoid racing with an ongoing load.
+        if (initializingPromise) {
+          try { await initializingPromise; } catch (_) {}
+        }
+
         if (engine) {
       
           postMessage({
@@ -1141,6 +1150,11 @@ function isCorrupted(text) {
 }
 
 function computeMaxTokens() {
+
+  // Honour user-configured value first
+  if (MODEL_CONFIG.max_tokens) {
+    return MODEL_CONFIG.max_tokens;
+  }
 
   if (DEVICE_PROFILE.lowEnd) {
     return 96;

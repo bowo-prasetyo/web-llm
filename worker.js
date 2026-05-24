@@ -376,14 +376,15 @@ async function initialize() {
 
 async function generate(prompt) {
   try {
-  
+
+    continuationCount = 0;
     ACTIVE_GENERATION = true;
     
     await initialize();
   
-    MODEL_CONFIG.max_tokens =
+    const maxTokens =
       computeMaxTokens();
-  
+    
     let history = [...SESSION_HISTORY];
 
     // Keep only recent history
@@ -437,7 +438,7 @@ async function generate(prompt) {
             MODEL_CONFIG.temperature,
       
           max_tokens:
-            MODEL_CONFIG.max_tokens,
+            maxTokens,
       
           stream: true,
         });
@@ -541,32 +542,34 @@ async function generate(prompt) {
       });
     
       history.push({
-        role: "user",
-        content:
-          "Continue exactly from where you stopped. Do not repeat previous text.",
+        role: "assistant",
+        content: answer,
       });
-    
+      
       let cleanContinuation = "";
     
       IS_GENERATING = true;
       resetStallTimer();
-    
+
       const continuationStream =
         await engine.chat.completions.create({
-    
+      
           messages: history,
-    
+      
           temperature:
             MODEL_CONFIG.temperature,
-
+      
           max_tokens:
-            MODEL_CONFIG.max_tokens,
-    
+            maxTokens,
+      
           stream: true,
-        });
-    
+      });
+            
       finishReason = null;
-    
+      IS_GENERATING = true;
+      LAST_STREAM_TIME = 0;
+      resetStallTimer();
+            
       for await (const chunk of continuationStream) {
     
         const delta =
@@ -582,12 +585,18 @@ async function generate(prompt) {
         LAST_STREAM_TIME = Date.now();
         resetStallTimer();
     
-        const candidate =
-          cleanContinuation + delta;
-    
-        cleanContinuation =
-          removeOverlap(answer, candidate);
-    
+        cleanContinuation += delta;
+        
+        if (
+          cleanContinuation.length < 300
+        ) {
+          cleanContinuation =
+            removeOverlap(
+              answer,
+              cleanContinuation
+            );
+        }
+        
         postMessage({
           type: "stream",
           text:
@@ -598,11 +607,6 @@ async function generate(prompt) {
       IS_GENERATING = false;
     
       answer += cleanContinuation;
-    
-      history.push({
-        role: "assistant",
-        content: cleanContinuation,
-      });
     
       history =
         history.slice(-MAX_HISTORY);
@@ -647,15 +651,9 @@ async function generate(prompt) {
       role: "assistant",
       content: answer,
     });
-      
+
     SESSION_HISTORY =
-      history
-        .filter(msg =>
-          !msg.content.includes(
-            "Continue exactly from where you stopped"
-          )
-        )
-        .slice(-MAX_HISTORY);
+      history.slice(-MAX_HISTORY);
     
     RETRYING_AFTER_CRASH = false;
     

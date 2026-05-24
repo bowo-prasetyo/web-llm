@@ -764,59 +764,6 @@ async function generate(prompt) {
       )
       .slice(-MAX_HISTORY);
     
-    if (isCorrupted(answer)) {
-    
-      // Already retried once?
-      if (RETRYING_AFTER_CRASH) {
-
-        RETRYING_AFTER_CRASH = false;
-      
-        postMessage({
-          type: "error",
-          text:
-            "Model produced corrupted output.",
-        });
-      
-        return;
-      }
-            
-      RETRYING_AFTER_CRASH = true;
-    
-      postMessage({
-        type: "status",
-        text:
-          "Corrupted output detected. Retrying safely...",
-      });
-    
-      // Keep same engine alive
-      const originalTemperature =
-        MODEL_CONFIG.temperature;
-      const originalMaxTokens =
-        MODEL_CONFIG.max_tokens;
-      const originalHistory = SESSION_HISTORY;
-      
-      MODEL_CONFIG.temperature = 0.1;
-      MODEL_CONFIG.max_tokens = 32;
-      SESSION_HISTORY = [];
-      
-      try {
-        
-        return await generate(
-          "Answer briefly and clearly: " + prompt
-        );
-        
-      }
-      finally {
-        
-        MODEL_CONFIG.temperature = originalTemperature;
-        MODEL_CONFIG.max_tokens = originalMaxTokens;  
-        SESSION_HISTORY = originalHistory;
-        
-      }
-    }
-    
-    RETRYING_AFTER_CRASH = false;
-    
     postMessage({
       type: "response",
       text: answer,
@@ -838,24 +785,45 @@ self.onmessage = async (event) => {
   try {
     switch (data.type) {
       case "init":
+      
         postMessage({
           type: "models",
           models: AVAILABLE_MODELS,
         });
       
-        await initialize();      
         break;
-
+              
       case "set-config":
+      
         USER_CONFIG = data.config;
       
-        // unload existing engine
+        if (engine) {
+      
+          postMessage({
+            type: "status",
+            text: "Unloading previous model...",
+          });
+      
+          try {
+      
+            await engine.unload();
+      
+          } catch (err) {
+      
+            console.warn(
+              "Unload failed",
+              err
+            );
+          }
+        }
+      
         engine = null;
         initializingPromise = null;
       
         postMessage({
           type: "status",
-          text: `Loading ${data.config.model}...`,
+          text:
+            `Initializing ${data.config.model}...`,
         });
       
         await initialize();
@@ -887,23 +855,39 @@ function resetUnloadTimer() {
 
   clearTimeout(unloadTimer);
 
-  unloadTimer = setTimeout(() => {
-
-    // NEVER unload during generation
+  unloadTimer = setTimeout(async () => {
+  
     if (IS_GENERATING || ACTIVE_GENERATION) {
       resetUnloadTimer();
       return;
     }
-        
+  
+    if (engine) {
+  
+      try {
+  
+        await engine.unload();
+  
+      } catch (err) {
+  
+        console.warn(
+          "Unload failed",
+          err
+        );
+      }
+    }
+  
     engine = null;
     initializingPromise = null;
-
+  
     postMessage({
       type: "status",
-      text: "Model unloaded to save memory",
+      text:
+        "Model unloaded to save memory",
     });
-
-  }, 300000);
+  
+  }, 1800000);
+  
 };
 
 async function loadVectorDB() {

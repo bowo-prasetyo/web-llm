@@ -333,36 +333,41 @@ async function initialize() {
         }
       );
 
-    } catch (err) {
-
+    catch (err) {
+    
+      const message = err?.message || "";
+    
       const gpuCrash =
-        err.message.includes("DXGI_ERROR") ||
-        err.message.includes("Device was lost") ||
-        err.message.includes("device removed") ||
-        err.message.includes("GPUBuffer");
-
-        if (gpuCrash) {
-        
-          await saveToOPFS(
-            "gpu-instability.flag",
-            "1"
-          );
-        
-          engine = null;
-          initializingPromise = null;
-        
-          postMessage({
-            type: "fatal",
-            text:
-              "GPU became unstable. Restarting in safe GPU mode.",
-          });
-        
-          self.close();
-          return;
-        }
-      
+        message.includes("DXGI_ERROR") ||
+        message.includes("Device was lost") ||
+        message.includes("device removed") ||
+        message.includes("GPUBuffer");
+    
+      if (gpuCrash) {
+    
+        await saveToOPFS(
+          "gpu-instability.flag",
+          "1"
+        );
+    
+        engine = null;
+        initializingPromise = null;
+    
+        postMessage({
+          type: "fatal",
+          text:
+            "GPU became unstable. Restarting in safe GPU mode.",
+        });
+    
+        self.close();
+        return;
+      }
+    
+      // IMPORTANT
+      initializingPromise = null;
+      throw err;
     }
-
+    
     await loadVectorDB();
 
     postMessage({
@@ -446,6 +451,7 @@ async function generate(prompt) {
       
       resetStallTimer();
       const requestId = ++REQUEST_COUNTER;
+      let tokenCount = 0;
       
       for await (const chunk of completion) {
         
@@ -469,6 +475,7 @@ async function generate(prompt) {
         resetStallTimer();
       
         partial += delta;
+        tokenCount += delta.split(/\s+/).length;
       
         postMessage({
           type: "stream",
@@ -477,8 +484,7 @@ async function generate(prompt) {
         
         postMessage({
           type: "token",
-          count:
-            partial.split(/\s+/).length,
+          count: tokenCount,
         });
       }
       
@@ -583,6 +589,7 @@ async function generate(prompt) {
       });
     
       finishReason = null;
+      tokenCount = 0;
     
       for await (const chunk of continuationStream) {
 
@@ -602,6 +609,7 @@ async function generate(prompt) {
         resetStallTimer();
       
         cleanContinuation += delta;
+        tokenCount += delta.split(/\s+/).length;
     
         if (
           cleanContinuation.length < 300
@@ -621,8 +629,7 @@ async function generate(prompt) {
         
         postMessage({
           type: "token",
-          count:
-            cleanContinuation.split(/\s+/).length,
+          count: tokenCount,
         });
       }
     
@@ -851,7 +858,13 @@ function cosineSimilarity(a, b) {
   magA = Math.sqrt(magA);
   magB = Math.sqrt(magB);
 
-  return dot / (magA * magB);
+  const denom = magA * magB;
+  
+  if (denom === 0) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  
+  return dot / denom;
 }
 
 async function ingestDocument(

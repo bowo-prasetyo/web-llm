@@ -476,29 +476,57 @@ const Home = {
     }
 
     function getModelDefaults(model) {
-    
+
+      // ~0.5B — ultra-lightweight
       if (model.includes("0.5B")) {
-    
         return {
           temperature: 0.2,
-          max_tokens: 64,
+          max_tokens: 128,
           contextWindowSize: 2048,
         };
       }
-    
-      if (model.includes("1.5B")) {
-    
+
+      // ~1B
+      if (model.includes("1B")) {
         return {
-          temperature: 0.3,
-          max_tokens: 128,
+          temperature: 0.4,
+          max_tokens: 256,
           contextWindowSize: 4096,
         };
       }
-    
+
+      // ~1.5B (includes Coder-1.5B)
+      if (model.includes("1.5B")) {
+        return {
+          temperature: 0.4,
+          max_tokens: 512,
+          contextWindowSize: 4096,
+        };
+      }
+
+      // ~2B (Gemma-2-2B)
+      if (model.includes("2b") || model.includes("2B")) {
+        return {
+          temperature: 0.6,
+          max_tokens: 512,
+          contextWindowSize: 4096,
+        };
+      }
+
+      // ~3B (Qwen2.5-3B, Llama-3.1-3B)
+      if (model.includes("3B")) {
+        return {
+          temperature: 0.7,
+          max_tokens: 768,
+          contextWindowSize: 8192,
+        };
+      }
+
+      // ~3.8B (Phi-3.5-mini) and unknown — most capable defaults
       return {
         temperature: 0.7,
-        max_tokens: 256,
-        contextWindowSize: 4096,
+        max_tokens: 768,
+        contextWindowSize: 8192,
       };
     }
         

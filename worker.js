@@ -18,12 +18,20 @@ Rules you must never break:
 - If the user states a correct fact, accept it. Do not contradict correct information the user provides.
 - Only correct the user if you are certain they are factually wrong.`;
 
-//const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
-const SMALLEST_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
+const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const AVAILABLE_MODELS = [
-  "Llama-3.2-1B-Instruct-q4f32_1-MLC",
+  // ~0.5B — ultra-lightweight
   "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
+  // ~1–1.5B — lightweight
+  "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
+  "Llama-3.2-1B-Instruct-q4f32_1-MLC",
   "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
+  // ~2–3B — mid-range
+  "gemma-2-2b-it-q4f16_1-MLC",
+  "Qwen2.5-3B-Instruct-q4f16_1-MLC",
+  "Llama-3.1-3B-Instruct-q4f16_1-MLC",
+  // ~3.8B — heavy
+  "Phi-3.5-mini-instruct-q4f16_1-MLC",
 ];
 
 const HARD_TIMEOUT_MS = 180000;
@@ -1166,11 +1174,18 @@ function computeMaxTokens() {
     return 96;
   }
 
-  if (MODEL.includes("1.5B")) {
+  // ~0.5B
+  if (MODEL.includes("0.5B")) {
+    return 128;
+  }
+
+  // ~1–1.5B
+  if (MODEL.includes("1B") || MODEL.includes("1.5B")) {
     return 512;
   }
 
-  return 256;
+  // ~2–3.8B — more capacity
+  return 768;
 }
 
 function ensureEngine() {

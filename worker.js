@@ -36,6 +36,12 @@ const AVAILABLE_MODELS = [
 
 const HARD_TIMEOUT_MS = 180000;
 
+// Maximum conversation turns kept in history.
+// Recomputed per-generation based on device profile (see generate()),
+// but also needed at module scope for the restore-history handler.
+const MAX_HISTORY_HIGH = 20;
+const MAX_HISTORY_LOW  = 6;
+
 let IS_GENERATING = false;
 let LAST_STREAM_TIME = 0;
 let STALL_TIMEOUT = null;
@@ -463,11 +469,11 @@ async function generate(prompt) {
       ...SESSION_HISTORY
     ];
 
-    // Keep only recent history
+    // Keep only recent history (use module-level constants)
     const MAX_HISTORY =
       DEVICE_PROFILE.lowEnd ?
-      6 :
-      20;
+      MAX_HISTORY_LOW :
+      MAX_HISTORY_HIGH;
     
     let response;
     let finishReason = null;
@@ -880,7 +886,7 @@ self.onmessage = async (event) => {
           SESSION_HISTORY = data.history
             .filter(m => m.role === "user" || m.role === "assistant")
             .filter(m => typeof m.content === "string" && m.content.trim())
-            .slice(-MAX_HISTORY);
+            .slice(-MAX_HISTORY_HIGH);
         }
         break;
 

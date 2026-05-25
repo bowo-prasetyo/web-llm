@@ -173,6 +173,7 @@ const Home = {
     const streamingText = ref("");
     const models = ref([]);
     const lastAppliedModel = ref("");
+    const conversationRestored = ref(false); // guard: restore once per page load
     const settings = ref({
       model: "",
       temperature: 0.7,
@@ -208,6 +209,7 @@ const Home = {
       }
 
       addMessage("user", text);
+      saveConversation(); // persist user message immediately
 
       prompt.value = "";
       loading.value = true;
@@ -300,9 +302,14 @@ const Home = {
             data.text.startsWith("Ready")
           ) {
             modelLoading.value = false;
-            // Restore persisted conversation into the UI and worker
-            // now that the model is loaded and ready to receive history.
-            loadConversation();
+            // Restore persisted conversation once per page load only.
+            // Subsequent "Ready" status messages (after each generation)
+            // must not re-run loadConversation, or it would overwrite
+            // messages.value and lose the current live conversation.
+            if (!conversationRestored.value) {
+              conversationRestored.value = true;
+              loadConversation();
+            }
           }
           break;
         

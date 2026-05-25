@@ -634,23 +634,34 @@ async function generate(prompt) {
         text: `Continuing response (${continuationCount})...`,
       });
 
-      // Use assistant-prefill: append the partial answer as an assistant
-      // message with no trailing user turn. The model then continues from
-      // exactly where it stopped, instead of restarting from a user prompt.
+      // WebLLM requires the last message to be role "user" or "tool" —
+      // it rejects conversations ending with "assistant". We therefore use
+      // a two-message tail: the partial answer as an assistant turn, then a
+      // minimal user directive. The directive is intentionally terse and
+      // instruction-like so the model appends rather than restarts.
       const systemMsg =
         history[0]?.role === "system" ? [history[0]] : [];
       const nonSystem =
         history.slice(systemMsg.length);
 
-      // Keep the most recent conversation turns plus the partial answer.
-      // Slice before pushing so we never evict the prefill message.
       const trimmed =
         nonSystem.slice(-Math.max(MAX_HISTORY - 2, 4));
 
-      const prefillHistory = [
+      // Trim the partial answer to its last ~400 chars so the seam context
+      // fits within a small model's attention without eating max_tokens.
+      const SEAM_CONTEXT = 400;
+      const seam = answer.length > SEAM_CONTEXT
+        ? "..." + answer.slice(-SEAM_CONTEXT)
+        : answer;
+
+      const continuationHistory = [
         ...systemMsg,
         ...trimmed,
-        { role: "assistant", content: answer },
+        { role: "assistant", content: seam },
+        {
+          role: "user",
+          content: "[continue]",
+        },
       ];
 
       let continuation = "";
@@ -661,7 +672,7 @@ async function generate(prompt) {
 
       const continuationStream =
         await engine.chat.completions.create({
-          messages: prefillHistory,
+          messages: continuationHistory,
           temperature: MODEL_CONFIG.temperature,
           max_tokens: maxTokens,
           stop: ["\nUser:", "\nHuman:", "\nAssistant:"],
@@ -703,7 +714,7 @@ async function generate(prompt) {
 
       IS_GENERATING = false;
 
-      // Safety: strip any accidental overlap at the seam (e.g. mid-word split)
+      // Strip overlap at the seam once, after the full continuation arrives.
       const cleanContinuation = removeOverlap(answer, continuation);
 
       if (!cleanContinuation.trim() || isRepeating(answer + cleanContinuation)) {
@@ -717,8 +728,9 @@ async function generate(prompt) {
       answer += cleanContinuation;
       totalGeneratedChars += cleanContinuation.length;
 
-      // Update history to include the now-extended answer for next iteration
-      history = prefillHistory.slice(0, -1); // remove prefill stub
+      // Carry forward clean history (without the continuation scaffold)
+      // so the next loop iteration or SESSION_HISTORY save is consistent.
+      history = [...systemMsg, ...trimmed];
 
       if (totalGeneratedChars > 4000) {
         break;

@@ -6,18 +6,15 @@ import {
   pipeline
 } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
-const SYSTEM_PROMPT = `
-You are a precise and truthful AI assistant.
+const SYSTEM_PROMPT = `You are a concise, factually accurate AI assistant.
 
-Rules:
-- Prefer correctness over sounding conversational.
-- If uncertain, say you are uncertain.
-- Do not invent facts.
-- Maintain logical consistency across the conversation.
-- Do not change previous correct answers unless necessary.
-- Keep answers concise and accurate.
-- Avoid unnecessary self-reflection like "I think I made a mistake" unless actually correcting an error.
-`;
+Rules you must never break:
+- Never contradict established science, physics, or basic facts (e.g. humans have mass).
+- If you are unsure, say "I'm not sure" — do not invent an explanation.
+- Do not add philosophical or metaphysical tangents to simple factual questions.
+- Do not contradict yourself within the same conversation.
+- Keep answers short and direct unless the user asks for detail.
+- Never redefine ordinary words (like "mass", "weight", "you") in unusual ways to rescue a wrong answer.`;
 
 //const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const SMALLEST_MODEL = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
@@ -485,8 +482,14 @@ async function generate(prompt) {
         role: "user",
         content: augmentedPrompt,
       });
-  
-      history = history.slice(-MAX_HISTORY);
+
+      // Always pin the system message — slice only the non-system tail
+      // so MAX_HISTORY evictions never strip the model's instructions.
+      {
+        const sys = history[0]?.role === "system" ? [history[0]] : [];
+        const rest = history.slice(sys.length);
+        history = [...sys, ...rest.slice(-Math.max(MAX_HISTORY - 1, 4))];
+      }
       
       IS_GENERATING = true;
       LAST_STREAM_TIME = 0;

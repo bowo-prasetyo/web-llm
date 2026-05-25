@@ -646,8 +646,13 @@ async function generate(prompt) {
           "Continue exactly from where you stopped without repeating previous text.",
       });
     
-      history =
-        history.slice(-MAX_HISTORY);
+      // Preserve the last assistant+user pair when slicing so the model
+      // always has its own prior output as context for the continuation.
+      if (history.length > MAX_HISTORY) {
+        const systemMsg = history[0]?.role === "system" ? [history[0]] : [];
+        const rest = history.slice(systemMsg.length);
+        history = [...systemMsg, ...rest.slice(-Math.max(MAX_HISTORY - 1, 4))];
+      }
     
       let cleanContinuation = "";
     
@@ -697,20 +702,9 @@ async function generate(prompt) {
         cleanContinuation += delta;
         tokenCount += delta.split(/\s+/).length;
     
-        if (
-          cleanContinuation.length < 300
-        ) {
-          cleanContinuation =
-            removeOverlap(
-              answer,
-              cleanContinuation
-            );
-        }
-    
         postMessage({
           type: "stream",
-          text:
-            answer + cleanContinuation,
+          text: answer + cleanContinuation,
         });
         
         postMessage({
@@ -718,7 +712,11 @@ async function generate(prompt) {
           count: tokenCount,
         });
       }
-    
+
+      // Apply overlap removal once after the full continuation is received.
+      // Doing it inside the stream loop would corrupt partial in-flight tokens.
+      cleanContinuation = removeOverlap(answer, cleanContinuation);
+
       IS_GENERATING = false;
 
       if (isRepeating(answer + cleanContinuation)) {

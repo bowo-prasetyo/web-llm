@@ -623,129 +623,108 @@ async function generate(prompt) {
       finishReason === "length" &&
       continuationCount < MAX_CONTINUATIONS
     ) {
-    
+
       continuationCount++;
-    
+
       postMessage({
         type: "status",
-        text:
-          `Continuing response (${continuationCount})...`,
+        text: `Continuing response (${continuationCount})...`,
       });
-    
-      // IMPORTANT:
-      // assistant message first
-      history.push({
-        role: "assistant",
-        content: answer,
-      });
-    
-      // THEN user continuation request
-      history.push({
-        role: "user",
-        content:
-          "Continue exactly from where you stopped without repeating previous text.",
-      });
-    
-      // Preserve the last assistant+user pair when slicing so the model
-      // always has its own prior output as context for the continuation.
-      if (history.length > MAX_HISTORY) {
-        const systemMsg = history[0]?.role === "system" ? [history[0]] : [];
-        const rest = history.slice(systemMsg.length);
-        history = [...systemMsg, ...rest.slice(-Math.max(MAX_HISTORY - 1, 4))];
-      }
-    
-      let cleanContinuation = "";
-    
+
+      // Use assistant-prefill: append the partial answer as an assistant
+      // message with no trailing user turn. The model then continues from
+      // exactly where it stopped, instead of restarting from a user prompt.
+      const systemMsg =
+        history[0]?.role === "system" ? [history[0]] : [];
+      const nonSystem =
+        history.slice(systemMsg.length);
+
+      // Keep the most recent conversation turns plus the partial answer.
+      // Slice before pushing so we never evict the prefill message.
+      const trimmed =
+        nonSystem.slice(-Math.max(MAX_HISTORY - 2, 4));
+
+      const prefillHistory = [
+        ...systemMsg,
+        ...trimmed,
+        { role: "assistant", content: answer },
+      ];
+
+      let continuation = "";
+
       IS_GENERATING = true;
       LAST_STREAM_TIME = 0;
       resetStallTimer();
-    
+
       const continuationStream =
         await engine.chat.completions.create({
-    
-          messages: history,
-    
-          temperature:
-            MODEL_CONFIG.temperature,
-    
-          max_tokens:
-            maxTokens,
-
-          stop: [
-            "\nUser:",
-            "\nHuman:",
-            "\nAssistant:",
-          ],
-      
+          messages: prefillHistory,
+          temperature: MODEL_CONFIG.temperature,
+          max_tokens: maxTokens,
+          stop: ["\nUser:", "\nHuman:", "\nAssistant:"],
           stream: true,
-      });
-    
+        });
+
       finishReason = null;
-    
+
       for await (const chunk of continuationStream) {
-                
+
         const choice = chunk.choices?.[0];
 
         if (choice?.finish_reason) {
           finishReason = choice.finish_reason;
         }
-      
+
         const delta = choice?.delta?.content || "";
-      
+
         if (!delta) {
           continue;
         }
-      
+
         LAST_STREAM_TIME = Date.now();
         resetStallTimer();
-      
-        cleanContinuation += delta;
+
+        continuation += delta;
         tokenCount += delta.split(/\s+/).length;
-    
+
         postMessage({
           type: "stream",
-          text: answer + cleanContinuation,
+          text: answer + continuation,
         });
-        
+
         postMessage({
           type: "token",
           count: tokenCount,
         });
       }
 
-      // Apply overlap removal once after the full continuation is received.
-      // Doing it inside the stream loop would corrupt partial in-flight tokens.
-      cleanContinuation = removeOverlap(answer, cleanContinuation);
-
       IS_GENERATING = false;
 
-      if (isRepeating(answer + cleanContinuation)) {
+      // Safety: strip any accidental overlap at the seam (e.g. mid-word split)
+      const cleanContinuation = removeOverlap(answer, continuation);
 
+      if (!cleanContinuation.trim() || isRepeating(answer + cleanContinuation)) {
         postMessage({
           type: "status",
-          text:
-            "Stopping repetitive continuation",
+          text: "Stopping: continuation empty or repetitive",
         });
-      
         break;
       }
-    
+
       answer += cleanContinuation;
       totalGeneratedChars += cleanContinuation.length;
+
+      // Update history to include the now-extended answer for next iteration
+      history = prefillHistory.slice(0, -1); // remove prefill stub
 
       if (totalGeneratedChars > 4000) {
         break;
       }
 
-      if (
-        Date.now() - generationStart >
-        HARD_TIMEOUT_MS
-      ) {
-        throw new Error(
-          "Generation exceeded maximum time"
-        );
+      if (Date.now() - generationStart > HARD_TIMEOUT_MS) {
+        throw new Error("Generation exceeded maximum time");
       }
-      
+
     }
 
     history.push({

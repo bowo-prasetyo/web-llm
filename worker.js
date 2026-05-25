@@ -807,10 +807,14 @@ self.onmessage = async (event) => {
               
       case "set-config":
       
+        const prevModel = USER_CONFIG?.model;
         USER_CONFIG = data.config;
 
-        // Clear history so the new model starts with a clean slate
-        SESSION_HISTORY = [];
+        // Clear SESSION_HISTORY only when the model actually changes —
+        // not on same-model reloads caused by tab resume / engine restart.
+        if (prevModel && prevModel !== data.config.model) {
+          SESSION_HISTORY = [];
+        }
 
         // If an initialize() is already in flight, wait for it to settle
         // before tearing down, to avoid racing with an ongoing load.
@@ -867,6 +871,21 @@ self.onmessage = async (event) => {
           type: "models",
           models: AVAILABLE_MODELS,
         });      
+        break;
+
+      case "restore-history":
+        // Repopulate SESSION_HISTORY from persisted UI messages.
+        // Only accepted when not currently generating.
+        if (!ACTIVE_GENERATION && Array.isArray(data.history)) {
+          SESSION_HISTORY = data.history
+            .filter(m => m.role === "user" || m.role === "assistant")
+            .filter(m => typeof m.content === "string" && m.content.trim())
+            .slice(-MAX_HISTORY);
+        }
+        break;
+
+      case "clear-history":
+        SESSION_HISTORY = [];
         break;
     }
   } catch (err) {

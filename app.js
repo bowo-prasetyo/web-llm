@@ -127,6 +127,12 @@ const Home = {
     >
       Reset Defaults
     </button>
+    <button
+      @click="clearConversation"
+      :disabled="messages.length === 0"
+    >
+      Clear Chat
+    </button>
     <input
       type="file"
       accept=".pdf,.txt,.md"
@@ -292,8 +298,11 @@ const Home = {
           if (
             data.text.includes("Model loaded successfully") ||
             data.text.startsWith("Ready")
-          ) {          
+          ) {
             modelLoading.value = false;
+            // Restore persisted conversation into the UI and worker
+            // now that the model is loaded and ready to receive history.
+            loadConversation();
           }
           break;
         
@@ -362,6 +371,8 @@ const Home = {
           status.value = "Ready";
         
           loading.value = false;
+
+          saveConversation();
         
           break;
 
@@ -394,8 +405,9 @@ const Home = {
         return;
       }
     
-      // Only apply defaults
-      // when model changes
+      // Only apply defaults when model changes;
+      // also clear persisted conversation so old history
+      // from a different model isn't fed to the new one.
       if (
         settings.value.model !==
         lastAppliedModel.value
@@ -410,6 +422,11 @@ const Home = {
           ...settings.value,
           ...defaults,
         };
+
+        if (lastAppliedModel.value !== "") {
+          // Only clear if this isn't the very first load
+          clearConversation();
+        }
     
         lastAppliedModel.value =
           settings.value.model;
@@ -475,6 +492,54 @@ const Home = {
       saveSettings();
     }
 
+    // ── Conversation persistence ──────────────────────────────────────────
+
+    const CONVERSATION_KEY = "webllm-conversation";
+    const MAX_PERSISTED_MESSAGES = 40;
+
+    function saveConversation() {
+      try {
+        // Only persist finalised messages (not mid-stream assistant-stream)
+        const toSave = messages.value
+          .filter(m => m.role !== "assistant-stream")
+          .slice(-MAX_PERSISTED_MESSAGES);
+        localStorage.setItem(
+          CONVERSATION_KEY,
+          JSON.stringify(toSave)
+        );
+      } catch (err) {
+        console.warn("Failed saving conversation", err);
+      }
+    }
+
+    function loadConversation() {
+      try {
+        const raw = localStorage.getItem(CONVERSATION_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) || parsed.length === 0) return;
+        messages.value = parsed;
+        scrollBottom();
+        // Restore SESSION_HISTORY in the worker so it has context
+        const history = parsed.map(m => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        }));
+        getWorker().postMessage({
+          type: "restore-history",
+          history,
+        });
+      } catch (err) {
+        console.warn("Failed loading conversation", err);
+      }
+    }
+
+    function clearConversation() {
+      messages.value = [];
+      localStorage.removeItem(CONVERSATION_KEY);
+      getWorker().postMessage({ type: "clear-history" });
+    }
+
     function getModelDefaults(model) {
 
       // ~0.5B — ultra-lightweight
@@ -537,7 +602,11 @@ const Home = {
       loadSettings();
       getWorker().postMessage({
         type: "init",
-      });    
+      });
+      // Restore conversation after a short tick so the worker has
+      // processed "init" and sent back "models" before we send history.
+      // The actual restore-history is sent once the model finishes loading,
+      // triggered from the "models" handler via loadConversation().
     });
         
     return {
@@ -555,6 +624,7 @@ const Home = {
       saveSettings,
       loadSettings,
       resetSettings,
+      clearConversation,
     };
   },
 };

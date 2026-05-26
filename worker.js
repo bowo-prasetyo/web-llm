@@ -516,6 +516,13 @@ async function generate(prompt) {
         type: "thinking",
       });
       
+      // Guard: if the engine was torn down between generate() start and here
+      // (e.g. by a concurrent set-config), reinitialise before proceeding.
+      if (!engine) {
+        postMessage({ type: "status", text: "Engine not ready, reinitialising..." });
+        initializingPromise = null;
+        await initialize();
+      }
       ensureEngine();
       
       const completion =
@@ -606,6 +613,18 @@ async function generate(prompt) {
     } catch (err) {
 
       const message = err?.message || "";
+
+      // "deleted object as a pointer of type Tokenizer*" means the WASM engine
+      // was destroyed mid-generation (race with set-config). Reset so next
+      // request reinitialises cleanly instead of crashing again.
+      if (
+        message.includes("deleted object") ||
+        message.includes("Tokenizer")
+      ) {
+        engine = null;
+        initializingPromise = null;
+        throw err; // re-throw to surface as a normal error, not a fatal
+      }
       
       const gpuCrash =
         message.includes("Instance reference") ||
@@ -812,6 +831,24 @@ self.onmessage = async (event) => {
         break;
               
       case "set-config":
+
+        // If generation is active, wait for it to complete before
+        // swapping the model — prevents the Tokenizer* deleted-object crash.
+        if (ACTIVE_GENERATION) {
+          postMessage({
+            type: "status",
+            text: "Waiting for generation to finish before switching model...",
+          });
+          // Poll until generation completes, then re-dispatch
+          await new Promise(resolve => {
+            const poll = setInterval(() => {
+              if (!ACTIVE_GENERATION) {
+                clearInterval(poll);
+                resolve();
+              }
+            }, 200);
+          });
+        }
       
         const prevModel = USER_CONFIG?.model;
         USER_CONFIG = data.config;

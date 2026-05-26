@@ -30,14 +30,35 @@ function replaceWorker(onmessage) {
   return worker;
 }
 
+// ── Shared reactive state (accessible to both Home and Settings) ──────────
+const { ref: vRef, reactive } = Vue;
+const sharedSettings  = vRef({ model: "", temperature: 0.7, max_tokens: 256, contextWindowSize: 4096 });
+const sharedModels    = vRef([]);
+const sharedLoading   = vRef(false);
+const sharedModelLoading = vRef(false);
+const sharedMessages  = vRef([]);
+// These are populated once Home mounts; Settings reads them directly.
+let sharedApplySettings   = () => {};
+let sharedResetSettings   = () => {};
+let sharedClearConversation = () => {};
+
 const Home = {
   template: `
     <div class="container">
+
       <div class="header">
-        WebLLM Browser Chat
+        <span class="header-title">WebLLM Chat</span>
+        <div class="header-actions">
+          <button class="icon-btn" @click="$router.push('/settings')" title="Settings">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <div class="status">
+      <div class="status-bar">
+        <span class="status-dot" :class="{ active: !modelLoading && !loading }"></span>
         {{ status }}
       </div>
 
@@ -51,135 +72,80 @@ const Home = {
               ? 'assistant'
               : message.role
           ]"
-
         >
           {{ message.content }}
         </div>
       </div>
 
-<div class="footer-container">
+      <div class="footer-container">
+        <div class="toolbar">
+          <select
+            v-model="settings.model"
+            @change="applySettings"
+            :disabled="modelLoading || loading"
+            class="model-select"
+          >
+            <option disabled value="">Select Model</option>
+            <option v-for="model in models" :key="model" :value="model">
+              {{ model }}
+            </option>
+          </select>
 
-  <div class="toolbar">
-  
-    <select
-      v-model="settings.model"
-      @change="applySettings"
-    >
-      <option disabled value="">
-        Select Model
-      </option>
-  
-      <option
-        v-for="model in models"
-        :key="model"
-        :value="model"
-      >
-        {{ model }}
-      </option>
-    </select>
-    <div class="settings-panel">
-    
-      <label>
-        Temperature
-    
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          max="2"
-          v-model.number="settings.temperature"
-        />
-      </label>
-    
-      <label>
-        Max Tokens
-    
-        <input
-          type="number"
-          min="16"
-          max="2048"
-          step="16"
-          v-model.number="settings.max_tokens"
-        />
-      </label>
-    
-      <label>
-        Context Window
-    
-        <input
-          type="number"
-          min="512"
-          max="8192"
-          step="512"
-          v-model.number="settings.contextWindowSize"
-        />
-      </label>
-    
-    </div>
-    <button
-      @click="applySettings"
-      :disabled="modelLoading || loading"
-    >
-      Apply Settings
-    </button>
-    <button
-      @click="resetSettings"
-    >
-      Reset Defaults
-    </button>
-    <button
-      @click="clearConversation"
-      :disabled="messages.length === 0"
-    >
-      Clear Chat
-    </button>
-    <input
-      type="file"
-      accept=".pdf,.txt,.md"
-      @change="uploadFile"
-    />
-  </div>
+          <button
+            class="clear-btn"
+            @click="clearConversation"
+            :disabled="messages.length === 0"
+            title="Clear chat"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+            Clear
+          </button>
 
-  <div class="footer">
-        <textarea
-          v-model="prompt"
-          placeholder="Ask something..."
-          @keydown.enter.exact.prevent="send"
-        ></textarea>
+          <label class="upload-btn" title="Upload file">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>{{ uploadedFileName || 'Upload' }}</span>
+            <input type="file" accept=".pdf,.txt,.md" @change="uploadFile" style="display:none" />
+          </label>
+        </div>
 
-        <button
-          @click="send"
-          :disabled="
-            loading ||
-            modelLoading ||
-            !prompt.trim()
-          "
-        >
-          Send
-        </button>
+        <div class="footer">
+          <textarea
+            v-model="prompt"
+            placeholder="Ask something… (Enter to send, Shift+Enter for newline)"
+            @keydown.enter.exact.prevent="send"
+          ></textarea>
+          <button
+            class="send-btn"
+            @click="send"
+            :disabled="loading || modelLoading || !prompt.trim()"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
-          </div>
-
   `,
 
   setup() {
     const prompt = ref("");
-    const loading = ref(false);
-    const modelLoading = ref(false);
+    // Use module-level shared refs so Settings page can read/write the same state
+    const loading = sharedLoading;
+    const modelLoading = sharedModelLoading;
     const status = ref("Loading...");
-    const messages = ref([]);
+    const messages = sharedMessages;
     const messagesContainer = ref(null);
     const streamingText = ref("");
-    const models = ref([]);
+    const models = sharedModels;
     const lastAppliedModel = ref("");
     const conversationRestored = ref(false); // guard: restore once per page load
-    const settings = ref({
-      model: "",
-      temperature: 0.7,
-      max_tokens: 256,
-      contextWindowSize: 4096,
-    });
+    const uploadedFileName = ref("");
+    const settings = sharedSettings;
     // Always use the module-level worker via getWorker() — never snapshot it
     // into a local variable, as fatal restarts replace the module-level ref.
 
@@ -238,6 +204,7 @@ const Home = {
         return;
       }
 
+      uploadedFileName.value = file.name;
       status.value = `Reading ${file.name}...`;
 
       let text = "";
@@ -632,6 +599,11 @@ const Home = {
       };
     }
         
+    // Expose functions to Settings page
+    sharedApplySettings    = applySettings;
+    sharedResetSettings    = resetSettings;
+    sharedClearConversation = clearConversation;
+
     getWorker().onmessage = onWorkerMessage;
 
     onMounted(() => {
@@ -655,6 +627,7 @@ const Home = {
       messagesContainer,
       send,
       uploadFile,
+      uploadedFileName,
       models,
       settings,
       applySettings,
@@ -666,10 +639,104 @@ const Home = {
   },
 };
 
-const routes = [{
-  path: "/",
-  component: Home,
-}, ];
+const Settings = {
+  template: `
+    <div class="settings-page">
+      <div class="settings-header">
+        <button class="back-btn" @click="$router.push('/')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Back
+        </button>
+        <h1 class="settings-title">Settings</h1>
+      </div>
+
+      <div class="settings-body">
+
+        <section class="settings-section">
+          <h2 class="section-label">Model</h2>
+          <select v-model="settings.model" @change="applySettings" :disabled="modelLoading || loading" class="settings-select">
+            <option disabled value="">Select Model</option>
+            <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
+          </select>
+          <p class="section-hint">Changing the model will clear the current conversation.</p>
+        </section>
+
+        <section class="settings-section">
+          <h2 class="section-label">Generation</h2>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Temperature</span>
+              <span class="setting-desc">Creativity vs consistency. Lower = more focused.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="0" max="2" step="0.05" v-model.number="settings.temperature" class="slider" />
+              <span class="setting-value">{{ settings.temperature.toFixed(2) }}</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Max Tokens</span>
+              <span class="setting-desc">Maximum length of each response.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" />
+              <span class="setting-value">{{ settings.max_tokens }}</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Context Window</span>
+              <span class="setting-desc">Tokens of conversation history the model sees.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" />
+              <span class="setting-value">{{ settings.contextWindowSize }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2 class="section-label">Actions</h2>
+          <div class="settings-actions">
+            <button class="action-btn primary" @click="applySettings" :disabled="modelLoading || loading">
+              Apply Settings
+            </button>
+            <button class="action-btn secondary" @click="resetSettings">
+              Reset Defaults
+            </button>
+            <button class="action-btn danger" @click="clearConversation" :disabled="messages.length === 0">
+              Clear Conversation
+            </button>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  `,
+
+  setup() {
+    return {
+      settings: sharedSettings,
+      models: sharedModels,
+      loading: sharedLoading,
+      modelLoading: sharedModelLoading,
+      messages: sharedMessages,
+      applySettings: sharedApplySettings,
+      resetSettings: sharedResetSettings,
+      clearConversation: sharedClearConversation,
+    };
+  },
+};
+
+const routes = [
+  { path: "/",         component: Home     },
+  { path: "/settings", component: Settings },
+];
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -677,7 +744,7 @@ const router = createRouter({
 });
 
 createApp({
-    template: `<router-view />`
+    template: \`<router-view />\`
   })
   .use(router)
   .mount("#app");

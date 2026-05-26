@@ -744,7 +744,7 @@ const router = createRouter({
 });
 
 createApp({
-    template: \`<router-view />\`
+    template: `<router-view />`
   })
   .use(router)
   .mount("#app");

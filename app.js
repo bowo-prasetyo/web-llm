@@ -40,6 +40,7 @@ const sharedMessages  = vRef([]);
 const sharedSessions  = vRef([]);   // [{id, title, model, ts, preview}]
 const sharedSidebarOpen = vRef(false);
 const sharedModelSizes  = vRef({});  // {modelId: sizeInMB}
+const sharedIsDownloading = vRef(false);  // true while model weights are fetching
 // These are populated once Home mounts; Settings reads them directly.
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
@@ -178,6 +179,17 @@ const Home = {
             <span>{{ uploadedFileName || 'Upload' }}</span>
             <input type="file" accept=".pdf,.txt,.md" @change="uploadFile" style="display:none" />
           </label>
+
+          <!-- Cancel download button — shown only while model is downloading -->
+          <button
+            v-if="isDownloading"
+            class="stop-btn cancel-download-btn"
+            @click="cancelDownload"
+            title="Cancel download"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Cancel Download
+          </button>
         </div>
 
         <div class="footer">
@@ -186,10 +198,24 @@ const Home = {
             placeholder="Ask something… (Enter to send, Shift+Enter for newline)"
             @keydown.enter.exact.prevent="send"
           ></textarea>
+          <!-- Stop generation button — replaces Send while streaming -->
           <button
+            v-if="loading"
+            class="send-btn stop-gen-btn"
+            @click="stopGeneration"
+            title="Stop generation"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+            </svg>
+          </button>
+
+          <!-- Send button — shown when not streaming -->
+          <button
+            v-else
             class="send-btn"
             @click="send"
-            :disabled="loading || modelLoading || !prompt.trim()"
+            :disabled="modelLoading || !prompt.trim()"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -217,6 +243,7 @@ const Home = {
     const sessions = sharedSessions;
     const sidebarOpen = sharedSidebarOpen;
     const modelSizes = sharedModelSizes;
+    const isDownloading = sharedIsDownloading;
     const CACHED_KEY = "webllm-cached-models";
     const confirmModal = ref({
       show: false,
@@ -372,8 +399,21 @@ const Home = {
       }
 
       switch (data.type) {
+        case "downloading":
+          status.value = data.text;
+          isDownloading.value = true;
+          break;
+
+        case "download-cancelled":
+          isDownloading.value = false;
+          modelLoading.value = false;
+          status.value = "Download cancelled";
+          break;
+
         case "status":
           status.value = data.text;
+          // Any non-download status means the download phase is over
+          isDownloading.value = false;
           if (
             data.text.includes("Model loaded successfully") ||
             data.text.startsWith("Ready")
@@ -551,6 +591,24 @@ const Home = {
       confirmModal.value.show = false;
       markModelCached(settings.value.model);
       applySettings(true); // bypass confirmation this time
+    }
+
+    function stopGeneration() {
+      if (!loading.value) return;
+      getWorker().postMessage({ type: "stop-generation" });
+      // UI will update when the worker sends "response" with partial text
+    }
+
+    function cancelDownload() {
+      if (!isDownloading.value) return;
+      isDownloading.value = false;
+      modelLoading.value = false;
+      // Terminate and replace the worker — only reliable way to cancel fetch
+      worker = replaceWorker(onWorkerMessage);
+      status.value = "Download cancelled";
+      // Revert model select to previously loaded model
+      settings.value.model = lastAppliedModel.value || (models.value[0] || "");
+      getWorker().postMessage({ type: "init" });
     }
 
     function saveSettings() {
@@ -908,6 +966,9 @@ const Home = {
       confirmModal,
       confirmDownload,
       modelSizes,
+      isDownloading,
+      stopGeneration,
+      cancelDownload,
     };
   },
 };

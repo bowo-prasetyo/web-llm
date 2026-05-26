@@ -148,6 +148,7 @@ let LAST_STREAM_TIME = 0;
 let STALL_TIMEOUT = null;
 let REQUEST_COUNTER = 0;
 let ACTIVE_GENERATION = false;
+let STOP_REQUESTED = false;   // set by "stop-generation" message
 let SESSION_HISTORY = [];
 
 
@@ -494,10 +495,15 @@ async function initialize() {
           contextWindowSize:
             MODEL_CONFIG.contextWindowSize,
           initProgressCallback: (progress) => {
+            const pct = Math.round((progress.progress || 0) * 100);
+            const isDownloading =
+              progress.text?.toLowerCase().includes("fetch") ||
+              progress.text?.toLowerCase().includes("download") ||
+              (pct < 100 && !progress.text?.toLowerCase().includes("finish"));
             postMessage({
-              type: "status",
-              text: progress.text ||
-                `Loading ${Math.round(progress.progress * 100)}%`,
+              type: isDownloading ? "downloading" : "status",
+              text: progress.text || `Loading ${pct}%`,
+              progress: pct,
             });
           },
         }
@@ -556,6 +562,7 @@ async function generate(prompt) {
     const generationStart = Date.now();
     continuationCount = 0;
     ACTIVE_GENERATION = true;
+    STOP_REQUESTED = false;
     
     await initialize();
   
@@ -650,6 +657,15 @@ async function generate(prompt) {
       const requestId = ++REQUEST_COUNTER;
       
       for await (const chunk of completion) {
+
+        if (STOP_REQUESTED) {
+          postMessage({
+            type: "status",
+            text: "Generation stopped",
+          });
+          finishReason = null; // prevent continuation loop
+          break;
+        }
 
         if (
           Date.now() - generationStart >
@@ -822,6 +838,15 @@ async function generate(prompt) {
       finishReason = null;
 
       for await (const chunk of continuationStream) {
+
+        if (STOP_REQUESTED) {
+          postMessage({
+            type: "status",
+            text: "Generation stopped",
+          });
+          finishReason = null;
+          break;
+        }
 
         const choice = chunk.choices?.[0];
 
@@ -1031,6 +1056,18 @@ self.onmessage = async (event) => {
 
       case "clear-history":
         SESSION_HISTORY = [];
+        break;
+
+      case "stop-generation":
+        // Signal both stream loops to break cleanly on their next iteration
+        STOP_REQUESTED = true;
+        break;
+
+      case "cancel-download":
+        // CreateMLCEngine has no cancel API — terminate the worker so the
+        // download fetch is aborted by the browser, then let app.js restart it.
+        postMessage({ type: "download-cancelled" });
+        self.close();
         break;
     }
   } catch (err) {

@@ -776,3 +776,57 @@ html, body, #app {
   flex: 1;
   text-align: center;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   STOP / CANCEL BUTTONS
+══════════════════════════════════════════════════════════════ */
+
+/* Stop generation — replaces Send button while streaming */
+.stop-gen-btn {
+  background: #c0392b !important;
+  animation: pulse-red 1.4s ease-in-out infinite;
+}
+.stop-gen-btn:hover {
+  background: #e74c3c !important;
+  box-shadow: 0 0 14px rgba(192,57,43,.5) !important;
+  animation: none;
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,.0); }
+  50%       { box-shadow: 0 0 0 6px rgba(192,57,43,.25); }
+}
+
+/* Cancel download — appears in toolbar during model fetch */
+.stop-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+  flex-shrink: 0;
+}
+
+.cancel-download-btn {
+  background: rgba(192,57,43,.12);
+  border: 1px solid #7a2c2c;
+  color: #e05c5c;
+  animation: pulse-border 1.8s ease-in-out infinite;
+}
+.cancel-download-btn:hover {
+  background: rgba(192,57,43,.22);
+  border-color: #c0392b;
+  color: #ff6b6b;
+  animation: none;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: #7a2c2c; }
+  50%       { border-color: #c0392b; }
+}

@@ -13,6 +13,10 @@ Pure client-side browser AI chat application built with:
 
 The application runs entirely inside the browser without any backend server.
 
+## Live Demo
+
+https://bowo-prasetyo.github.io/web-llm/
+
 ## Features
 
 * Fully client-side AI chat

@@ -37,20 +37,67 @@ const sharedModels    = vRef([]);
 const sharedLoading   = vRef(false);
 const sharedModelLoading = vRef(false);
 const sharedMessages  = vRef([]);
+const sharedSessions  = vRef([]);   // [{id, title, model, ts, preview}]
+const sharedSidebarOpen = vRef(false);
 // These are populated once Home mounts; Settings reads them directly.
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
 let sharedClearConversation = () => {};
+let sharedNewChat         = () => {};
+let sharedLoadSession     = (_id) => {};
+let sharedDeleteSession   = (_id) => {};
 
 const Home = {
   template: `
     <div class="container">
 
+      <!-- Sidebar overlay -->
+      <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false"></div>
+
+      <!-- Sessions sidebar -->
+      <div class="sidebar" :class="{ open: sidebarOpen }">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Chats</span>
+          <button class="new-chat-btn" @click="newChat" :disabled="loading || modelLoading">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Chat
+          </button>
+        </div>
+        <div class="sidebar-list">
+          <div v-if="sessions.length === 0" class="sidebar-empty">No saved chats yet</div>
+          <div
+            v-for="s in sessions"
+            :key="s.id"
+            class="session-item"
+            :class="{ active: s.id === currentSessionId }"
+            @click="loadSession(s.id)"
+          >
+            <div class="session-meta">
+              <span class="session-title">{{ s.title }}</span>
+              <span class="session-date">{{ formatDate(s.ts) }}</span>
+            </div>
+            <div class="session-preview">{{ s.preview }}</div>
+            <div class="session-model">{{ s.model.split('-').slice(0,2).join('-') }}</div>
+            <button class="session-delete" @click.stop="deleteSession(s.id)" title="Delete">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="header">
-        <span class="header-title">WebLLM Chat</span>
+        <div class="header-left">
+          <button class="icon-btn" @click="sidebarOpen = !sidebarOpen" title="Chat history">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <span class="header-title">WebLLM Chat</span>
+        </div>
         <div class="header-actions">
+          <button class="icon-btn" @click="newChat" :disabled="loading || modelLoading" title="New chat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
           <button class="icon-btn" @click="$router.push('/settings')" title="Settings">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
           </button>
@@ -145,6 +192,9 @@ const Home = {
     const lastAppliedModel = ref("");
     const conversationRestored = ref(false); // guard: restore once per page load
     const uploadedFileName = ref("");
+    const currentSessionId = ref("");
+    const sessions = sharedSessions;
+    const sidebarOpen = sharedSidebarOpen;
     const settings = sharedSettings;
     // Always use the module-level worker via getWorker() — never snapshot it
     // into a local variable, as fatal restarts replace the module-level ref.
@@ -477,40 +527,188 @@ const Home = {
       saveSettings();
     }
 
-    // ── Conversation persistence ──────────────────────────────────────────
+    // ── Multi-session storage ─────────────────────────────────────────────
 
-    const CONVERSATION_KEY = "webllm-conversation";
+    const SESSIONS_INDEX_KEY = "webllm-sessions-index";
     const MAX_PERSISTED_MESSAGES = 40;
+    const MAX_SESSIONS = 50;
 
-    function saveConversation() {
+    function sessionKey(id) { return "webllm-session:" + id; }
+
+    function genId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+
+    function titleFromMessages(msgs) {
+      const first = msgs.find(m => m.role === "user");
+      if (!first) return "New Chat";
+      return first.content.trim().slice(0, 42) + (first.content.length > 42 ? "…" : "");
+    }
+
+    function previewFromMessages(msgs) {
+      const last = [...msgs].reverse().find(m => m.role === "assistant");
+      if (!last) return "";
+      return last.content.trim().slice(0, 60) + (last.content.length > 60 ? "…" : "");
+    }
+
+    function loadIndex() {
       try {
-        // Only persist finalised messages (not mid-stream assistant-stream)
+        const raw = localStorage.getItem(SESSIONS_INDEX_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch { return []; }
+    }
+
+    function saveIndex(index) {
+      try {
+        localStorage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(index));
+        sessions.value = index;
+      } catch (err) { console.warn("Failed saving session index", err); }
+    }
+
+    function formatDate(ts) {
+      const d = new Date(ts);
+      const now = new Date();
+      const diffDays = Math.floor((now - d) / 86400000);
+      if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      if (diffDays === 1) return "Yesterday";
+      if (diffDays < 7)  return d.toLocaleDateString([], { weekday: "short" });
+      return d.toLocaleDateString([], { month: "short", day: "numeric" });
+    }
+
+    // Persist current session messages to localStorage
+    function saveConversation() {
+      if (!currentSessionId.value) return;
+      try {
         const toSave = messages.value
           .filter(m => m.role !== "assistant-stream")
           .slice(-MAX_PERSISTED_MESSAGES);
-        localStorage.setItem(
-          CONVERSATION_KEY,
-          JSON.stringify(toSave)
-        );
-      } catch (err) {
-        console.warn("Failed saving conversation", err);
-      }
+        localStorage.setItem(sessionKey(currentSessionId.value), JSON.stringify(toSave));
+
+        // Update index entry
+        const index = loadIndex();
+        const idx = index.findIndex(s => s.id === currentSessionId.value);
+        const entry = {
+          id: currentSessionId.value,
+          title: titleFromMessages(toSave),
+          preview: previewFromMessages(toSave),
+          model: settings.value.model || "",
+          ts: Date.now(),
+        };
+        if (idx >= 0) index[idx] = entry;
+        else index.unshift(entry);
+        // Keep newest first, cap at MAX_SESSIONS
+        index.sort((a, b) => b.ts - a.ts);
+        if (index.length > MAX_SESSIONS) index.splice(MAX_SESSIONS);
+        saveIndex(index);
+      } catch (err) { console.warn("Failed saving session", err); }
+    }
+
+    // Load a session by id into the UI and worker
+    function loadSession(id) {
+      if (id === currentSessionId.value) { sidebarOpen.value = false; return; }
+      if (loading.value || modelLoading.value) return;
+
+      // Save current session before switching
+      saveConversation();
+
+      try {
+        const raw = localStorage.getItem(sessionKey(id));
+        const parsed = raw ? JSON.parse(raw) : [];
+
+        currentSessionId.value = id;
+        sidebarOpen.value = false;
+
+        const last = parsed[parsed.length - 1];
+        const unanswered = last && last.role === "user" ? last.content : null;
+        const toRestore = unanswered ? parsed.slice(0, -1) : parsed;
+
+        messages.value = toRestore;
+        scrollBottom();
+        getWorker().postMessage({
+          type: "clear-history",
+        });
+        const history = toRestore.map(m => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        }));
+        getWorker().postMessage({ type: "restore-history", history });
+
+        if (unanswered) {
+          addMessage("user", unanswered);
+          saveConversation();
+          loading.value = true;
+          getWorker().postMessage({ type: "generate", prompt: unanswered });
+        }
+      } catch (err) { console.warn("Failed loading session", err); }
+    }
+
+    // Create a brand-new chat session
+    function newChat() {
+      if (loading.value || modelLoading.value) return;
+      saveConversation();
+      currentSessionId.value = genId();
+      messages.value = [];
+      conversationRestored.value = true; // suppress auto-restore for new chats
+      getWorker().postMessage({ type: "clear-history" });
+      sidebarOpen.value = false;
+    }
+
+    // Delete a session from storage and index
+    function deleteSession(id) {
+      try {
+        localStorage.removeItem(sessionKey(id));
+        const index = loadIndex().filter(s => s.id !== id);
+        saveIndex(index);
+        // If deleting the current session, start a new one
+        if (id === currentSessionId.value) newChat();
+      } catch (err) { console.warn("Failed deleting session", err); }
+    }
+
+    // Legacy single-session key migration (one-time)
+    function migrateLegacySession() {
+      const legacy = localStorage.getItem("webllm-conversation");
+      if (!legacy) return;
+      try {
+        const parsed = JSON.parse(legacy);
+        if (!Array.isArray(parsed) || parsed.length === 0) return;
+        const id = genId();
+        localStorage.setItem(sessionKey(id), legacy);
+        const index = loadIndex();
+        index.unshift({
+          id, ts: Date.now(),
+          title: titleFromMessages(parsed),
+          preview: previewFromMessages(parsed),
+          model: settings.value.model || "",
+        });
+        saveIndex(index);
+        localStorage.removeItem("webllm-conversation");
+      } catch {}
     }
 
     function loadConversation() {
+      migrateLegacySession();
+      const index = loadIndex();
+      sessions.value = index;
+
+      if (index.length === 0) {
+        // First ever launch — create initial session
+        currentSessionId.value = genId();
+        return;
+      }
+
+      // Load the most recent session
+      const latest = index[0];
+      currentSessionId.value = latest.id;
+
       try {
-        const raw = localStorage.getItem(CONVERSATION_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
+        const raw = localStorage.getItem(sessionKey(latest.id));
+        const parsed = raw ? JSON.parse(raw) : [];
         if (!Array.isArray(parsed) || parsed.length === 0) return;
 
-        // Detect an unanswered user message: last saved message is role "user",
-        // meaning the tab suspended after the user sent but before the reply arrived.
         const last = parsed[parsed.length - 1];
         const unanswered = last && last.role === "user" ? last.content : null;
-
-        // Restore history excluding the unanswered message (it will be re-sent below)
         const toRestore = unanswered ? parsed.slice(0, -1) : parsed;
+
         messages.value = toRestore;
         scrollBottom();
 
@@ -518,29 +716,24 @@ const Home = {
           role: m.role === "assistant" ? "assistant" : "user",
           content: m.content,
         }));
-        getWorker().postMessage({
-          type: "restore-history",
-          history,
-        });
+        getWorker().postMessage({ type: "restore-history", history });
 
-        // Auto-resume the unanswered question so the user doesn't have to resend it
         if (unanswered) {
           addMessage("user", unanswered);
           saveConversation();
           loading.value = true;
-          getWorker().postMessage({
-            type: "generate",
-            prompt: unanswered,
-          });
+          getWorker().postMessage({ type: "generate", prompt: unanswered });
         }
-      } catch (err) {
-        console.warn("Failed loading conversation", err);
-      }
+      } catch (err) { console.warn("Failed loading latest session", err); }
     }
 
     function clearConversation() {
+      if (!currentSessionId.value) return;
       messages.value = [];
-      localStorage.removeItem(CONVERSATION_KEY);
+      localStorage.removeItem(sessionKey(currentSessionId.value));
+      const index = loadIndex().filter(s => s.id !== currentSessionId.value);
+      saveIndex(index);
+      currentSessionId.value = genId();
       getWorker().postMessage({ type: "clear-history" });
     }
 
@@ -603,6 +796,9 @@ const Home = {
     sharedApplySettings    = applySettings;
     sharedResetSettings    = resetSettings;
     sharedClearConversation = clearConversation;
+    sharedNewChat          = newChat;
+    sharedLoadSession      = loadSession;
+    sharedDeleteSession    = deleteSession;
 
     getWorker().onmessage = onWorkerMessage;
 
@@ -635,6 +831,13 @@ const Home = {
       loadSettings,
       resetSettings,
       clearConversation,
+      sessions,
+      currentSessionId,
+      sidebarOpen,
+      newChat,
+      loadSession,
+      deleteSession,
+      formatDate,
     };
   },
 };
@@ -729,6 +932,7 @@ const Settings = {
       applySettings: sharedApplySettings,
       resetSettings: sharedResetSettings,
       clearConversation: sharedClearConversation,
+      newChat: sharedNewChat,
     };
   },
 };

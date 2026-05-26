@@ -208,8 +208,19 @@ const Home = {
         return;
       }
 
-      addMessage("user", text);
-      saveConversation(); // persist user message immediately
+      // Deduplicate: if the user manually resends the exact same text that is
+      // already the last message (e.g. after a tab-resume auto-resume), don't
+      // add it again — just trigger generation on the existing message.
+      const lastMsg = messages.value[messages.value.length - 1];
+      const isDuplicate =
+        lastMsg &&
+        lastMsg.role === "user" &&
+        lastMsg.content === text;
+
+      if (!isDuplicate) {
+        addMessage("user", text);
+        saveConversation(); // persist user message immediately
+      }
 
       prompt.value = "";
       loading.value = true;
@@ -525,10 +536,18 @@ const Home = {
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed) || parsed.length === 0) return;
-        messages.value = parsed;
+
+        // Detect an unanswered user message: last saved message is role "user",
+        // meaning the tab suspended after the user sent but before the reply arrived.
+        const last = parsed[parsed.length - 1];
+        const unanswered = last && last.role === "user" ? last.content : null;
+
+        // Restore history excluding the unanswered message (it will be re-sent below)
+        const toRestore = unanswered ? parsed.slice(0, -1) : parsed;
+        messages.value = toRestore;
         scrollBottom();
-        // Restore SESSION_HISTORY in the worker so it has context
-        const history = parsed.map(m => ({
+
+        const history = toRestore.map(m => ({
           role: m.role === "assistant" ? "assistant" : "user",
           content: m.content,
         }));
@@ -536,6 +555,17 @@ const Home = {
           type: "restore-history",
           history,
         });
+
+        // Auto-resume the unanswered question so the user doesn't have to resend it
+        if (unanswered) {
+          addMessage("user", unanswered);
+          saveConversation();
+          loading.value = true;
+          getWorker().postMessage({
+            type: "generate",
+            prompt: unanswered,
+          });
+        }
       } catch (err) {
         console.warn("Failed loading conversation", err);
       }

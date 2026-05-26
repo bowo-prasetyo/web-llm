@@ -1224,28 +1224,57 @@ function ensureEngine() {
 
 function removeOverlap(original, continuation) {
 
+  // Only remove overlaps that are clearly genuine token-boundary duplicates:
+  // - Minimum 60 chars to avoid false positives on common phrases/list items.
+  // - The match must start at a word boundary (space, newline, or start).
+  // - After stripping, the result must not start mid-word.
   const maxOverlap = Math.min(
-    200,
+    300,
     original.length,
     continuation.length
   );
 
-  for (
-    let len = maxOverlap;
-    len > 20;
-    len--
-  ) {
+  const MIN_OVERLAP = 60;
 
-    const end =
-      original.slice(-len);
+  for (let len = maxOverlap; len >= MIN_OVERLAP; len--) {
 
-    const start =
-      continuation.slice(0, len);
+    const tail = original.slice(-len);
+    const head = continuation.slice(0, len);
 
-    if (end === start) {
-
-      return continuation.slice(len);
+    if (tail !== head) {
+      continue;
     }
+
+    // Confirm the match starts at a word boundary in the original
+    const charBefore = original[original.length - len - 1];
+    const startsAtBoundary =
+      charBefore === undefined || // start of string
+      charBefore === " " ||
+      charBefore === "\n" ||
+      charBefore === "." ||
+      charBefore === "," ;
+
+    if (!startsAtBoundary) {
+      continue;
+    }
+
+    const stripped = continuation.slice(len);
+
+    // Reject if stripping leaves us starting mid-word
+    // (i.e. the char before the strip point wasn't a boundary)
+    const lastCharOfMatch = continuation[len - 1];
+    const firstCharAfter = stripped[0];
+    if (
+      firstCharAfter &&
+      firstCharAfter !== " " &&
+      firstCharAfter !== "\n" &&
+      lastCharOfMatch !== " " &&
+      lastCharOfMatch !== "\n"
+    ) {
+      continue;
+    }
+
+    return stripped;
   }
 
   return continuation;

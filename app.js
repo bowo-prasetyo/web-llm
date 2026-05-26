@@ -39,6 +39,7 @@ const sharedModelLoading = vRef(false);
 const sharedMessages  = vRef([]);
 const sharedSessions  = vRef([]);   // [{id, title, model, ts, preview}]
 const sharedSidebarOpen = vRef(false);
+const sharedModelSizes  = vRef({});  // {modelId: sizeInMB}
 // These are populated once Home mounts; Settings reads them directly.
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
@@ -50,6 +51,26 @@ let sharedDeleteSession   = (_id) => {};
 const Home = {
   template: `
     <div class="container">
+
+      <!-- Download confirmation modal -->
+      <div class="modal-overlay" v-if="confirmModal.show" @click.self="confirmModal.show = false">
+        <div class="modal">
+          <div class="modal-icon">⬇</div>
+          <h2 class="modal-title">Download Model?</h2>
+          <p class="modal-body">
+            <strong>{{ confirmModal.model }}</strong><br><br>
+            This model will be downloaded and cached in your browser
+            (<strong>~{{ confirmModal.sizeMb >= 1024
+              ? (confirmModal.sizeMb / 1024).toFixed(1) + " GB"
+              : confirmModal.sizeMb + " MB" }}</strong>).
+            After the first download it loads instantly from cache.
+          </p>
+          <div class="modal-actions">
+            <button class="action-btn secondary" @click="confirmModal.show = false; settings.model = confirmModal.previousModel">Cancel</button>
+            <button class="action-btn primary" @click="confirmDownload">Download & Load</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Sidebar overlay -->
       <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false"></div>
@@ -195,6 +216,34 @@ const Home = {
     const currentSessionId = ref("");
     const sessions = sharedSessions;
     const sidebarOpen = sharedSidebarOpen;
+    const modelSizes = sharedModelSizes;
+    const CACHED_KEY = "webllm-cached-models";
+    const confirmModal = ref({
+      show: false,
+      model: "",
+      previousModel: "",
+      sizeMb: 0,
+    });
+
+    function getCachedModels() {
+      try {
+        return JSON.parse(localStorage.getItem(CACHED_KEY) || "[]");
+      } catch { return []; }
+    }
+
+    function markModelCached(modelId) {
+      try {
+        const cached = getCachedModels();
+        if (!cached.includes(modelId)) {
+          cached.push(modelId);
+          localStorage.setItem(CACHED_KEY, JSON.stringify(cached));
+        }
+      } catch {}
+    }
+
+    function isModelCached(modelId) {
+      return getCachedModels().includes(modelId);
+    }
     const settings = sharedSettings;
     // Always use the module-level worker via getWorker() — never snapshot it
     // into a local variable, as fatal restarts replace the module-level ref.
@@ -330,6 +379,8 @@ const Home = {
             data.text.startsWith("Ready")
           ) {
             modelLoading.value = false;
+            // Mark this model as cached so future selects skip the confirmation
+            markModelCached(settings.value.model);
             // Restore persisted conversation once per page load only.
             // Subsequent "Ready" status messages (after each generation)
             // must not re-run loadConversation, or it would overwrite
@@ -413,17 +464,19 @@ const Home = {
 
         case "models":
           models.value = data.models;
-        
+          if (data.sizes) {
+            modelSizes.value = data.sizes;
+          }
+
           if (
             !settings.value.model ||
-            !data.models.includes(
-              settings.value.model
-            )
-          ) {        
-            settings.value.model =
-              data.models[0];
+            !data.models.includes(settings.value.model)
+          ) {
+            settings.value.model = data.models[0];
           }
-            
+
+          // Mark currently selected model as cached since we have it
+          // (or we're about to download it on first launch — confirmed below)
           await applySettings();
           break;
                     
@@ -434,25 +487,39 @@ const Home = {
       }
     }
 
-    async function applySettings() {
-    
+    async function applySettings(skipConfirm = false) {
+
       if (!settings.value.model) {
         return;
       }
-    
+
+      const isNewModel = settings.value.model !== lastAppliedModel.value;
+
+      // Show download confirmation for first-time downloads
+      if (isNewModel && !skipConfirm && !isModelCached(settings.value.model)) {
+        const sizeMb = modelSizes.value[settings.value.model] || 0;
+        // Only ask if we have size data and it's meaningful (>50 MB)
+        if (sizeMb > 50) {
+          confirmModal.value = {
+            show: true,
+            model: settings.value.model,
+            previousModel: lastAppliedModel.value || settings.value.model,
+            sizeMb,
+          };
+          return; // wait for user to confirm
+        }
+      }
+
       // Only apply defaults when model changes;
       // also clear persisted conversation so old history
       // from a different model isn't fed to the new one.
-      if (
-        settings.value.model !==
-        lastAppliedModel.value
-      ) {
-    
+      if (isNewModel) {
+
         const defaults =
           getModelDefaults(
             settings.value.model
           );
-    
+
         settings.value = {
           ...settings.value,
           ...defaults,
@@ -462,7 +529,7 @@ const Home = {
           // Only clear if this isn't the very first load
           clearConversation();
         }
-    
+
         lastAppliedModel.value =
           settings.value.model;
       }
@@ -480,6 +547,12 @@ const Home = {
       });
     }
             
+    function confirmDownload() {
+      confirmModal.value.show = false;
+      markModelCached(settings.value.model);
+      applySettings(true); // bypass confirmation this time
+    }
+
     function saveSettings() {
     
       localStorage.setItem(
@@ -739,57 +812,51 @@ const Home = {
 
     function getModelDefaults(model) {
 
-      // ~0.5B — ultra-lightweight
-      if (model.includes("0.5B")) {
-        return {
-          temperature: 0.2,
-          max_tokens: 128,
-          contextWindowSize: 2048,
-        };
+      // Micro: SmolLM2-135M, 360M
+      if (model.includes("135M") || model.includes("360M")) {
+        return { temperature: 0.2, max_tokens: 64,  contextWindowSize: 2048 };
       }
 
-      // ~1B
-      if (model.includes("1B")) {
-        return {
-          temperature: 0.4,
-          max_tokens: 256,
-          contextWindowSize: 4096,
-        };
+      // ~0.5–0.6B
+      if (model.includes("0.5B") || model.includes("0.6B")) {
+        return { temperature: 0.2, max_tokens: 128, contextWindowSize: 2048 };
       }
 
-      // ~1.5B (includes Coder-1.5B)
-      if (model.includes("1.5B")) {
-        return {
-          temperature: 0.4,
-          max_tokens: 512,
-          contextWindowSize: 4096,
-        };
+      // ~1–1.1B (TinyLlama, Llama-3.2-1B, SmolLM2-1.7B)
+      if (
+        model.includes("1.1B") || model.includes("1.7B") ||
+        (model.includes("1B") && !model.includes("1.5B"))
+      ) {
+        return { temperature: 0.4, max_tokens: 256, contextWindowSize: 4096 };
+      }
+
+      // ~1.5–1.6B
+      if (model.includes("1.5B") || model.includes("1.6b") || model.includes("1_6b")) {
+        return { temperature: 0.4, max_tokens: 512, contextWindowSize: 4096 };
       }
 
       // ~2B (Gemma-2-2B)
       if (model.includes("2b") || model.includes("2B")) {
-        return {
-          temperature: 0.6,
-          max_tokens: 512,
-          contextWindowSize: 4096,
-        };
+        return { temperature: 0.6, max_tokens: 512, contextWindowSize: 4096 };
       }
 
-      // ~3B (Qwen2.5-3B, Llama-3.1-3B)
-      if (model.includes("3B")) {
-        return {
-          temperature: 0.7,
-          max_tokens: 768,
-          contextWindowSize: 8192,
-        };
+      // ~3–4B
+      if (model.includes("3B") || model.includes("4B") || model.includes("4b")) {
+        return { temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
       }
 
-      // ~3.8B (Phi-3.5-mini) and unknown — most capable defaults
-      return {
-        temperature: 0.7,
-        max_tokens: 768,
-        contextWindowSize: 8192,
-      };
+      // ~3.8B (Phi-3.5-mini)
+      if (model.includes("mini")) {
+        return { temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
+      }
+
+      // ~7–9B large models
+      if (model.includes("7B") || model.includes("8B") || model.includes("9b")) {
+        return { temperature: 0.7, max_tokens: 1024, contextWindowSize: 8192 };
+      }
+
+      // Unknown / fallback
+      return { temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
     }
         
     // Expose functions to Settings page
@@ -838,6 +905,9 @@ const Home = {
       loadSession,
       deleteSession,
       formatDate,
+      confirmModal,
+      confirmDownload,
+      modelSizes,
     };
   },
 };

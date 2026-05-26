@@ -18,20 +18,121 @@ Rules you must never break:
 - If the user states a correct fact, accept it. Do not contradict correct information the user provides.
 - Only correct the user if you are certain they are factually wrong.`;
 
-const SMALLEST_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+const SMALLEST_MODEL = "SmolLM2-360M-Instruct-q4f32_1-MLC";
+
+// Approximate download sizes (MB) for first-time download confirmation.
+// Derived from VRAM footprints in the WebLLM model registry.
+const MODEL_SIZES_MB = {
+  // SmolLM2
+  "SmolLM2-135M-Instruct-q0f32-MLC":               720,
+  "SmolLM2-360M-Instruct-q4f32_1-MLC":             580,
+  "SmolLM2-360M-Instruct-q0f32-MLC":              1744,
+  "SmolLM2-1.7B-Instruct-q4f16_1-MLC":            1774,
+  "SmolLM2-1.7B-Instruct-q4f32_1-MLC":            2692,
+  // TinyLlama
+  "TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC":          840,
+  // Qwen2.5
+  "Qwen2.5-0.5B-Instruct-q4f16_1-MLC":             945,
+  "Qwen2.5-0.5B-Instruct-q4f32_1-MLC":            1060,
+  "Qwen2.5-1.5B-Instruct-q4f16_1-MLC":            1630,
+  "Qwen2.5-1.5B-Instruct-q4f32_1-MLC":            1889,
+  "Qwen2.5-3B-Instruct-q4f16_1-MLC":              2505,
+  "Qwen2.5-3B-Instruct-q4f32_1-MLC":              2894,
+  "Qwen2.5-7B-Instruct-q4f16_1-MLC":              5107,
+  "Qwen2.5-7B-Instruct-q4f32_1-MLC":              5900,
+  // Qwen2.5 Coder
+  "Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC":       945,
+  "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC":      1630,
+  "Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC":        2505,
+  "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC":        5107,
+  // Qwen2.5 Math
+  "Qwen2.5-Math-1.5B-Instruct-q4f16_1-MLC":       1630,
+  // Qwen3
+  "Qwen3-0.6B-q4f16_1-MLC":                       1050,
+  "Qwen3-1.7B-q4f16_1-MLC":                       1774,
+  "Qwen3-4B-q4f16_1-MLC":                         3200,
+  "Qwen3-8B-q4f16_1-MLC":                         5500,
+  // Llama 3.2
+  "Llama-3.2-1B-Instruct-q4f16_1-MLC":             879,
+  "Llama-3.2-1B-Instruct-q4f32_1-MLC":            1129,
+  "Llama-3.2-3B-Instruct-q4f16_1-MLC":            2264,
+  "Llama-3.2-3B-Instruct-q4f32_1-MLC":            2952,
+  // Llama 3.1
+  "Llama-3.1-8B-Instruct-q4f16_1-MLC":            5001,
+  "Llama-3.1-8B-Instruct-q4f32_1-MLC":            6101,
+  // Gemma 2
+  "gemma-2-2b-it-q4f16_1-MLC":                    1895,
+  "gemma-2-2b-it-q4f32_1-MLC":                    2509,
+  "gemma-2-9b-it-q4f16_1-MLC":                    6422,
+  // Phi 3.5
+  "Phi-3.5-mini-instruct-q4f16_1-MLC":            3672,
+  "Phi-3.5-mini-instruct-q4f32_1-MLC":            5483,
+  // Mistral 7B
+  "Mistral-7B-Instruct-v0.3-q4f32_1-MLC":         5619,
+  // Hermes (fine-tuned)
+  "Hermes-3-Llama-3.2-3B-q4f16_1-MLC":            2264,
+  "Hermes-3-Llama-3.1-8B-q4f16_1-MLC":            4876,
+  // DeepSeek-R1 Distill
+  "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC":      5107,
+  "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC":     5001,
+  // StableLM
+  "stablelm-2-zephyr-1_6b-q4f16_1-MLC":           2088,
+};
+
 const AVAILABLE_MODELS = [
-  // ~0.5B — ultra-lightweight
+  // ── ~100–400M — ultra-micro ─────────────────────────────────────────
+  "SmolLM2-135M-Instruct-q0f32-MLC",
+  "SmolLM2-360M-Instruct-q4f32_1-MLC",
+  "SmolLM2-360M-Instruct-q0f32-MLC",
+
+  // ── ~0.5–0.6B — micro ───────────────────────────────────────────────
   "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
-  // ~1–1.5B — lightweight
-  "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
+  "Qwen2.5-0.5B-Instruct-q4f32_1-MLC",
+  "Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC",
+  "Qwen3-0.6B-q4f16_1-MLC",
+
+  // ── ~1–1.7B — lightweight ───────────────────────────────────────────
+  "TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC",
+  "Llama-3.2-1B-Instruct-q4f16_1-MLC",
   "Llama-3.2-1B-Instruct-q4f32_1-MLC",
+  "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
+  "SmolLM2-1.7B-Instruct-q4f32_1-MLC",
+  "Qwen3-1.7B-q4f16_1-MLC",
+  "stablelm-2-zephyr-1_6b-q4f16_1-MLC",
+
+  // ── ~1.5B — small ───────────────────────────────────────────────────
   "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
-  // ~2–3B — mid-range
+  "Qwen2.5-1.5B-Instruct-q4f32_1-MLC",
+  "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
+  "Qwen2.5-Math-1.5B-Instruct-q4f16_1-MLC",
+
+  // ── ~2–3B — mid ─────────────────────────────────────────────────────
   "gemma-2-2b-it-q4f16_1-MLC",
+  "gemma-2-2b-it-q4f32_1-MLC",
+  "Llama-3.2-3B-Instruct-q4f16_1-MLC",
+  "Llama-3.2-3B-Instruct-q4f32_1-MLC",
+  "Hermes-3-Llama-3.2-3B-q4f16_1-MLC",
   "Qwen2.5-3B-Instruct-q4f16_1-MLC",
-  "Llama-3.1-3B-Instruct-q4f16_1-MLC",
-  // ~3.8B — heavy
+  "Qwen2.5-3B-Instruct-q4f32_1-MLC",
+  "Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC",
+  "Qwen3-4B-q4f16_1-MLC",
+
+  // ── ~3.8B — upper-mid ───────────────────────────────────────────────
   "Phi-3.5-mini-instruct-q4f16_1-MLC",
+  "Phi-3.5-mini-instruct-q4f32_1-MLC",
+
+  // ── ~7–9B — large (needs ≥6 GB VRAM) ───────────────────────────────
+  "Qwen2.5-7B-Instruct-q4f16_1-MLC",
+  "Qwen2.5-7B-Instruct-q4f32_1-MLC",
+  "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
+  "Qwen3-8B-q4f16_1-MLC",
+  "Llama-3.1-8B-Instruct-q4f16_1-MLC",
+  "Llama-3.1-8B-Instruct-q4f32_1-MLC",
+  "Hermes-3-Llama-3.1-8B-q4f16_1-MLC",
+  "Mistral-7B-Instruct-v0.3-q4f32_1-MLC",
+  "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC",
+  "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC",
+  "gemma-2-9b-it-q4f16_1-MLC",
 ];
 
 const HARD_TIMEOUT_MS = 180000;
@@ -909,11 +1010,12 @@ self.onmessage = async (event) => {
         );
         break;
 
-      case "models":      
+      case "models":
         postMessage({
           type: "models",
           models: AVAILABLE_MODELS,
-        });      
+          sizes: MODEL_SIZES_MB,
+        });
         break;
 
       case "restore-history":
@@ -1236,17 +1338,31 @@ function computeMaxTokens() {
     return 96;
   }
 
-  // ~0.5B
-  if (MODEL.includes("0.5B")) {
+  // micro: SmolLM2-135M/360M, Qwen3-0.6B
+  if (
+    MODEL.includes("135M") || MODEL.includes("360M") ||
+    MODEL.includes("0.5B") || MODEL.includes("0.6B")
+  ) {
     return 128;
   }
 
-  // ~1–1.5B
-  if (MODEL.includes("1B") || MODEL.includes("1.5B")) {
+  // ~1–1.7B
+  if (
+    MODEL.includes("1.1B") || MODEL.includes("1B") ||
+    MODEL.includes("1.5B") || MODEL.includes("1.6b") ||
+    MODEL.includes("1.7B")
+  ) {
     return 512;
   }
 
-  // ~2–3.8B — more capacity
+  // ~7–9B — more capacity
+  if (
+    MODEL.includes("7B") || MODEL.includes("8B") || MODEL.includes("9b")
+  ) {
+    return 1024;
+  }
+
+  // ~2–4B default
   return 768;
 }
 

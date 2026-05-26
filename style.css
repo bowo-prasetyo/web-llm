@@ -697,3 +697,82 @@ html, body, #app {
   color: #e05c5c;
   background: rgba(224,92,92,.1);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   DOWNLOAD CONFIRMATION MODAL
+══════════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.7);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+  animation: fadeIn .18s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 14px;
+  padding: 28px 24px 24px;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 24px 60px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04);
+  animation: slideUp .2s cubic-bezier(.4,0,.2,1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.modal-icon {
+  font-size: 28px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.modal-title {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 14px;
+  letter-spacing: .02em;
+}
+
+.modal-body {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.modal-body strong {
+  color: var(--amber-text);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: stretch;
+}
+
+.modal-actions .action-btn {
+  flex: 1;
+  text-align: center;
+}

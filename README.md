@@ -323,3 +323,8 @@ Streaming Response → UI
 ## License
 
 Open-source libraries and models remain subject to their respective licenses.
+
+## Assisted By
+
+[ChatGPT](https://chatgpt.com)
+[Claude AI](https://claude.ai)

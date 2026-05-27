@@ -32,7 +32,17 @@ function replaceWorker(onmessage) {
 
 // ── Shared reactive state (accessible to both Home and Settings) ──────────
 const { ref: vRef, reactive } = Vue;
-const sharedSettings  = vRef({ model: "", temperature: 0.7, max_tokens: 256, contextWindowSize: 4096 });
+const sharedSettings  = vRef({
+  model: "",
+  temperature: 0.7,
+  max_tokens: 256,
+  contextWindowSize: 4096,
+  top_p: 1.0,
+  frequency_penalty: 0.0,
+  presence_penalty: 0.0,
+  repetition_penalty: 1.0,
+  system_prompt: "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.",
+});
 const sharedModels    = vRef([]);
 const sharedLoading   = vRef(false);
 const sharedModelLoading = vRef(false);
@@ -687,14 +697,16 @@ const Home = {
     }
 
     function resetSettings() {
-    
+
+      const defaults = getModelDefaults(settings.value.model || "");
+
       settings.value = {
-        model: models.value[0] || "",
-        temperature: 0.3,
-        max_tokens: 128,
-        contextWindowSize: 2048,
+        model: settings.value.model || models.value[0] || "",
+        ...defaults,
+        // Keep system_prompt from current settings on reset (user may have customised it)
+        system_prompt: settings.value.system_prompt,
       };
-    
+
       saveSettings();
     }
 
@@ -911,13 +923,21 @@ const Home = {
     function getModelDefaults(model) {
 
       // Micro: SmolLM2-135M, 360M
+      // Shared penalty defaults — same across all model sizes
+      const penaltyDefaults = {
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+        repetition_penalty: 1.0,
+      };
+
       if (model.includes("135M") || model.includes("360M")) {
-        return { temperature: 0.2, max_tokens: 64,  contextWindowSize: 2048 };
+        return { ...penaltyDefaults, temperature: 0.2, max_tokens: 64,  contextWindowSize: 2048 };
       }
 
       // ~0.5–0.6B
       if (model.includes("0.5B") || model.includes("0.6B")) {
-        return { temperature: 0.2, max_tokens: 128, contextWindowSize: 2048 };
+        return { ...penaltyDefaults, temperature: 0.2, max_tokens: 128, contextWindowSize: 2048 };
       }
 
       // ~1–1.1B (TinyLlama, Llama-3.2-1B, SmolLM2-1.7B)
@@ -925,36 +945,36 @@ const Home = {
         model.includes("1.1B") || model.includes("1.7B") ||
         (model.includes("1B") && !model.includes("1.5B"))
       ) {
-        return { temperature: 0.4, max_tokens: 256, contextWindowSize: 4096 };
+        return { ...penaltyDefaults, temperature: 0.4, max_tokens: 256, contextWindowSize: 4096 };
       }
 
       // ~1.5–1.6B
       if (model.includes("1.5B") || model.includes("1.6b") || model.includes("1_6b")) {
-        return { temperature: 0.4, max_tokens: 512, contextWindowSize: 4096 };
+        return { ...penaltyDefaults, temperature: 0.4, max_tokens: 512, contextWindowSize: 4096 };
       }
 
       // ~2B (Gemma-2-2B)
       if (model.includes("2b") || model.includes("2B")) {
-        return { temperature: 0.6, max_tokens: 512, contextWindowSize: 4096 };
+        return { ...penaltyDefaults, temperature: 0.6, max_tokens: 512, contextWindowSize: 4096 };
       }
 
       // ~3–4B
       if (model.includes("3B") || model.includes("4B") || model.includes("4b")) {
-        return { temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
+        return { ...penaltyDefaults, temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
       }
 
       // ~3.8B (Phi-3.5-mini)
       if (model.includes("mini")) {
-        return { temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
+        return { ...penaltyDefaults, temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
       }
 
       // ~7–9B large models
       if (model.includes("7B") || model.includes("8B") || model.includes("9b")) {
-        return { temperature: 0.7, max_tokens: 1024, contextWindowSize: 8192 };
+        return { ...penaltyDefaults, temperature: 0.7, max_tokens: 1024, contextWindowSize: 8192 };
       }
 
       // Unknown / fallback
-      return { temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
+      return { ...penaltyDefaults, temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
     }
         
     // Expose functions to Settings page
@@ -1043,7 +1063,7 @@ const Settings = {
           <div class="setting-row">
             <div class="setting-info">
               <span class="setting-name">Temperature</span>
-              <span class="setting-desc">Creativity vs consistency. Lower = more focused.</span>
+              <span class="setting-desc">Randomness of output. Low = focused, High = creative.</span>
             </div>
             <div class="setting-control">
               <input type="range" min="0" max="2" step="0.05" v-model.number="settings.temperature" class="slider" />
@@ -1053,8 +1073,19 @@ const Settings = {
 
           <div class="setting-row">
             <div class="setting-info">
+              <span class="setting-name">Top P</span>
+              <span class="setting-desc">Nucleus sampling. Only consider tokens in the top P probability mass. 1.0 = off.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="0.01" max="1" step="0.01" v-model.number="settings.top_p" class="slider" />
+              <span class="setting-value">{{ settings.top_p.toFixed(2) }}</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
               <span class="setting-name">Max Tokens</span>
-              <span class="setting-desc">Maximum length of each response.</span>
+              <span class="setting-desc">Maximum number of tokens to generate per response.</span>
             </div>
             <div class="setting-control">
               <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" />
@@ -1065,7 +1096,7 @@ const Settings = {
           <div class="setting-row">
             <div class="setting-info">
               <span class="setting-name">Context Window</span>
-              <span class="setting-desc">Tokens of conversation history the model sees.</span>
+              <span class="setting-desc">Tokens of conversation history visible to the model. Requires model reload.</span>
             </div>
             <div class="setting-control">
               <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" />
@@ -1075,13 +1106,65 @@ const Settings = {
         </section>
 
         <section class="settings-section">
+          <h2 class="section-label">Repetition Control</h2>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Frequency Penalty</span>
+              <span class="setting-desc">Penalises tokens by how often they have appeared. Reduces word repetition. Range −2 to 2.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.frequency_penalty" class="slider" />
+              <span class="setting-value">{{ settings.frequency_penalty.toFixed(1) }}</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Presence Penalty</span>
+              <span class="setting-desc">Penalises tokens that have already appeared at all. Encourages new topics. Range −2 to 2.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.presence_penalty" class="slider" />
+              <span class="setting-value">{{ settings.presence_penalty.toFixed(1) }}</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Repetition Penalty</span>
+              <span class="setting-desc">MLC-specific multiplicative penalty applied to repeated tokens. 1.0 = off, &gt;1 reduces repetition.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="1" max="2" step="0.05" v-model.number="settings.repetition_penalty" class="slider" />
+              <span class="setting-value">{{ settings.repetition_penalty.toFixed(2) }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h2 class="section-label">System Prompt</h2>
+          <p class="section-hint" style="margin-bottom:10px">Instructions given to the model before every conversation. Changes take effect on the next message.</p>
+          <textarea
+            class="system-prompt-editor"
+            v-model="settings.system_prompt"
+            placeholder="Enter system prompt..."
+            rows="7"
+            spellcheck="false"
+          ></textarea>
+          <button class="action-btn secondary" style="margin-top:8px" @click="resetSystemPrompt">
+            Reset to Default
+          </button>
+        </section>
+
+        <section class="settings-section">
           <h2 class="section-label">Actions</h2>
           <div class="settings-actions">
             <button class="action-btn primary" @click="applySettings" :disabled="modelLoading || loading">
               Apply Settings
             </button>
             <button class="action-btn secondary" @click="resetSettings">
-              Reset Defaults
+              Reset All Defaults
             </button>
             <button class="action-btn danger" @click="clearConversation" :disabled="messages.length === 0">
               Clear Conversation
@@ -1094,6 +1177,12 @@ const Settings = {
   `,
 
   setup() {
+    const DEFAULT_SYSTEM_PROMPT = sharedSettings.value.system_prompt;
+
+    function resetSystemPrompt() {
+      sharedSettings.value.system_prompt = DEFAULT_SYSTEM_PROMPT;
+    }
+
     return {
       settings: sharedSettings,
       models: sharedModels,
@@ -1104,6 +1193,7 @@ const Settings = {
       resetSettings: sharedResetSettings,
       clearConversation: sharedClearConversation,
       newChat: sharedNewChat,
+      resetSystemPrompt,
     };
   },
 };

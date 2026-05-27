@@ -830,3 +830,22 @@ html, body, #app {
   0%, 100% { border-color: #7a2c2c; }
   50%       { border-color: #c0392b; }
 }
+
+/* ── System prompt editor ─────────────────────────────────────── */
+.system-prompt-editor {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  resize: vertical;
+  outline: none;
+  transition: border-color .15s;
+  min-height: 140px;
+}
+.system-prompt-editor:focus { border-color: var(--amber-dim); }
+.system-prompt-editor::placeholder { color: var(--text-3); }

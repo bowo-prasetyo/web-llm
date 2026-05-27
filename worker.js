@@ -6,7 +6,9 @@ import {
   pipeline
 } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
-const SYSTEM_PROMPT = `You are a concise, factually accurate AI assistant.
+// System prompt is now user-configurable via Settings.
+// Fallback used when USER_CONFIG.system_prompt is not set.
+const DEFAULT_SYSTEM_PROMPT = `You are a concise, factually accurate AI assistant.
 
 Rules you must never break:
 - Never contradict established science, physics, or basic facts (e.g. humans have mass).
@@ -17,6 +19,12 @@ Rules you must never break:
 - Never redefine ordinary words in unusual ways to rescue a wrong answer.
 - If the user states a correct fact, accept it. Do not contradict correct information the user provides.
 - Only correct the user if you are certain they are factually wrong.`;
+
+function getSystemPrompt() {
+  return (USER_CONFIG && USER_CONFIG.system_prompt)
+    ? USER_CONFIG.system_prompt
+    : DEFAULT_SYSTEM_PROMPT;
+}
 
 const SMALLEST_MODEL = "SmolLM2-360M-Instruct-q4f32_1-MLC";
 
@@ -220,14 +228,13 @@ async function detectBestModel() {
     };
 
     MODEL_CONFIG = {
-      max_tokens:
-        USER_CONFIG.max_tokens,
-    
-      temperature:
-        USER_CONFIG.temperature,
-    
-      contextWindowSize:
-        USER_CONFIG.contextWindowSize,
+      max_tokens:         USER_CONFIG.max_tokens,
+      temperature:        USER_CONFIG.temperature,
+      contextWindowSize:  USER_CONFIG.contextWindowSize,
+      top_p:              USER_CONFIG.top_p          ?? 1.0,
+      frequency_penalty:  USER_CONFIG.frequency_penalty ?? 0.0,
+      presence_penalty:   USER_CONFIG.presence_penalty  ?? 0.0,
+      repetition_penalty: USER_CONFIG.repetition_penalty ?? 1.0,
     };
       
     postMessage({
@@ -572,7 +579,7 @@ async function generate(prompt) {
     let history = [
       {
         role: "system",
-        content: SYSTEM_PROMPT,
+        content: getSystemPrompt(),
       },
       ...SESSION_HISTORY
     ];
@@ -635,21 +642,22 @@ async function generate(prompt) {
       
       const completion =
         await engine.chat.completions.create({
-      
+
           messages: history,
-      
-          temperature:
-            MODEL_CONFIG.temperature,
-      
-          max_tokens:
-            maxTokens,
+
+          temperature:    MODEL_CONFIG.temperature,
+          max_tokens:     maxTokens,
+          top_p:          MODEL_CONFIG.top_p          ?? 1.0,
+          frequency_penalty: MODEL_CONFIG.frequency_penalty ?? 0.0,
+          presence_penalty:  MODEL_CONFIG.presence_penalty  ?? 0.0,
+          repetition_penalty: MODEL_CONFIG.repetition_penalty ?? 1.0,
 
           stop: [
             "\nUser:",
             "\nHuman:",
             "\nAssistant:",
           ],
-      
+
           stream: true,
         });
       
@@ -829,8 +837,12 @@ async function generate(prompt) {
       const continuationStream =
         await engine.chat.completions.create({
           messages: continuationHistory,
-          temperature: MODEL_CONFIG.temperature,
-          max_tokens: maxTokens,
+          temperature:    MODEL_CONFIG.temperature,
+          max_tokens:     maxTokens,
+          top_p:          MODEL_CONFIG.top_p          ?? 1.0,
+          frequency_penalty: MODEL_CONFIG.frequency_penalty ?? 0.0,
+          presence_penalty:  MODEL_CONFIG.presence_penalty  ?? 0.0,
+          repetition_penalty: MODEL_CONFIG.repetition_penalty ?? 1.0,
           stop: ["\nUser:", "\nHuman:", "\nAssistant:"],
           stream: true,
         });

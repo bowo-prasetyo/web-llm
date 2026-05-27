@@ -51,6 +51,8 @@ const sharedSessions  = vRef([]);   // [{id, title, model, ts, preview}]
 const sharedSidebarOpen = vRef(false);
 const sharedModelSizes  = vRef({});  // {modelId: sizeInMB}
 const sharedIsDownloading = vRef(false);  // true while model weights are fetching
+const sharedIndexedDocs = vRef([]);   // [{filename, chunks}]
+const sharedIngestState = vRef(null); // {filename, current, total} | null
 // These are populated once Home mounts; Settings reads them directly.
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
@@ -203,6 +205,47 @@ const Home = {
         </div>
       </div>
 
+      <!-- RAG context indicator — shown above footer when RAG was used -->
+      <div v-if="ragSources.length > 0" class="rag-banner">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Answer informed by: <span class="rag-sources">{{ ragSources.join(", ") }}</span>
+        <button class="rag-dismiss" @click="ragSources = []">×</button>
+      </div>
+
+      <!-- Ingest progress bar -->
+      <div v-if="ingestState" class="ingest-progress-bar">
+        <div class="ingest-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Indexing {{ ingestState.filename }} — chunk {{ ingestState.current }} / {{ ingestState.total }}
+        </div>
+        <div class="ingest-track">
+          <div class="ingest-fill" :style="{ width: Math.round(ingestState.current / ingestState.total * 100) + '%' }"></div>
+        </div>
+      </div>
+
+      <!-- Document manager panel -->
+      <div v-if="docsOpen" class="docs-panel">
+        <div class="docs-panel-header">
+          <span class="docs-panel-title">Indexed Documents</span>
+          <div class="docs-panel-actions">
+            <button v-if="indexedDocuments.length > 0" class="action-btn danger" style="font-size:11px;padding:4px 9px" @click="clearDocuments">Clear All</button>
+            <button class="icon-btn" @click="docsOpen = false" style="width:26px;height:26px">×</button>
+          </div>
+        </div>
+        <div v-if="indexedDocuments.length === 0" class="docs-empty">
+          No documents indexed yet. Upload a file to enable document-aware answers.
+        </div>
+        <div v-for="doc in indexedDocuments" :key="doc.filename" class="doc-item">
+          <div class="doc-info">
+            <span class="doc-name">{{ doc.filename }}</span>
+            <span class="doc-chunks">{{ doc.chunks }} chunks</span>
+          </div>
+          <button class="doc-delete" @click="deleteDocument(doc.filename)" title="Remove">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
       <div class="footer-container">
         <div class="toolbar">
           <select
@@ -216,6 +259,17 @@ const Home = {
               {{ model }}
             </option>
           </select>
+
+          <!-- Documents button — badge shows indexed doc count -->
+          <button
+            class="clear-btn docs-btn"
+            :class="{ 'has-docs': indexedDocuments.length > 0 }"
+            @click="docsOpen = !docsOpen"
+            title="Indexed documents"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Docs<span v-if="indexedDocuments.length > 0" class="doc-badge">{{ indexedDocuments.length }}</span>
+          </button>
 
           <button
             class="clear-btn"
@@ -299,8 +353,12 @@ const Home = {
     const currentSessionId = ref("");
     const sessions = sharedSessions;
     const sidebarOpen = sharedSidebarOpen;
+    const docsOpen = ref(false);
     const modelSizes = sharedModelSizes;
     const isDownloading = sharedIsDownloading;
+    const indexedDocuments = sharedIndexedDocs;
+    const ingestState = sharedIngestState;
+    const ragSources = ref([]);       // filenames used in last response
     const CACHED_KEY = "webllm-cached-models";
     // Tracks the model that was cancelled so applySettings won't re-trigger it
     const postCancelModel = ref("");
@@ -375,6 +433,7 @@ const Home = {
 
       prompt.value = "";
       loading.value = true;
+      ragSources.value = []; // clear previous indicator
 
       getWorker().postMessage({
         type: "generate",
@@ -386,6 +445,14 @@ const Home = {
       const file = event.target.files[0];
 
       if (!file) {
+        return;
+      }
+
+      // FIX 12: Reject files over ~50 MB before any parsing
+      const MAX_FILE_BYTES = 50 * 1024 * 1024;
+      if (file.size > MAX_FILE_BYTES) {
+        status.value = `⚠ ${file.name} is too large (${(file.size / 1048576).toFixed(1)} MB). Maximum is 50 MB.`;
+        event.target.value = "";
         return;
       }
 
@@ -590,6 +657,36 @@ const Home = {
           addMessage("assistant", "Error: " + data.text);
           loading.value = false;
           break;
+
+        case "rag-context":
+          ragSources.value = data.sources || [];
+          break;
+
+        case "documents-updated":
+          indexedDocuments.value = data.documents || [];
+          break;
+
+        case "ingest-progress":
+          ingestState.value = {
+            filename: data.filename,
+            current: data.current,
+            total: data.total,
+          };
+          break;
+
+        case "ingest-done":
+          ingestState.value = null;
+          status.value = `✓ ${data.filename} indexed (${data.chunks} chunks)`;
+          break;
+
+        case "ingest-error":
+          ingestState.value = null;
+          status.value = `⚠ Failed to index ${data.filename}: ${data.error}`;
+          break;
+
+        case "ingest-queued":
+          status.value = `⏳ ${data.filename} queued — waiting for generation to finish...`;
+          break;
       }
     }
 
@@ -677,6 +774,15 @@ const Home = {
       if (!loading.value) return;
       getWorker().postMessage({ type: "stop-generation" });
       // UI will update when the worker sends "response" with partial text
+    }
+
+    function deleteDocument(filename) {
+      getWorker().postMessage({ type: "delete-document", filename });
+    }
+
+    function clearDocuments() {
+      getWorker().postMessage({ type: "clear-documents" });
+      indexedDocuments.value = [];
     }
 
     function cancelDownload() {
@@ -1238,6 +1344,12 @@ const Home = {
       searchResults,
       searchPending,
       onSearchInput,
+      indexedDocuments,
+      ingestState,
+      ragSources,
+      docsOpen,
+      deleteDocument,
+      clearDocuments,
     };
   },
 };

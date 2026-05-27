@@ -553,10 +553,24 @@ async function initialize() {
     
     await loadVectorDB();
 
+    // If we have indexed documents, pre-load the embedder now so
+    // searchRelevantChunks() doesn't stall on the first generate() call.
+    if (vectorDB.length > 0) {
+      initializeEmbedder().catch(() => {}); // non-blocking, best-effort
+    }
+
     postMessage({
       type: "status",
       text: "Model loaded successfully",
     });
+
+    // Tell the UI which documents are currently indexed
+    if (vectorDB.length > 0) {
+      postMessage({
+        type: "documents-updated",
+        documents: getIndexedDocuments(),
+      });
+    }
   })();
 
   return initializingPromise;
@@ -598,21 +612,26 @@ async function generate(prompt) {
   
       const relevantChunks =
         await searchRelevantChunks(prompt);
-  
-      const context =
-        relevantChunks
-        .map(item => item.text)
-        .join("\n\n");
-  
-      const augmentedPrompt =
-        context ?
-        `Context:\n${context}\n\nQuestion:\n${prompt}` :
-        prompt;
-  
+
+      // Build the augmented prompt for the API call only — do NOT store
+      // the full context in SESSION_HISTORY (it would be replayed on every
+      // subsequent turn, wasting context window and confusing the model).
+      const context = relevantChunks
+        .map(item => `[${item.filename}]\n${item.text}`)
+        .join("\n\n---\n\n");
+
+      const augmentedPrompt = context
+        ? `Relevant context from uploaded documents:\n\n${context}\n\n---\nUser question: ${prompt}`
+        : prompt;
+
+      // Push only the bare user prompt into session history
       history.push({
         role: "user",
-        content: augmentedPrompt,
+        content: prompt,
       });
+
+      // Track which files contributed context so UI can show it
+      const contextSources = [...new Set(relevantChunks.map(c => c.filename))];
 
       // Always pin the system message — slice only the non-system tail
       // so MAX_HISTORY evictions never strip the model's instructions.
@@ -621,6 +640,13 @@ async function generate(prompt) {
         const rest = history.slice(sys.length);
         history = [...sys, ...rest.slice(-Math.max(MAX_HISTORY - 1, 4))];
       }
+
+      // Build a one-shot history for the API that replaces the last user turn
+      // with the RAG-augmented version. We do this AFTER trimming so the
+      // context doesn't bloat history and get replayed on future turns.
+      const apiHistory = augmentedPrompt !== prompt
+        ? [...history.slice(0, -1), { role: "user", content: augmentedPrompt }]
+        : history;
       
       IS_GENERATING = true;
       LAST_STREAM_TIME = 0;
@@ -640,10 +666,18 @@ async function generate(prompt) {
       }
       ensureEngine();
       
+      // Post context sources to UI so user knows RAG was used
+      if (contextSources.length > 0) {
+        postMessage({
+          type: "rag-context",
+          sources: contextSources,
+        });
+      }
+
       const completion =
         await engine.chat.completions.create({
 
-          messages: history,
+          messages: apiHistory,
 
           temperature:    MODEL_CONFIG.temperature,
           max_tokens:     maxTokens,
@@ -1041,10 +1075,44 @@ self.onmessage = async (event) => {
         break;
 
       case "ingest":
-        await ingestDocument(
-          data.filename,
-          data.text
+        // Don't start embedding while LLM is generating — they share the
+        // worker thread and will compete for compute / memory.
+        if (ACTIVE_GENERATION) {
+          postMessage({
+            type: "ingest-queued",
+            filename: data.filename,
+          });
+          // Wait for generation to finish, then ingest
+          await new Promise(resolve => {
+            const poll = setInterval(() => {
+              if (!ACTIVE_GENERATION) {
+                clearInterval(poll);
+                resolve();
+              }
+            }, 300);
+          });
+        }
+        await ingestDocument(data.filename, data.text);
+        break;
+
+      case "delete-document":
+        vectorDB = vectorDB.filter(
+          item => item.filename !== data.filename
         );
+        await saveVectorDB();
+        postMessage({
+          type: "documents-updated",
+          documents: getIndexedDocuments(),
+        });
+        break;
+
+      case "clear-documents":
+        vectorDB = [];
+        await saveVectorDB();
+        postMessage({
+          type: "documents-updated",
+          documents: [],
+        });
         break;
 
       case "models":
@@ -1198,21 +1266,72 @@ async function initializeEmbedder() {
 
 function chunkText(
   text,
-  chunkSize = 500
+  chunkSize = 800,  // ~130 words — enough for a full paragraph
+  overlap  = 120   // overlap so boundary sentences aren't split in half
 ) {
 
-  const chunks = [];
+  // Normalize whitespace: collapse multiple blank lines, trim
+  const normalized = text
+    .replace(/
+/g, "
+")
+    .replace(/
+{3,}/g, "
 
-  for (
-    let i = 0; i < text.length; i += chunkSize
-  ) {
+")
+    .trim();
 
-    chunks.push(
-      text.slice(i, i + chunkSize)
-    );
+  if (normalized.length <= chunkSize) {
+    return normalized ? [normalized] : [];
   }
 
-  return chunks;
+  const chunks = [];
+  let start = 0;
+
+  while (start < normalized.length) {
+    const end = start + chunkSize;
+
+    if (end >= normalized.length) {
+      // Last chunk — take the rest
+      chunks.push(normalized.slice(start).trim());
+      break;
+    }
+
+    // Try to break at a sentence boundary (. ! ?) within the last 200 chars
+    let breakAt = -1;
+    const window = normalized.slice(end - 200, end + 100);
+    const sentenceEnd = window.search(/[.!?][\s
+]/);
+    if (sentenceEnd !== -1) {
+      breakAt = end - 200 + sentenceEnd + 1;
+    }
+
+    // Fall back to paragraph break
+    if (breakAt === -1) {
+      const paraBreak = normalized.lastIndexOf("
+
+", end);
+      if (paraBreak > start + chunkSize / 2) {
+        breakAt = paraBreak;
+      }
+    }
+
+    // Fall back to word boundary
+    if (breakAt === -1) {
+      const spaceBreak = normalized.lastIndexOf(" ", end);
+      if (spaceBreak > start) {
+        breakAt = spaceBreak;
+      } else {
+        breakAt = end; // hard cut only as last resort
+      }
+    }
+
+    chunks.push(normalized.slice(start, breakAt).trim());
+    // Overlap: next chunk starts overlap chars before the break
+    start = Math.max(start + 1, breakAt - overlap);
+  }
+
+  return chunks.filter(c => c.length > 20); // discard tiny fragments
 }
 
 async function createEmbedding(text) {
@@ -1252,50 +1371,85 @@ function cosineSimilarity(a, b) {
   return dot / denom;
 }
 
-async function ingestDocument(
-  filename,
-  text
-) {
+function getIndexedDocuments() {
+  // Return unique filename list with chunk counts
+  const map = new Map();
+  for (const item of vectorDB) {
+    map.set(item.filename, (map.get(item.filename) || 0) + 1);
+  }
+  return Array.from(map.entries()).map(([filename, chunks]) => ({
+    filename,
+    chunks,
+  }));
+}
 
-  await initializeEmbedder();
+async function ingestDocument(filename, text) {
 
-  const chunks = chunkText(text);
-
-  postMessage({
-    type: "status",
-    text: `Embedding ${chunks.length} chunks...`,
-  });
-
-  vectorDB = vectorDB.filter(
-    item => item.filename !== filename
-  );
-    
-  for (const chunk of chunks) {
-
-    const embedding =
-      await createEmbedding(chunk);
-
-    vectorDB.push({
+  // FIX 12: Reject excessively large files before any processing
+  const MAX_TEXT_CHARS = 500_000; // ~83,000 words, ~200 pages
+  if (text.length > MAX_TEXT_CHARS) {
+    postMessage({
+      type: "ingest-error",
       filename,
-      text: chunk,
-      embedding,
+      error: `File too large (${Math.round(text.length / 1000)}k chars). Maximum is ${MAX_TEXT_CHARS / 1000}k chars (~200 pages).`,
     });
+    return;
   }
 
-  await saveVectorDB();
+  try {
 
-  postMessage({
-    type: "status",
-    text: `${filename} indexed successfully`,
-  });
+    await initializeEmbedder();
+
+    const chunks = chunkText(text);
+
+    // Remove previous version of this file
+    vectorDB = vectorDB.filter(item => item.filename !== filename);
+
+    for (let i = 0; i < chunks.length; i++) {
+
+      // FIX 15: Per-chunk progress
+      postMessage({
+        type: "ingest-progress",
+        filename,
+        current: i + 1,
+        total: chunks.length,
+      });
+
+      const embedding = await createEmbedding(chunks[i]);
+      vectorDB.push({ filename, text: chunks[i], embedding });
+    }
+
+    await saveVectorDB();
+
+    postMessage({
+      type: "documents-updated",
+      documents: getIndexedDocuments(),
+    });
+
+    postMessage({
+      type: "ingest-done",
+      filename,
+      chunks: chunks.length,
+    });
+
+  } catch (err) {
+    // FIX 14: Surface ingest errors to UI as a dedicated message type,
+    // not as a chat message
+    postMessage({
+      type: "ingest-error",
+      filename,
+      error: err?.message || "Unknown error during indexing",
+    });
+  }
 }
 
 async function searchRelevantChunks(
   query,
-  topK = 3
+  topK = 4,
+  minScore = 0.25  // below this the chunk is probably unrelated
 ) {
 
-  if (!vectorDB.length) {
+  if (!vectorDB.length || !embedder) {
     return [];
   }
 
@@ -1310,11 +1464,27 @@ async function searchRelevantChunks(
     ),
   }));
 
-  scored.sort(
-    (a, b) => b.score - a.score
-  );
+  scored.sort((a, b) => b.score - a.score);
 
-  return scored.slice(0, topK);
+  // Only return chunks above the relevance threshold
+  const relevant = scored.filter(c => c.score >= minScore);
+
+  if (relevant.length === 0) return [];
+
+  // Deduplicate by filename+approximate position to avoid near-identical
+  // overlapping chunks (artifact of the overlap in chunkText)
+  const seen = new Set();
+  const deduped = [];
+  for (const item of relevant) {
+    const key = item.filename + "|" + item.text.slice(0, 40);
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(item);
+    }
+    if (deduped.length >= topK) break;
+  }
+
+  return deduped;
 }
 
 function resetStallTimer() {

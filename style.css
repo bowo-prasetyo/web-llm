@@ -947,3 +947,164 @@ html, body, #app {
   margin-top: 4px;
   font-style: italic;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   RAG + DOCUMENT MANAGER
+══════════════════════════════════════════════════════════════ */
+
+/* RAG context banner */
+.rag-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: rgba(245,166,35,.07);
+  border-top: 1px solid rgba(245,166,35,.15);
+  font-size: 11.5px;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.rag-banner svg { color: var(--amber-dim); flex-shrink: 0; }
+.rag-sources { color: var(--amber-text); font-style: italic; }
+.rag-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.rag-dismiss:hover { color: var(--text); }
+
+/* Ingest progress bar */
+.ingest-progress-bar {
+  padding: 7px 14px;
+  background: #141414;
+  border-top: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+.ingest-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+  margin-bottom: 5px;
+  font-family: var(--font-mono);
+}
+.ingest-label svg { color: var(--amber); }
+.ingest-track {
+  height: 3px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ingest-fill {
+  height: 100%;
+  background: var(--amber);
+  border-radius: 2px;
+  transition: width .3s ease;
+}
+
+/* Docs button with badge */
+.docs-btn { position: relative; }
+.docs-btn.has-docs { color: var(--amber-text); border-color: var(--amber-dim); }
+.doc-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--amber);
+  color: #111;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  margin-left: 3px;
+  line-height: 1;
+}
+
+/* Document manager panel — sits above the footer */
+.docs-panel {
+  background: #141414;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.docs-panel::-webkit-scrollbar { width: 3px; }
+.docs-panel::-webkit-scrollbar-thumb { background: var(--border); }
+
+.docs-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px 7px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.docs-panel-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--amber-dim);
+}
+.docs-panel-actions { display: flex; align-items: center; gap: 6px; }
+
+.docs-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  gap: 8px;
+}
+.doc-item:last-child { border-bottom: none; }
+
+.doc-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.doc-name {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-chunks {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.doc-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color .12s, background .12s;
+}
+.doc-delete:hover {
+  color: #e05c5c;
+  background: rgba(224,92,92,.1);
+}

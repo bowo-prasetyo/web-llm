@@ -610,7 +610,9 @@ const Home = {
             
     function confirmDownload() {
       confirmModal.value.show = false;
-      markModelCached(settings.value.model);
+      // Do NOT mark as cached here — only mark it after the model
+      // actually finishes loading (in the "Model loaded successfully" handler).
+      // Marking here caused cancelled downloads to appear cached forever.
       applySettings(true); // bypass confirmation this time
     }
 
@@ -625,8 +627,16 @@ const Home = {
       isDownloading.value = false;
       modelLoading.value = false;
 
+      const cancelledModel = settings.value.model;
+
+      // Remove from cache list so confirmation shows again next time
+      try {
+        const cached = getCachedModels().filter(m => m !== cancelledModel);
+        localStorage.setItem(CACHED_KEY, JSON.stringify(cached));
+      } catch {}
+
       // Remember the cancelled model so applySettings won't re-trigger it
-      postCancelModel.value = settings.value.model;
+      postCancelModel.value = cancelledModel;
 
       // Revert the select to the last successfully loaded model (or nothing)
       settings.value.model = lastAppliedModel.value;

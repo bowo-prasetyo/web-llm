@@ -245,6 +245,8 @@ const Home = {
     const modelSizes = sharedModelSizes;
     const isDownloading = sharedIsDownloading;
     const CACHED_KEY = "webllm-cached-models";
+    // Tracks the model that was cancelled so applySettings won't re-trigger it
+    const postCancelModel = ref("");
     const confirmModal = ref({
       show: false,
       model: "",
@@ -512,12 +514,19 @@ const Home = {
             !settings.value.model ||
             !data.models.includes(settings.value.model)
           ) {
-            settings.value.model = data.models[0];
+            // After a cancel, lastAppliedModel is "" — don't auto-select
+            // a new model; leave the dropdown empty so the user chooses.
+            if (lastAppliedModel.value) {
+              settings.value.model = lastAppliedModel.value;
+            } else if (!postCancelModel.value) {
+              // First ever launch — auto-select the first model
+              settings.value.model = data.models[0];
+            }
           }
 
-          // Mark currently selected model as cached since we have it
-          // (or we're about to download it on first launch — confirmed below)
-          await applySettings();
+          if (settings.value.model) {
+            await applySettings();
+          }
           break;
                     
         case "error":
@@ -532,6 +541,18 @@ const Home = {
       if (!settings.value.model) {
         return;
       }
+
+      // After a cancel, the reverted model is "" or the last good model.
+      // If somehow the cancelled model is still selected, refuse to load it
+      // (user must actively re-select it to confirm intent).
+      if (
+        postCancelModel.value &&
+        settings.value.model === postCancelModel.value
+      ) {
+        postCancelModel.value = "";
+        return;
+      }
+      postCancelModel.value = ""; // clear on any successful apply
 
       const isNewModel = settings.value.model !== lastAppliedModel.value;
 
@@ -603,11 +624,20 @@ const Home = {
       if (!isDownloading.value) return;
       isDownloading.value = false;
       modelLoading.value = false;
-      // Terminate and replace the worker — only reliable way to cancel fetch
+
+      // Remember the cancelled model so applySettings won't re-trigger it
+      postCancelModel.value = settings.value.model;
+
+      // Revert the select to the last successfully loaded model (or nothing)
+      settings.value.model = lastAppliedModel.value;
+
+      // Terminate and replace the worker — the new worker sends "models"
+      // on its own startup, which will trigger applySettings; we suppress
+      // it for the cancelled model via postCancelModel above.
       worker = replaceWorker(onWorkerMessage);
       status.value = "Download cancelled";
-      // Revert model select to previously loaded model
-      settings.value.model = lastAppliedModel.value || (models.value[0] || "");
+
+      // Send init so the worker reports its models list and stays ready
       getWorker().postMessage({ type: "init" });
     }
 

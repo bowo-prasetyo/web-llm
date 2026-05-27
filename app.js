@@ -95,7 +95,54 @@ const Home = {
             New Chat
           </button>
         </div>
-        <div class="sidebar-list">
+
+        <!-- Search box -->
+        <div class="sidebar-search">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Search chats…"
+            v-model="searchQuery"
+            @input="onSearchInput"
+          />
+          <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''; searchResults = []" title="Clear">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- Search results -->
+        <div v-if="searchQuery" class="sidebar-list">
+          <div v-if="searchResults.length === 0 && !searchPending" class="sidebar-empty">
+            No results for "{{ searchQuery }}"
+          </div>
+          <div v-if="searchPending" class="sidebar-empty">Searching…</div>
+          <template v-for="r in searchResults" :key="r.session.id">
+            <div
+              class="session-item search-result-item"
+              :class="{ active: r.session.id === currentSessionId }"
+              @click="loadSession(r.session.id)"
+            >
+              <div class="session-meta">
+                <span class="session-title">{{ r.session.id === currentSessionId ? "Current chat" : r.session.title }}</span>
+                <span class="session-date">{{ formatDate(r.session.ts) }}</span>
+              </div>
+              <!-- Show up to 3 matching excerpts per session -->
+              <div
+                v-for="(match, mi) in r.matches.slice(0, 3)"
+                :key="mi"
+                class="search-match"
+              >
+                <span class="match-role">{{ match.role === "user" ? "You" : "AI" }}</span>
+                <span class="match-snippet" v-html="match.highlighted"></span>
+              </div>
+              <div v-if="r.matches.length > 3" class="search-more">+{{ r.matches.length - 3 }} more matches</div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Normal sessions list -->
+        <div v-else class="sidebar-list">
           <div v-if="sessions.length === 0" class="sidebar-empty">No saved chats yet</div>
           <div
             v-for="s in sessions"
@@ -999,6 +1046,164 @@ const Home = {
       // triggered from the "models" handler via loadConversation().
     });
         
+    // ── Search ──────────────────────────────────────────────────────────────
+    const searchQuery = ref("");
+    const searchResults = ref([]);
+    const searchPending = ref(false);
+    let searchDebounceTimer = null;
+
+    const SNIPPET_RADIUS = 80; // chars around match to show as context
+
+    function escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    // Build highlighted snippet around first match in text
+    function makeSnippet(text, query) {
+      const lc = text.toLowerCase();
+      const qlc = query.toLowerCase();
+      const idx = lc.indexOf(qlc);
+      if (idx === -1) return null;
+
+      const start = Math.max(0, idx - SNIPPET_RADIUS);
+      const end   = Math.min(text.length, idx + qlc.length + SNIPPET_RADIUS);
+      const raw   = (start > 0 ? "…" : "") +
+                    text.slice(start, end) +
+                    (end < text.length ? "…" : "");
+
+      // Highlight all occurrences of query in the snippet (case-insensitive)
+      const highlighted = escapeHtml(raw).replace(
+        new RegExp(escapeRegex(escapeHtml(query)), "gi"),
+        m => `<mark class="search-highlight">${m}</mark>`
+      );
+      return highlighted;
+    }
+
+    // Count total matches of query in text
+    function countMatches(text, query) {
+      const matches = text.toLowerCase().match(
+        new RegExp(escapeRegex(query.toLowerCase()), "g")
+      );
+      return matches ? matches.length : 0;
+    }
+
+    // Search a list of messages for query; return match objects
+    function searchMessages(msgs, query) {
+      const results = [];
+      for (const msg of msgs) {
+        if (msg.role !== "user" && msg.role !== "assistant") continue;
+        if (!msg.content.toLowerCase().includes(query.toLowerCase())) continue;
+        const highlighted = makeSnippet(msg.content, query);
+        if (highlighted) {
+          results.push({
+            role: msg.role,
+            highlighted,
+            matchCount: countMatches(msg.content, query),
+          });
+        }
+      }
+      return results;
+    }
+
+    async function runSearch(query) {
+      if (!query.trim()) {
+        searchResults.value = [];
+        searchPending.value = false;
+        return;
+      }
+
+      searchPending.value = true;
+      const results = [];
+
+      // Search active session (live messages, not yet persisted to index)
+      const activeMatches = searchMessages(messages.value, query);
+      if (activeMatches.length > 0) {
+        results.push({
+          session: {
+            id: currentSessionId.value,
+            title: titleFromMessages(messages.value) || "Current chat",
+            ts: Date.now(),
+            model: settings.value.model || "",
+          },
+          matches: activeMatches,
+          totalMatches: activeMatches.reduce((a, m) => a + m.matchCount, 0),
+        });
+      }
+
+      // Search all saved sessions (load from localStorage on demand)
+      const index = loadIndex();
+      for (const entry of index) {
+        if (entry.id === currentSessionId.value) continue; // already searched above
+        try {
+          const raw = localStorage.getItem(sessionKey(entry.id));
+          if (!raw) continue;
+          const msgs = JSON.parse(raw);
+          if (!Array.isArray(msgs)) continue;
+
+          // Quick title/preview check first (avoids JSON.parse for non-matches)
+          const inTitleOrPreview =
+            (entry.title || "").toLowerCase().includes(query.toLowerCase()) ||
+            (entry.preview || "").toLowerCase().includes(query.toLowerCase());
+
+          const msgMatches = searchMessages(msgs, query);
+
+          if (msgMatches.length > 0 || inTitleOrPreview) {
+            // If only title/preview matched but no message matched, make a
+            // snippet from the title so something meaningful shows
+            const matches = msgMatches.length > 0
+              ? msgMatches
+              : [{
+                  role: "user",
+                  highlighted: makeSnippet(entry.title || "", query) ||
+                               escapeHtml(entry.title || ""),
+                  matchCount: 1,
+                }];
+
+            results.push({
+              session: entry,
+              matches,
+              totalMatches: matches.reduce((a, m) => a + m.matchCount, 0),
+            });
+          }
+        } catch {}
+
+        // Yield to the event loop every 5 sessions to stay responsive
+        if (index.indexOf(entry) % 5 === 4) {
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      // Sort: active session first, then by total match count desc
+      results.sort((a, b) => {
+        if (a.session.id === currentSessionId.value) return -1;
+        if (b.session.id === currentSessionId.value) return 1;
+        return b.totalMatches - a.totalMatches;
+      });
+
+      searchResults.value = results;
+      searchPending.value = false;
+    }
+
+    function onSearchInput() {
+      clearTimeout(searchDebounceTimer);
+      if (!searchQuery.value.trim()) {
+        searchResults.value = [];
+        searchPending.value = false;
+        return;
+      }
+      searchPending.value = true;
+      searchDebounceTimer = setTimeout(() => {
+        runSearch(searchQuery.value);
+      }, 280);
+    }
+
     return {
       prompt,
       loading,
@@ -1029,6 +1234,10 @@ const Home = {
       isDownloading,
       stopGeneration,
       cancelDownload,
+      searchQuery,
+      searchResults,
+      searchPending,
+      onSearchInput,
     };
   },
 };

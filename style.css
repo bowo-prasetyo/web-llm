@@ -849,3 +849,101 @@ html, body, #app {
 }
 .system-prompt-editor:focus { border-color: var(--amber-dim); }
 .system-prompt-editor::placeholder { color: var(--text-3); }
+
+/* ══════════════════════════════════════════════════════════════
+   SIDEBAR SEARCH
+══════════════════════════════════════════════════════════════ */
+
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #242424;
+  background: #141414;
+  flex-shrink: 0;
+}
+
+.search-icon {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: #1c1c1c;
+  border: 1px solid #2a2a2a;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  padding: 6px 9px;
+  outline: none;
+  transition: border-color .15s;
+  min-width: 0;
+}
+.search-input:focus { border-color: var(--amber-dim); }
+.search-input::placeholder { color: var(--text-3); }
+
+.search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 3px;
+  transition: color .12s;
+  flex-shrink: 0;
+}
+.search-clear:hover { color: var(--text); }
+
+/* Search result items */
+.search-result-item {
+  padding-right: 10px; /* no delete btn in search results */
+}
+
+.search-match {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.match-role {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--amber-dim);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.match-snippet {
+  font-size: 11.5px;
+  color: var(--text-2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.search-highlight {
+  background: rgba(245, 166, 35, 0.28);
+  color: var(--amber-text);
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 500;
+}
+
+.search-more {
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-top: 4px;
+  font-style: italic;
+}

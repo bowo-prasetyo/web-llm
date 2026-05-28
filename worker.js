@@ -1272,13 +1272,8 @@ function chunkText(
 
   // Normalize whitespace: collapse multiple blank lines, trim
   const normalized = text
-    .replace(/
-/g, "
-")
-    .replace(/
-{3,}/g, "
-
-")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 
   if (normalized.length <= chunkSize) {
@@ -1300,17 +1295,14 @@ function chunkText(
     // Try to break at a sentence boundary (. ! ?) within the last 200 chars
     let breakAt = -1;
     const window = normalized.slice(end - 200, end + 100);
-    const sentenceEnd = window.search(/[.!?][\s
-]/);
+    const sentenceEnd = window.search(/[.!?][\s\n]/);
     if (sentenceEnd !== -1) {
       breakAt = end - 200 + sentenceEnd + 1;
     }
 
     // Fall back to paragraph break
     if (breakAt === -1) {
-      const paraBreak = normalized.lastIndexOf("
-
-", end);
+      const paraBreak = normalized.lastIndexOf("\n\n", end);
       if (paraBreak > start + chunkSize / 2) {
         breakAt = paraBreak;
       }

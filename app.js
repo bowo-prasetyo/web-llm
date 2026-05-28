@@ -638,13 +638,14 @@ const Home = {
             !settings.value.model ||
             !data.models.includes(settings.value.model)
           ) {
-            // After a cancel, lastAppliedModel is "" — don't auto-select
-            // a new model; leave the dropdown empty so the user chooses.
-            if (lastAppliedModel.value) {
+            if (lastAppliedModel.value && data.models.includes(lastAppliedModel.value)) {
+              // Restore last known good model after worker restart
               settings.value.model = lastAppliedModel.value;
             } else if (!postCancelModel.value) {
-              // First ever launch — auto-select the first model
-              settings.value.model = data.models[0];
+              // First launch or stale saved model — auto-select lightest cached model,
+              // or fall back to first in list
+              const cachedInList = getCachedModels().find(m => data.models.includes(m));
+              settings.value.model = cachedInList || data.models[0];
             }
           }
 
@@ -710,15 +711,18 @@ const Home = {
 
       const isNewModel = settings.value.model !== lastAppliedModel.value;
 
-      // Show download confirmation for first-time downloads
-      if (isNewModel && !skipConfirm && !isModelCached(settings.value.model)) {
+      // Show download confirmation for first-time downloads,
+      // but only if the user is actively changing models (lastAppliedModel is set).
+      // On initial page load (lastAppliedModel is ""), skip confirmation so the
+      // app always loads a model automatically and doesn't start with an empty UI.
+      const isUserChange = lastAppliedModel.value !== "";
+      if (isNewModel && isUserChange && !skipConfirm && !isModelCached(settings.value.model)) {
         const sizeMb = modelSizes.value[settings.value.model] || 0;
-        // Only ask if we have size data and it's meaningful (>50 MB)
         if (sizeMb > 50) {
           confirmModal.value = {
             show: true,
             model: settings.value.model,
-            previousModel: lastAppliedModel.value || settings.value.model,
+            previousModel: lastAppliedModel.value,
             sizeMb,
           };
           return; // wait for user to confirm

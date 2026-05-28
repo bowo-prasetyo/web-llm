@@ -735,10 +735,8 @@ const Home = {
             settings.value.model
           );
 
-        settings.value = {
-          ...settings.value,
-          ...defaults,
-        };
+        // Merge defaults key-by-key to preserve Vue reactivity on the shared ref
+        Object.assign(settings.value, defaults);
 
         if (lastAppliedModel.value !== "") {
           // Only clear if this isn't the very first load
@@ -823,43 +821,35 @@ const Home = {
     }
     
     function loadSettings() {
-    
-      const saved =
-        localStorage.getItem("webllm-settings");
-    
-      if (!saved) {
-        return;
-      }
-    
+
+      const saved = localStorage.getItem("webllm-settings");
+      if (!saved) return;
+
       try {
-    
         const parsed = JSON.parse(saved);
-    
-        settings.value = {
-          ...settings.value,
-          ...parsed,
-        };
-    
+        // Merge individual keys rather than replacing the whole object.
+        // Replacing settings.value would swap out the reactive object and break
+        // Vue's dependency tracking — especially for the shared ref used by
+        // the Settings component.
+        Object.keys(parsed).forEach(key => {
+          if (key in settings.value || key === "system_prompt") {
+            settings.value[key] = parsed[key];
+          }
+        });
       } catch (err) {
-    
-        console.error(
-          "Failed loading settings",
-          err
-        );
+        console.error("Failed loading settings", err);
       }
     }
 
     function resetSettings() {
 
       const defaults = getModelDefaults(settings.value.model || "");
-
-      settings.value = {
-        model: settings.value.model || models.value[0] || "",
-        ...defaults,
-        // Keep system_prompt from current settings on reset (user may have customised it)
-        system_prompt: settings.value.system_prompt,
-      };
-
+      // Merge key-by-key to preserve Vue reactivity on the shared ref
+      Object.assign(settings.value, defaults);
+      if (!settings.value.model) {
+        settings.value.model = models.value[0] || "";
+      }
+      // system_prompt is intentionally NOT reset here — user may have customised it
       saveSettings();
     }
 

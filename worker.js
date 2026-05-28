@@ -994,15 +994,14 @@ self.onmessage = async (event) => {
   try {
     switch (data.type) {
       case "init":
-      
         postMessage({
           type: "models",
           models: AVAILABLE_MODELS,
+          sizes: MODEL_SIZES_MB,
         });
-      
         break;
               
-      case "set-config":
+      case "set-config": {
 
         // If generation is active, wait for it to complete before
         // swapping the model — prevents the Tokenizer* deleted-object crash.
@@ -1021,7 +1020,7 @@ self.onmessage = async (event) => {
             }, 200);
           });
         }
-      
+
         const prevModel = USER_CONFIG?.model;
         USER_CONFIG = data.config;
 
@@ -1067,8 +1066,9 @@ self.onmessage = async (event) => {
         });
       
         await initialize();
-      
+
         break;
+      }
               
       case "generate":
         await generate(data.prompt);

@@ -1133,6 +1133,12 @@ const Home = {
     sharedDeleteSession    = deleteSession;
 
     getWorker().onmessage = onWorkerMessage;
+    getWorker().onerror = (err) => {
+      console.error("Worker error:", err);
+      status.value = "Worker error: " + (err.message || err);
+      loading.value = false;
+      modelLoading.value = false;
+    };
 
     onMounted(() => {
     

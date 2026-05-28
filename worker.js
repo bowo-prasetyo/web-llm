@@ -1386,7 +1386,7 @@ function getIndexedDocuments() {
 async function ingestDocument(filename, text) {
 
   // FIX 12: Reject excessively large files before any processing
-  const MAX_TEXT_CHARS = 500_000; // ~83,000 words, ~200 pages
+  const MAX_TEXT_CHARS = 500000; // ~83,000 words (~200 pages)
   if (text.length > MAX_TEXT_CHARS) {
     postMessage({
       type: "ingest-error",

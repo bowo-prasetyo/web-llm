@@ -1134,8 +1134,11 @@ const Home = {
 
     getWorker().onmessage = onWorkerMessage;
     getWorker().onerror = (err) => {
-      console.error("Worker error:", err);
-      status.value = "Worker error: " + (err.message || err);
+      const msg = err.message || err.filename
+        ? `${err.message || "Unknown"} (${err.filename || "?"}:${err.lineno || "?"})`
+        : "Worker failed to load — check browser console for import errors";
+      console.error("Worker error:", msg, err);
+      status.value = "⚠ Worker error: " + msg;
       loading.value = false;
       modelLoading.value = false;
     };

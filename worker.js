@@ -517,35 +517,50 @@ async function initialize() {
       );
 
     } catch (err) {
-    
+
       const message = err?.message || "";
-    
+
       const gpuCrash =
         message.includes("DXGI_ERROR") ||
         message.includes("Device was lost") ||
         message.includes("device removed") ||
         message.includes("GPUBuffer");
-    
+
+      const webgpuUnsupported =
+        message.includes("Unable to find a compatible GPU") ||
+        message.includes("WebGPU is not supported") ||
+        message.includes("No compatible GPUs") ||
+        message.includes("Failed to create WebGPU") ||
+        message.includes("GPU device lost") ||
+        message.includes("requestAdapter");
+
       if (gpuCrash) {
-    
-        await saveToOPFS(
-          "gpu-instability.flag",
-          "1"
-        );
-    
+
+        await saveToOPFS("gpu-instability.flag", "1");
+
         engine = null;
         initializingPromise = null;
-    
+
         postMessage({
           type: "fatal",
-          text:
-            "GPU became unstable. Restarting in safe GPU mode.",
+          text: "GPU became unstable. Restarting in safe GPU mode.",
         });
-    
+
         self.close();
         return;
       }
-    
+
+      if (webgpuUnsupported) {
+        engine = null;
+        initializingPromise = null;
+
+        postMessage({
+          type: "webgpu-error",
+          text: message,
+        });
+        return; // Don't throw — let the UI handle it gracefully
+      }
+
       // IMPORTANT
       initializingPromise = null;
       throw err;

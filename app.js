@@ -53,6 +53,7 @@ const sharedModelSizes  = vRef({});  // {modelId: sizeInMB}
 const sharedIsDownloading = vRef(false);  // true while model weights are fetching
 const sharedIndexedDocs = vRef([]);   // [{filename, chunks}]
 const sharedIngestState = vRef(null); // {filename, current, total} | null
+const sharedWebgpuError = vRef(false); // true when WebGPU is unavailable
 // These are populated once Home mounts; Settings reads them directly.
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
@@ -82,6 +83,38 @@ const Home = {
             <button class="action-btn secondary" @click="confirmModal.show = false; settings.model = confirmModal.previousModel">Cancel</button>
             <button class="action-btn primary" @click="confirmDownload">Download & Load</button>
           </div>
+        </div>
+      </div>
+
+      <!-- WebGPU error screen — full overlay, shown when GPU is incompatible -->
+      <div v-if="webgpuError" class="webgpu-error-overlay">
+        <div class="webgpu-error-card">
+          <div class="webgpu-error-icon">⚠</div>
+          <h2 class="webgpu-error-title">WebGPU Not Available</h2>
+          <p class="webgpu-error-body">
+            Your browser or device doesn't support WebGPU, which is required to run AI models locally.
+          </p>
+          <div class="webgpu-error-steps">
+            <div class="webgpu-step">
+              <span class="step-num">1</span>
+              <span>Make sure <strong>Hardware Acceleration</strong> is enabled in your browser settings</span>
+            </div>
+            <div class="webgpu-step">
+              <span class="step-num">2</span>
+              <span>On Chrome Android, visit <code>chrome://flags</code> and enable <strong>WebGPU</strong></span>
+            </div>
+            <div class="webgpu-step">
+              <span class="step-num">3</span>
+              <span>Try <strong>Chrome 113+</strong> or <strong>Edge</strong> on desktop for best support</span>
+            </div>
+            <div class="webgpu-step">
+              <span class="step-num">4</span>
+              <span>Check your GPU compatibility at <a href="https://webgpureport.org" target="_blank" rel="noopener">webgpureport.org</a></span>
+            </div>
+          </div>
+          <button class="action-btn primary" style="margin-top:20px;width:100%" @click="webgpuError = false; applySettings()">
+            Try Again
+          </button>
         </div>
       </div>
 
@@ -358,6 +391,7 @@ const Home = {
     const isDownloading = sharedIsDownloading;
     const indexedDocuments = sharedIndexedDocs;
     const ingestState = sharedIngestState;
+    const webgpuError = sharedWebgpuError;
     const ragSources = ref([]);       // filenames used in last response
     const CACHED_KEY = "webllm-cached-models";
     // Tracks the model that was cancelled so applySettings won't re-trigger it
@@ -654,6 +688,13 @@ const Home = {
           }
           break;
                     
+        case "webgpu-error":
+          webgpuError.value = true;
+          modelLoading.value = false;
+          loading.value = false;
+          status.value = "WebGPU unavailable";
+          break;
+
         case "error":
           addMessage("assistant", "Error: " + data.text);
           loading.value = false;
@@ -1353,6 +1394,7 @@ const Home = {
       docsOpen,
       deleteDocument,
       clearDocuments,
+      webgpuError,
     };
   },
 };

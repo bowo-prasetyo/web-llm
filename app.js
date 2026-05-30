@@ -962,30 +962,61 @@ const Home = {
         if (data.type !== "webllm-sessions" || !Array.isArray(data.sessions)) {
           throw new Error("Not a valid WebLLM sessions file");
         }
-        let imported = 0;
+
         const index = loadIndex();
+        // Build a Set of existing session IDs for O(1) dedup lookup.
+        // The export file stores the original ID — if it already exists
+        // locally we skip it (merge behaviour, no duplication).
+        const existingIds = new Set(index.map(s => s.id));
+        // Also fingerprint existing sessions by title+ts for cases where
+        // IDs were regenerated on a previous import from another browser.
+        const existingFingerprints = new Set(
+          index.map(s => `${s.title}|${s.ts}`)
+        );
+
+        let added = 0;
+        let skipped = 0;
+
         for (const session of data.sessions) {
           if (!session.id || !Array.isArray(session.messages)) continue;
-          // Generate a new ID to avoid collisions with existing sessions
-          const newId = genId();
+
+          const fingerprint = `${session.title}|${session.ts}`;
+
+          if (existingIds.has(session.id) || existingFingerprints.has(fingerprint)) {
+            // Session already exists locally — skip to avoid duplication
+            skipped++;
+            continue;
+          }
+
+          // Genuinely new session — preserve the original ID so re-importing
+          // the same file again will be correctly deduplicated next time.
           localStorage.setItem(
-            sessionKey(newId),
+            sessionKey(session.id),
             JSON.stringify(session.messages.slice(-MAX_PERSISTED_MESSAGES))
           );
           index.unshift({
-            id: newId,
+            id: session.id,
             title: session.title || "Imported chat",
             preview: session.preview || "",
             model: session.model || "",
             ts: session.ts || Date.now(),
           });
-          imported++;
+          existingIds.add(session.id);
+          existingFingerprints.add(fingerprint);
+          added++;
         }
-        // Sort and cap
+
         index.sort((a, b) => b.ts - a.ts);
         if (index.length > MAX_SESSIONS) index.splice(MAX_SESSIONS);
         saveIndex(index);
-        status.value = `✓ Imported ${imported} session(s) — open the sidebar to view them`;
+
+        if (added === 0 && skipped > 0) {
+          status.value = `✓ All ${skipped} session(s) already exist — nothing imported`;
+        } else if (skipped > 0) {
+          status.value = `✓ Imported ${added} new session(s), skipped ${skipped} duplicate(s)`;
+        } else {
+          status.value = `✓ Imported ${added} session(s) — open the sidebar to view them`;
+        }
       } catch (err) {
         status.value = `⚠ Import failed: ${err.message}`;
       }

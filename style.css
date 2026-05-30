@@ -9,24 +9,24 @@
 /* ── Tokens ───────────────────────────────────────────────────── */
 :root {
   --bg:          #0f0f0f;
-  --surface:     #181818;
+  --surface:     #1c1c1c;
   --surface-2:   #222222;
   --surface-3:   #2a2a2a;
   --border:      #2e2e2e;
   --border-soft: #242424;
 
-  --amber:       #f5a623;
-  --amber-dim:   #c47f10;
+  --amber:       #ffab1a; /* Slightly more vibrant */
+  --amber-dim:   #a67c33; /* More 'bronze' than 'mud' */
   --amber-glow:  rgba(245,166,35,.12);
-  --amber-text:  #ffc84a;
-
+  --amber-text:  #ffcc66; /* Very high contrast for reading */
+   
   --text:        #e8e4dc;
   --text-2:      #9a9488;
-  --text-3:      #5c5850;
+  --text-3:      #8a847a;
 
-  --user-bg:     #1e1c18;
-  --user-border: #3a3520;
-  --asst-bg:     #131313;
+  --user-bg:     #26231e;
+  --user-border: #4a422d;
+  --asst-bg:     #181818;
 
   --radius:      10px;
   --radius-sm:   6px;
@@ -167,7 +167,7 @@ html, body, #app {
   background: var(--user-bg);
   border: 1px solid var(--user-border);
   color: var(--amber-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 13.5px;
 }
 
@@ -212,7 +212,7 @@ html, body, #app {
 }
 .model-select:hover  { border-color: var(--amber-dim); }
 .model-select:focus  { border-color: var(--amber); }
-.model-select:disabled { opacity: .45; cursor: not-allowed; }
+.model-select: { opacity: .45; cursor: not-allowed; }
 
 .clear-btn,
 .upload-btn {
@@ -237,7 +237,7 @@ html, body, #app {
   border-color: var(--border-soft);
   background: var(--surface-3);
 }
-.clear-btn:disabled { opacity: .35; cursor: not-allowed; }
+.clear-btn: { opacity: .35; cursor: not-allowed; }
 .upload-btn { cursor: pointer; }
 
 /* ── Input row ────────────────────────────────────────────────── */
@@ -508,6 +508,15 @@ html, body, #app {
 .action-btn.danger:hover:not(:disabled) {
   background: rgba(224,92,92,.08);
   border-color: #7a2c2c;
+}
+
+.send-btn:disabled, 
+.action-btn:disabled, 
+.icon-btn:disabled {
+  background: #222 !important;
+  color: #444 !important;
+  opacity: 1; /* Keep it solid so the shape is visible */
+  border: 1px solid #2a2a2a;
 }
 
 /* ── Mobile tweaks ────────────────────────────────────────────── */
@@ -934,11 +943,11 @@ html, body, #app {
 }
 
 .search-highlight {
-  background: rgba(245, 166, 35, 0.28);
-  color: var(--amber-text);
+  background: var(--amber);
+  color: #000; /* Black text on amber background is extremely readable */
   border-radius: 2px;
-  padding: 0 1px;
-  font-weight: 500;
+  padding: 0 2px;
+  font-weight: 600;
 }
 
 .search-more {

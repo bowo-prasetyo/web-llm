@@ -21,29 +21,35 @@ https://bowo-prasetyo.github.io/web-llm/
 
 * Fully client-side AI chat — no backend, no data leaves the browser
 * Multiple chat sessions with automatic save, restore, and delete
+* Full-text search across all chat sessions (titles, questions, and answers)
 * Conversation persistence across tab closures and mobile screen-off events
 * Auto-resume of unanswered questions after tab suspension
-* Multiple selectable LLM models (40+ models across 10+ model families)
+* Duplicate send prevention on manual resend after tab resume
+* 40+ selectable LLM models across 10+ model families, ordered by size
 * Download confirmation with size estimate on first model use
+* Cancel download at any time during model fetch
+* Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
-* Persistent local settings (model, temperature, max tokens, context window)
+* Persistent local settings (model, temperature, top-p, penalties, context window, system prompt)
 * Streaming AI responses with live token display
 * GPU-accelerated inference using WebGPU
+* Friendly WebGPU error screen with troubleshooting steps when GPU is unavailable
 * Web Worker isolation for a fully responsive UI during inference
 * Local document ingestion and semantic retrieval (RAG)
-* PDF, TXT, and Markdown file support
+* PDF, TXT, and Markdown file support (up to 50 MB / ~200 pages)
+* Sentence-aware chunking with overlap for coherent retrieval
+* Relevance threshold — only semantically related chunks injected as context
+* RAG context indicator showing which files informed each answer
+* Document manager panel — list, remove, or clear indexed files
+* Per-chunk embedding progress during document indexing
 * Local vector database using Transformers.js embeddings
 * Persistent vector storage using OPFS
-* Automatic recovery from GPU crashes and engine errors
+* Automatic recovery from GPU crashes, engine errors, and WASM Tokenizer failures
 * Automatic model unload after inactivity to free GPU memory
 * Conversation history memory with configurable context window
-* RAG-style contextual prompting from uploaded documents
-* Dedicated Settings page (temperature, max tokens, context window sliders)
+* Dedicated Settings page with sliders for all generation parameters
+* Editable system prompt with reset-to-default option
 * Mobile-friendly responsive UI with slide-in session sidebar
-
-## Live Demo
-
-https://bowo-prasetyo.github.io/web-llm/
 
 ## Supported Models
 
@@ -144,23 +150,56 @@ Models are cached locally in the browser after the first download.
 
 ## User Settings
 
-Accessible via the ⚙ Settings page:
+Accessible via the ⚙ Settings page (tap the gear icon in the header):
+
+### Model
 
 * **Model selection** — choose from 40+ models; switching models clears the current conversation
-* **Temperature** — creativity vs. consistency (0.0–2.0), shown as a live slider
-* **Max tokens** — maximum response length (16–2048)
-* **Context window** — conversation history visible to the model (512–8192 tokens)
 
-Settings are automatically persisted in `localStorage`.
+### Generation
+
+* **Temperature** — randomness of output (0.0–2.0); low = focused, high = creative
+* **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
+* **Max Tokens** — maximum number of tokens to generate per response (16–2048)
+* **Context Window** — conversation history visible to the model (512–8192 tokens); requires model reload
+
+### Repetition Control
+
+* **Frequency Penalty** — reduces repetition of words that already appeared (−2 to 2)
+* **Presence Penalty** — encourages the model to introduce new topics (−2 to 2)
+* **Repetition Penalty** — MLC-native multiplicative penalty on repeated tokens (1.0–2.0)
+
+### System Prompt
+
+* Fully editable instructions given to the model before every conversation
+* Changes take effect on the next message without reloading the model
+* **Reset to Default** restores the built-in factual accuracy prompt
+
+All settings are automatically persisted in `localStorage`.
 
 ## Multi-session Chat
 
-* Tap the **☰ sidebar button** in the header to open the sessions panel
-* Tap **+ New Chat** to start a fresh conversation (current session auto-saves)
-* Previously saved chats are listed with title, preview, model, and timestamp
-* Tap any session to restore it — the conversation and model context are both recovered
+* Tap the **☰ menu button** in the header to open the sessions sidebar
+* Tap **+ New Chat** to start a fresh conversation — the current session auto-saves first
+* Previously saved chats are listed with auto-generated title, preview, model, and timestamp
+* Tap any session to restore it — messages and model context are both recovered
 * Tap the **🗑 trash icon** on any session to delete it
 * Up to 50 sessions are retained; oldest are pruned automatically
+* Sessions survive page reloads, tab closures, and mobile screen-off events
+* Unanswered questions (tab closed mid-generation) are automatically re-sent on next open
+
+## Session Search
+
+* Type in the **search box** at the top of the sidebar to search all chats
+* Search covers titles, all user questions, and all assistant answers — full content, not just previews
+* Results are ranked by match count with highlighted excerpts showing context around each match
+* The active session is always searched first; past sessions follow sorted by relevance
+* Search is debounced and yields to the event loop between sessions to remain responsive on large histories
+
+## Stop and Cancel Controls
+
+* **Stop generation** — while the model is streaming, the Send button becomes a pulsing red Stop button; tap it to halt and keep the partial response
+* **Cancel download** — while a model is being fetched, a pulsing "Cancel Download" button appears in the toolbar; tap it to abort; the model selection reverts and the download confirmation will re-appear on next selection
 
 ## Requirements
 
@@ -178,6 +217,15 @@ Recommended hardware:
 * Dedicated GPU recommended for 2B+ models
 * At least 4 GB RAM for small models; 8 GB+ for 3B+ models
 * Stable internet connection for first model download
+
+### WebGPU Troubleshooting
+
+If the app shows a "WebGPU Not Available" error screen:
+
+1. Enable **Hardware Acceleration** in your browser settings
+2. On Chrome Android: visit `chrome://flags` and enable **WebGPU** or **Unsafe WebGPU**
+3. Use **Chrome 113+** or **Edge** on desktop for the most reliable WebGPU support
+4. Check your GPU compatibility at [webgpureport.org](https://webgpureport.org)
 
 ## Run Locally
 
@@ -217,23 +265,32 @@ Supported document formats for RAG ingestion:
 * TXT
 * Markdown
 
-Uploaded files are processed locally:
+Maximum file size: **50 MB (~200 pages)**. Files exceeding this are rejected before parsing.
+
+Uploaded files are processed entirely locally:
 
 1. Parsed in the browser (PDF.js for PDFs, plain text otherwise)
-2. Chunked into smaller segments
-3. Embedded using Transformers.js (local embedding model)
-4. Stored in a local vector database (OPFS)
-5. Semantically retrieved and injected as context during chat
+2. Chunked into sentence-aware segments (~800 chars target, 120-char overlap between chunks)
+3. Embedded using Transformers.js (`all-MiniLM-L6-v2`, ~23 MB, downloaded on first use)
+4. Stored in a local vector database persisted to OPFS
+5. Semantically retrieved at query time — only chunks scoring above 0.25 cosine similarity are used
+6. Injected as context for the current turn only — not stored in conversation history
 
 No uploaded file ever leaves the browser.
 
-## Storage
+### Document Manager
 
-The application uses multiple browser storage mechanisms:
+* Tap the **📄 Docs button** in the toolbar to open the document panel (badge shows count of indexed files)
+* Each indexed file is listed with its filename and chunk count
+* Individual files can be removed without affecting others
+* **Clear All** removes all indexed documents at once
+* A **RAG context banner** appears above the input when the last answer used document context, showing which file(s) contributed — dismissable with ×
+
+## Storage
 
 | Storage | Used For |
 |---|---|
-| `localStorage` | Settings, session index, cached-model list, conversation messages |
+| `localStorage` | Settings, session index, cached-model list, conversation messages per session |
 | OPFS | Vector database (document embeddings), GPU stability flags |
 | Browser cache / IndexedDB | WebLLM model weights |
 
@@ -252,15 +309,15 @@ Cached data may include AI model weights (potentially several GB), vector databa
 
 ```
 app.js
-├── Home component      — chat view, sidebar, model select, toolbar
-├── Settings component  — temperature / max tokens / context sliders
+├── Home component      — chat view, sidebar, search, model select, toolbar
+├── Settings component  — all generation sliders + system prompt editor
 └── Shared state        — reactive refs shared between both pages
 
 worker.js
-├── initialize()        — model loading, device profile detection
-├── generate()          — streaming inference, continuation, RAG retrieval
-├── ingest()            — document chunking and embedding
-└── onmessage handler   — message routing (init, generate, set-config, …)
+├── initialize()        — device profile detection, model loading, vector DB restore
+├── generate()          — streaming inference, RAG retrieval, continuation loop
+├── ingestDocument()    — sentence-aware chunking, embedding, OPFS persistence
+└── onmessage handler   — message routing (init, set-config, generate, ingest, …)
 ```
 
 ## AI Pipeline
@@ -268,13 +325,13 @@ worker.js
 ```
 User Prompt
     ↓
-Semantic Retrieval (OPFS vector DB)
+Semantic Retrieval (OPFS vector DB · relevance threshold 0.25 · top-4 chunks)
     ↓
-Context Injection (RAG)
+Context Injection (current turn only — not stored in conversation history)
     ↓
-System Prompt + History Assembly
+System Prompt + History Assembly (system message always pinned)
     ↓
-WebLLM Streaming Generation
+WebLLM Streaming Generation (temperature · top-p · frequency/presence/repetition penalty)
     ↓
 Continuation Loop (if max_tokens hit)
     ↓
@@ -285,40 +342,50 @@ Streaming Response → UI
 
 | Feature | Description |
 |---|---|
-| GPU crash recovery | Detects lost-device errors, restarts worker in safe mode |
-| Tokenizer crash recovery | Detects WASM Tokenizer\* errors, resets engine cleanly |
-| Generation timeout | Hard limit per generation; delivers partial result rather than discarding |
-| Streaming stall detection | Kills hung streams after configurable timeout |
-| Continuation deduplication | Overlap removal at token-boundary seams between continuations |
+| GPU crash recovery | Detects lost-device errors, saves flag to OPFS, restarts in safe GPU mode |
+| WebGPU unavailable | Catches incompatible GPU errors, shows friendly troubleshooting screen with retry |
+| Tokenizer crash recovery | Detects WASM `Tokenizer*` errors, resets engine for clean next request |
+| Generation timeout | Hard time limit per generation; delivers partial result rather than discarding |
+| Streaming stall detection | Kills hung streams after configurable inactivity timeout |
+| Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |
+| Cancel download | User can abort a model fetch; cached-model list cleaned up so confirmation re-appears |
+| Continuation deduplication | Overlap removal at seam between multi-chunk continuations |
 | Repetition detection | Stops generation if output becomes looping |
-| Model swap guard | Waits for active generation to finish before unloading engine |
+| Model swap guard | Waits for active generation to complete before unloading the engine |
 | Auto-unload | Releases GPU memory after 30 minutes of inactivity |
-| Conservative GPU defaults | Low-end device profile uses smaller token budgets |
+| Conservative GPU defaults | Low-end device profile applies smaller token budgets |
 | System prompt pinning | System message is always preserved when history is trimmed |
+| RAG history isolation | Document context injected per-turn only; never stored in SESSION_HISTORY |
+| File size guard | Files over 50 MB are rejected before parsing to prevent memory exhaustion |
+| Ingest guard | Document embedding is deferred until any active generation finishes |
+| Worker error detection | `worker.onerror` surfaces parse/import failures in the status bar |
 
 ## Session and Persistence Features
 
 | Feature | Description |
 |---|---|
-| Multi-session | Up to 50 saved conversations, each with auto-generated title and preview |
+| Multi-session | Up to 50 saved conversations with auto-generated title, preview, model, and timestamp |
 | Auto-save | Every user message and assistant response is persisted immediately |
 | Tab-resume restore | On page reload or mobile resume, the last session is restored automatically |
 | Unanswered question resume | If the tab closed mid-generation, the question is automatically re-sent on next open |
 | Duplicate prevention | Manual resend of the same question is deduplicated |
+| Full-content search | Search titles, questions, and answers across all sessions with highlighted excerpts |
 | Legacy migration | Existing single-session data is migrated to the multi-session format on first run |
-| Download confirmation | First-time model downloads show size estimate and require explicit confirmation |
-| Cache tracking | Confirmed/loaded models are remembered; no re-confirmation on subsequent uses |
+| Download confirmation | First-time model downloads show a size estimate and require explicit confirmation |
+| Cancel re-confirmation | Cancelled models are removed from cache so confirmation correctly re-appears |
+| Cache tracking | Successfully loaded models skip confirmation on all subsequent uses |
 
 ## Notes
 
 * First launch may take several minutes depending on model size and internet speed
-* Browser storage usage can become large (several GB for bigger models)
+* Browser storage usage can become large — several GB for bigger models
 * Large models may fail on low-memory or integrated-GPU devices
 * 3B+ models work best on dedicated GPUs with 4+ GB VRAM
 * 7B+ models require 6+ GB VRAM and may not run on most mobile devices
 * WebGPU support is still evolving — Chrome and Edge are most reliable
 * Switching models clears the current conversation (models use incompatible tokenizer formats)
 * Safari WebGPU support is available from macOS 14 / iOS 17 but may be less stable
+* The embedding model for RAG (~23 MB) is downloaded separately on first document upload
 
 ## License
 
@@ -326,5 +393,5 @@ Open-source libraries and models remain subject to their respective licenses.
 
 ## Assisted By
 
-* [ChatGPT](https://chatgpt.com)
 * [Claude AI](https://claude.ai)
+* [ChatGPT](https://chatgpt.com)

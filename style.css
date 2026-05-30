@@ -1207,3 +1207,52 @@ html, body, #app {
   color: var(--amber-text);
 }
 .webgpu-step a { color: var(--amber-text); text-decoration: underline; }
+
+/* ══════════════════════════════════════════════════════════════
+   EXPORT / IMPORT TRANSFER CARDS
+══════════════════════════════════════════════════════════════ */
+
+.transfer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .transfer-grid { grid-template-columns: 1fr; }
+}
+
+.transfer-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transfer-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.transfer-card-desc {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.transfer-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.transfer-card-actions .action-btn {
+  font-size: 12px;
+  padding: 8px 12px;
+}

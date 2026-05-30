@@ -41,6 +41,7 @@ const sharedSettings  = vRef({
   frequency_penalty: 0.0,
   presence_penalty: 0.0,
   repetition_penalty: 1.0,
+  maxFileSizeMB: 50,
   system_prompt: "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.",
 });
 const sharedModels    = vRef([]);
@@ -58,9 +59,13 @@ const sharedWebgpuError = vRef(false); // true when WebGPU is unavailable
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
 let sharedClearConversation = () => {};
-let sharedNewChat         = () => {};
-let sharedLoadSession     = (_id) => {};
-let sharedDeleteSession   = (_id) => {};
+let sharedNewChat          = () => {};
+let sharedLoadSession      = (_id) => {};
+let sharedDeleteSession    = (_id) => {};
+let sharedExportSettings   = () => {};
+let sharedImportSettings   = () => {};
+let sharedExportSessions   = () => {};
+let sharedImportSessions   = () => {};
 
 const Home = {
   template: `
@@ -482,10 +487,10 @@ const Home = {
         return;
       }
 
-      // FIX 12: Reject files over ~50 MB before any parsing
-      const MAX_FILE_BYTES = 50 * 1024 * 1024;
+      const maxMB = settings.value.maxFileSizeMB || 50;
+      const MAX_FILE_BYTES = maxMB * 1024 * 1024;
       if (file.size > MAX_FILE_BYTES) {
-        status.value = `⚠ ${file.name} is too large (${(file.size / 1048576).toFixed(1)} MB). Maximum is 50 MB.`;
+        status.value = `⚠ ${file.name} is too large (${(file.size / 1048576).toFixed(1)} MB). Maximum is ${maxMB} MB.`;
         event.target.value = "";
         return;
       }
@@ -770,26 +775,14 @@ const Home = {
         }
       }
 
-      // Only apply defaults when model changes;
-      // also clear persisted conversation so old history
-      // from a different model isn't fed to the new one.
+      // Apply per-model defaults when model changes, but preserve conversation —
+      // the session history is shared across models intentionally.
       if (isNewModel) {
 
-        const defaults =
-          getModelDefaults(
-            settings.value.model
-          );
-
+        const defaults = getModelDefaults(settings.value.model);
         // Merge defaults key-by-key to preserve Vue reactivity on the shared ref
         Object.assign(settings.value, defaults);
-
-        if (lastAppliedModel.value !== "") {
-          // Only clear if this isn't the very first load
-          clearConversation();
-        }
-
-        lastAppliedModel.value =
-          settings.value.model;
+        lastAppliedModel.value = settings.value.model;
       }
     
       modelLoading.value = true;
@@ -863,6 +856,139 @@ const Home = {
         "webllm-settings",
         JSON.stringify(settings.value)
       );
+    }
+
+    // ── Import / Export helpers ──────────────────────────────────────────
+
+    function downloadJSON(obj, filename) {
+      const blob = new Blob(
+        [JSON.stringify(obj, null, 2)],
+        { type: "application/json" }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function readJSONFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          try { resolve(JSON.parse(e.target.result)); }
+          catch { reject(new Error("Invalid JSON file")); }
+        };
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsText(file);
+      });
+    }
+
+    // ── Settings export / import ─────────────────────────────────────────
+
+    function exportSettings() {
+      const ts = new Date().toISOString().slice(0, 10);
+      downloadJSON(
+        { version: 1, type: "webllm-settings", exportedAt: new Date().toISOString(), settings: settings.value },
+        `webllm-settings-${ts}.json`
+      );
+    }
+
+    async function importSettings(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      event.target.value = "";
+      try {
+        const data = await readJSONFile(file);
+        if (data.type !== "webllm-settings" || !data.settings) {
+          throw new Error("Not a valid WebLLM settings file");
+        }
+        // Merge imported settings into current, skip model to avoid auto-load
+        const { model: _skip, ...rest } = data.settings;
+        Object.keys(rest).forEach(key => {
+          if (key in settings.value || key === "system_prompt") {
+            settings.value[key] = rest[key];
+          }
+        });
+        saveSettings();
+        status.value = "✓ Settings imported successfully";
+      } catch (err) {
+        status.value = `⚠ Import failed: ${err.message}`;
+      }
+    }
+
+    // ── Session history export / import ──────────────────────────────────
+
+    function exportSessions() {
+      const index = loadIndex();
+      const allSessions = index.map(entry => {
+        try {
+          const raw = localStorage.getItem(sessionKey(entry.id));
+          const messages = raw ? JSON.parse(raw) : [];
+          return { ...entry, messages };
+        } catch {
+          return { ...entry, messages: [] };
+        }
+      });
+      // Also include current unsaved session if it has messages
+      if (messages.value.length > 0) {
+        const existsInIndex = index.some(s => s.id === currentSessionId.value);
+        if (!existsInIndex) {
+          allSessions.unshift({
+            id: currentSessionId.value,
+            title: titleFromMessages(messages.value) || "Current chat",
+            preview: previewFromMessages(messages.value) || "",
+            model: settings.value.model || "",
+            ts: Date.now(),
+            messages: messages.value.filter(m => m.role !== "assistant-stream"),
+          });
+        }
+      }
+      const ts = new Date().toISOString().slice(0, 10);
+      downloadJSON(
+        { version: 1, type: "webllm-sessions", exportedAt: new Date().toISOString(), sessions: allSessions },
+        `webllm-sessions-${ts}.json`
+      );
+      status.value = `✓ Exported ${allSessions.length} session(s)`;
+    }
+
+    async function importSessions(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      event.target.value = "";
+      try {
+        const data = await readJSONFile(file);
+        if (data.type !== "webllm-sessions" || !Array.isArray(data.sessions)) {
+          throw new Error("Not a valid WebLLM sessions file");
+        }
+        let imported = 0;
+        const index = loadIndex();
+        for (const session of data.sessions) {
+          if (!session.id || !Array.isArray(session.messages)) continue;
+          // Generate a new ID to avoid collisions with existing sessions
+          const newId = genId();
+          localStorage.setItem(
+            sessionKey(newId),
+            JSON.stringify(session.messages.slice(-MAX_PERSISTED_MESSAGES))
+          );
+          index.unshift({
+            id: newId,
+            title: session.title || "Imported chat",
+            preview: session.preview || "",
+            model: session.model || "",
+            ts: session.ts || Date.now(),
+          });
+          imported++;
+        }
+        // Sort and cap
+        index.sort((a, b) => b.ts - a.ts);
+        if (index.length > MAX_SESSIONS) index.splice(MAX_SESSIONS);
+        saveIndex(index);
+        status.value = `✓ Imported ${imported} session(s) — open the sidebar to view them`;
+      } catch (err) {
+        status.value = `⚠ Import failed: ${err.message}`;
+      }
     }
     
     function loadSettings() {
@@ -1172,6 +1298,10 @@ const Home = {
     sharedNewChat          = newChat;
     sharedLoadSession      = loadSession;
     sharedDeleteSession    = deleteSession;
+    sharedExportSettings   = exportSettings;
+    sharedImportSettings   = importSettings;
+    sharedExportSessions   = exportSessions;
+    sharedImportSessions   = importSessions;
 
     getWorker().onmessage = onWorkerMessage;
     getWorker().onerror = (err) => {
@@ -1395,6 +1525,10 @@ const Home = {
       deleteDocument,
       clearDocuments,
       webgpuError,
+      exportSettings,
+      importSettings,
+      exportSessions,
+      importSessions,
     };
   },
 };
@@ -1420,7 +1554,7 @@ const Settings = {
             <option disabled value="">Select Model</option>
             <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
           </select>
-          <p class="section-hint">Changing the model will clear the current conversation.</p>
+          <p class="section-hint">You can switch models mid-conversation. Generation defaults will update automatically.</p>
         </section>
 
         <section class="settings-section">
@@ -1467,6 +1601,17 @@ const Settings = {
             <div class="setting-control">
               <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" />
               <span class="setting-value">{{ settings.contextWindowSize }}</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Max Upload Size</span>
+              <span class="setting-desc">Maximum file size for document uploads.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="1" max="200" step="1" v-model.number="settings.maxFileSizeMB" class="slider" />
+              <span class="setting-value">{{ settings.maxFileSizeMB }} MB</span>
             </div>
           </div>
         </section>
@@ -1524,6 +1669,41 @@ const Settings = {
         </section>
 
         <section class="settings-section">
+          <h2 class="section-label">Export / Import</h2>
+          <p class="section-hint" style="margin-bottom:12px">Transfer your settings and chat history to another browser or device.</p>
+
+          <div class="transfer-grid">
+            <div class="transfer-card">
+              <div class="transfer-card-title">⚙ Settings</div>
+              <div class="transfer-card-desc">Export all settings to a JSON file, or import settings from a previously exported file.</div>
+              <div class="transfer-card-actions">
+                <button class="action-btn secondary" @click="exportSettings">
+                  Export Settings
+                </button>
+                <label class="action-btn secondary" style="cursor:pointer;text-align:center">
+                  Import Settings
+                  <input type="file" accept=".json" @change="importSettings" style="display:none" />
+                </label>
+              </div>
+            </div>
+
+            <div class="transfer-card">
+              <div class="transfer-card-title">💬 Chat History</div>
+              <div class="transfer-card-desc">Export all saved sessions to a JSON file, or import sessions from another browser (added alongside existing chats).</div>
+              <div class="transfer-card-actions">
+                <button class="action-btn secondary" @click="exportSessions">
+                  Export Chats
+                </button>
+                <label class="action-btn secondary" style="cursor:pointer;text-align:center">
+                  Import Chats
+                  <input type="file" accept=".json" @change="importSessions" style="display:none" />
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
           <h2 class="section-label">Actions</h2>
           <div class="settings-actions">
             <button class="action-btn primary" @click="applySettings" :disabled="modelLoading || loading">
@@ -1560,6 +1740,10 @@ const Settings = {
       clearConversation: sharedClearConversation,
       newChat: sharedNewChat,
       resetSystemPrompt,
+      exportSettings:  sharedExportSettings,
+      importSettings:  sharedImportSettings,
+      exportSessions:  sharedExportSessions,
+      importSessions:  sharedImportSessions,
     };
   },
 };

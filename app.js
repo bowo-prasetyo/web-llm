@@ -45,6 +45,7 @@ const sharedSettings  = vRef({
   system_prompt: "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.",
 });
 const sharedModels    = vRef([]);
+const sharedModelGroups = vRef([]); // populated after Home setup() runs
 const sharedLoading   = vRef(false);
 const sharedModelLoading = vRef(false);
 const sharedMessages  = vRef([]);
@@ -293,9 +294,13 @@ const Home = {
             class="model-select"
           >
             <option disabled value="">Select Model</option>
-            <option v-for="model in models" :key="model" :value="model">
-              {{ model }}
-            </option>
+            <template v-for="group in modelGroups" :key="group.label">
+              <optgroup :label="group.label">
+                <option v-for="model in group.models" :key="model" :value="model">
+                  {{ model }}
+                </option>
+              </optgroup>
+            </template>
           </select>
 
           <!-- Documents button — badge shows indexed doc count -->
@@ -386,6 +391,32 @@ const Home = {
     const streamingText = ref("");
     const models = sharedModels;
     const lastAppliedModel = ref("");
+
+    // Group the flat models list into labelled tiers for the <optgroup> select.
+    // Order and labels match the AVAILABLE_MODELS tiers in worker.js.
+    const MODEL_GROUPS_DEF = [
+      { label: "Ultra-micro (100–400M)", test: m => m.includes("135M") || m.includes("360M") },
+      { label: "Micro (0.5–0.6B)",       test: m => m.includes("0.5B") || m.includes("0.6B") },
+      { label: "Lightweight (1–1.7B)",   test: m => m.includes("1.1B") || (m.includes("1B") && !m.includes("1.5B")) || m.includes("1.7B") || m.includes("1_6b") || m.includes("1.6b") },
+      { label: "Small (1.5B)",           test: m => m.includes("1.5B") },
+      { label: "Mid (2–4B)",             test: m => m.includes("2b") || m.includes("2B") || m.includes("3B") || m.includes("4B") || m.includes("4b") },
+      { label: "Upper-mid (3.8B)",       test: m => m.includes("mini") },
+      { label: "Large (7–9B)",           test: m => m.includes("7B") || m.includes("8B") || m.includes("9b") },
+    ];
+
+    const { computed } = Vue;
+    const modelGroups = computed(() => {
+      const assigned = new Set();
+      const groups = MODEL_GROUPS_DEF.map(g => {
+        const matched = models.value.filter(m => g.test(m) && !assigned.has(m));
+        matched.forEach(m => assigned.add(m));
+        return { label: g.label, models: matched };
+      });
+      // Catch any unmatched models in an "Other" group
+      const other = models.value.filter(m => !assigned.has(m));
+      if (other.length) groups.push({ label: "Other", models: other });
+      return groups.filter(g => g.models.length > 0);
+    });
     const conversationRestored = ref(false); // guard: restore once per page load
     const uploadedFileName = ref("");
     const currentSessionId = ref("");
@@ -964,15 +995,37 @@ const Home = {
         }
 
         const index = loadIndex();
-        // Build a Set of existing session IDs for O(1) dedup lookup.
-        // The export file stores the original ID — if it already exists
-        // locally we skip it (merge behaviour, no duplication).
+
+        // Primary dedup: session ID. The export always preserves original IDs,
+        // so re-importing the same file will always be caught here.
         const existingIds = new Set(index.map(s => s.id));
-        // Also fingerprint existing sessions by title+ts for cases where
-        // IDs were regenerated on a previous import from another browser.
-        const existingFingerprints = new Set(
-          index.map(s => `${s.title}|${s.ts}`)
-        );
+
+        // Also include the current in-memory session (may not be in index yet)
+        existingIds.add(currentSessionId.value);
+
+        // Secondary dedup: normalised message content hash for sessions that
+        // may have been imported previously with a different ID.
+        // We hash the first+last user message text for a lightweight fingerprint.
+        function msgFingerprint(msgs) {
+          const userMsgs = (msgs || []).filter(m => m.role === "user");
+          if (!userMsgs.length) return null;
+          const first = userMsgs[0].content.trim().slice(0, 80);
+          const last  = userMsgs[userMsgs.length - 1].content.trim().slice(0, 80);
+          return `${first}|||${last}`;
+        }
+
+        // Build fingerprints for all existing sessions
+        const existingFingerprints = new Set();
+        for (const entry of index) {
+          try {
+            const raw = localStorage.getItem(sessionKey(entry.id));
+            const fp = raw ? msgFingerprint(JSON.parse(raw)) : null;
+            if (fp) existingFingerprints.add(fp);
+          } catch {}
+        }
+        // Also fingerprint the current in-memory session
+        const currentFp = msgFingerprint(messages.value);
+        if (currentFp) existingFingerprints.add(currentFp);
 
         let added = 0;
         let skipped = 0;
@@ -980,29 +1033,27 @@ const Home = {
         for (const session of data.sessions) {
           if (!session.id || !Array.isArray(session.messages)) continue;
 
-          const fingerprint = `${session.title}|${session.ts}`;
+          const fp = msgFingerprint(session.messages);
 
-          if (existingIds.has(session.id) || existingFingerprints.has(fingerprint)) {
-            // Session already exists locally — skip to avoid duplication
+          if (existingIds.has(session.id) || (fp && existingFingerprints.has(fp))) {
             skipped++;
             continue;
           }
 
-          // Genuinely new session — preserve the original ID so re-importing
-          // the same file again will be correctly deduplicated next time.
+          // Genuinely new — preserve original ID for future dedup
           localStorage.setItem(
             sessionKey(session.id),
             JSON.stringify(session.messages.slice(-MAX_PERSISTED_MESSAGES))
           );
           index.unshift({
-            id: session.id,
-            title: session.title || "Imported chat",
+            id:      session.id,
+            title:   session.title   || "Imported chat",
             preview: session.preview || "",
-            model: session.model || "",
-            ts: session.ts || Date.now(),
+            model:   session.model   || "",
+            ts:      session.ts      || Date.now(),
           });
           existingIds.add(session.id);
-          existingFingerprints.add(fingerprint);
+          if (fp) existingFingerprints.add(fp);
           added++;
         }
 
@@ -1011,7 +1062,7 @@ const Home = {
         saveIndex(index);
 
         if (added === 0 && skipped > 0) {
-          status.value = `✓ All ${skipped} session(s) already exist — nothing imported`;
+          status.value = `✓ All ${skipped} session(s) already exist — nothing to import`;
         } else if (skipped > 0) {
           status.value = `✓ Imported ${added} new session(s), skipped ${skipped} duplicate(s)`;
         } else {
@@ -1326,6 +1377,11 @@ const Home = {
     sharedApplySettings    = applySettings;
     sharedResetSettings    = resetSettings;
     sharedClearConversation = clearConversation;
+    // Expose modelGroups computed to Settings page via shared ref
+    // We use a watchEffect to keep it in sync since it's a computed
+    const { watchEffect } = Vue;
+    watchEffect(() => { sharedModelGroups.value = modelGroups.value; });
+
     sharedNewChat          = newChat;
     sharedLoadSession      = loadSession;
     sharedDeleteSession    = deleteSession;
@@ -1526,6 +1582,7 @@ const Home = {
       uploadFile,
       uploadedFileName,
       models,
+      modelGroups,
       settings,
       applySettings,
       saveSettings,
@@ -1583,7 +1640,11 @@ const Settings = {
           <h2 class="section-label">Model</h2>
           <select v-model="settings.model" @change="applySettings" :disabled="modelLoading || loading" class="settings-select">
             <option disabled value="">Select Model</option>
-            <option v-for="model in models" :key="model" :value="model">{{ model }}</option>
+            <template v-for="group in modelGroups" :key="group.label">
+              <optgroup :label="group.label">
+                <option v-for="model in group.models" :key="model" :value="model">{{ model }}</option>
+              </optgroup>
+            </template>
           </select>
           <p class="section-hint">You can switch models mid-conversation. Generation defaults will update automatically.</p>
         </section>
@@ -1763,6 +1824,7 @@ const Settings = {
     return {
       settings: sharedSettings,
       models: sharedModels,
+      modelGroups: sharedModelGroups,
       loading: sharedLoading,
       modelLoading: sharedModelLoading,
       messages: sharedMessages,

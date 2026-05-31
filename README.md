@@ -25,18 +25,22 @@ https://bowo-prasetyo.github.io/web-llm/
 * Conversation persistence across tab closures and mobile screen-off events
 * Auto-resume of unanswered questions after tab suspension
 * Duplicate send prevention on manual resend after tab resume
-* 40+ selectable LLM models across 10+ model families, ordered by size
+* 40+ selectable LLM models across 10+ model families, grouped by size tier
+* Switch models mid-conversation without clearing chat history
 * Download confirmation with size estimate on first model use
 * Cancel download at any time during model fetch
 * Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
 * Persistent local settings (model, temperature, top-p, penalties, context window, system prompt)
+* Configurable maximum file upload size (1–200 MB, default 50 MB)
+* Export settings to a JSON file and import on another browser
+* Export all chat sessions to a JSON file and import (merge) on another browser — no duplicates
 * Streaming AI responses with live token display
 * GPU-accelerated inference using WebGPU
 * Friendly WebGPU error screen with troubleshooting steps when GPU is unavailable
 * Web Worker isolation for a fully responsive UI during inference
 * Local document ingestion and semantic retrieval (RAG)
-* PDF, TXT, and Markdown file support (up to 50 MB / ~200 pages)
+* PDF, TXT, and Markdown file support
 * Sentence-aware chunking with overlap for coherent retrieval
 * Relevance threshold — only semantically related chunks injected as context
 * RAG context indicator showing which files informed each answer
@@ -54,7 +58,7 @@ https://bowo-prasetyo.github.io/web-llm/
 ## Supported Models
 
 40+ models are available, ordered from lightest to heaviest. The model
-dropdown in the app groups them by size tier.
+dropdown in the app groups them by size tier using `<optgroup>` labels.
 
 ### Ultra-micro (100–400M)
 
@@ -154,7 +158,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 
 ### Model
 
-* **Model selection** — choose from 40+ models; switching models clears the current conversation
+* **Model selection** — choose from 40+ models grouped by size tier; switching models preserves the current conversation
 
 ### Generation
 
@@ -162,6 +166,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 * **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
 * **Max Tokens** — maximum number of tokens to generate per response (16–2048)
 * **Context Window** — conversation history visible to the model (512–8192 tokens); requires model reload
+* **Max Upload Size** — maximum file size for document uploads (1–200 MB, default 50 MB)
 
 ### Repetition Control
 
@@ -174,6 +179,13 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 * Fully editable instructions given to the model before every conversation
 * Changes take effect on the next message without reloading the model
 * **Reset to Default** restores the built-in factual accuracy prompt
+
+### Export / Import
+
+* **Export Settings** — download all settings as a `webllm-settings-YYYY-MM-DD.json` file
+* **Import Settings** — load settings from a previously exported file; model selection is preserved to avoid an unwanted download
+* **Export Chats** — download all saved sessions as a `webllm-sessions-YYYY-MM-DD.json` file including full message content
+* **Import Chats** — merge sessions from an exported file into the current browser; duplicate sessions are detected by ID and content fingerprint and skipped automatically
 
 All settings are automatically persisted in `localStorage`.
 
@@ -265,7 +277,7 @@ Supported document formats for RAG ingestion:
 * TXT
 * Markdown
 
-Maximum file size: **50 MB (~200 pages)**. Files exceeding this are rejected before parsing.
+Maximum file size is configurable in Settings (default **50 MB**, up to 200 MB). Files exceeding the limit are rejected before parsing.
 
 Uploaded files are processed entirely locally:
 
@@ -310,7 +322,7 @@ Cached data may include AI model weights (potentially several GB), vector databa
 ```
 app.js
 ├── Home component      — chat view, sidebar, search, model select, toolbar
-├── Settings component  — all generation sliders + system prompt editor
+├── Settings component  — all generation sliders, system prompt, export/import
 └── Shared state        — reactive refs shared between both pages
 
 worker.js
@@ -356,7 +368,7 @@ Streaming Response → UI
 | Conservative GPU defaults | Low-end device profile applies smaller token budgets |
 | System prompt pinning | System message is always preserved when history is trimmed |
 | RAG history isolation | Document context injected per-turn only; never stored in SESSION_HISTORY |
-| File size guard | Files over 50 MB are rejected before parsing to prevent memory exhaustion |
+| File size guard | Files over the configured limit are rejected before parsing |
 | Ingest guard | Document embedding is deferred until any active generation finishes |
 | Worker error detection | `worker.onerror` surfaces parse/import failures in the status bar |
 
@@ -370,7 +382,11 @@ Streaming Response → UI
 | Unanswered question resume | If the tab closed mid-generation, the question is automatically re-sent on next open |
 | Duplicate prevention | Manual resend of the same question is deduplicated |
 | Full-content search | Search titles, questions, and answers across all sessions with highlighted excerpts |
+| Mid-conversation model switch | Switching models continues the current conversation rather than clearing it |
 | Legacy migration | Existing single-session data is migrated to the multi-session format on first run |
+| Settings export / import | Transfer all settings to another browser via a JSON file |
+| Session export / import | Transfer all chat sessions to another browser; merges without duplicating |
+| Deduplication on import | Sessions matched by ID or content fingerprint (first+last user message) are skipped |
 | Download confirmation | First-time model downloads show a size estimate and require explicit confirmation |
 | Cancel re-confirmation | Cancelled models are removed from cache so confirmation correctly re-appears |
 | Cache tracking | Successfully loaded models skip confirmation on all subsequent uses |
@@ -383,9 +399,10 @@ Streaming Response → UI
 * 3B+ models work best on dedicated GPUs with 4+ GB VRAM
 * 7B+ models require 6+ GB VRAM and may not run on most mobile devices
 * WebGPU support is still evolving — Chrome and Edge are most reliable
-* Switching models clears the current conversation (models use incompatible tokenizer formats)
+* Switching models mid-conversation is supported; generation defaults update automatically
 * Safari WebGPU support is available from macOS 14 / iOS 17 but may be less stable
 * The embedding model for RAG (~23 MB) is downloaded separately on first document upload
+* Imported sessions are merged non-destructively — existing sessions are never overwritten
 
 ## License
 

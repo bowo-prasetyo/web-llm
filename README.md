@@ -28,6 +28,7 @@ https://bowo-prasetyo.github.io/web-llm/
 * Duplicate send prevention on manual resend after tab resume
 * 40 selectable LLM models across 10+ model families, grouped by size tier
 * Switch models mid-conversation without clearing chat history
+* First-run model picker: choose what it's for (chat, coding, writing) and a size (Fast / Balanced / Smart); picks suit the device and avoid 16-bit models where they don't work
 * Download confirmation with size estimate on first model use
 * Cancel download at any time during model fetch
 * Stop generation at any time during streaming response
@@ -152,6 +153,26 @@ models fail (or the GPU doesn't support them), the model list also shows q4f32
 versions of the q4f16-only models (Qwen2.5-Coder, Qwen3, Hermes-3, DeepSeek-R1,
 gemma-2-9b and others) and marks q4f16 models with ⚠.
 Models are cached locally in the browser after the first download.
+
+## Choosing a Model
+
+On first launch the app asks two questions instead of downloading anything:
+
+1. **What will you mostly use it for?** Everyday chat, Coding, or Writing (this also sets the default persona)
+2. **Which size?**
+
+| Use | Fast | Balanced | Smart |
+|---|---|---|---|
+| Everyday chat | Llama 3.2 1B | Qwen2.5 1.5B | Qwen2.5 3B |
+| Coding | Qwen2.5 Coder 1.5B | Qwen2.5 Coder 3B | Qwen2.5 Coder 7B |
+| Writing | Llama 3.2 1B | Llama 3.2 3B | Llama 3.1 8B |
+
+* Fast is recommended on phones and devices reporting 4 GB of memory or less, Balanced otherwise; Smart needs a strong GPU
+* Devices where 16-bit GPU math is unsupported or broken get the q4f32 version of each pick automatically
+* Downloaded models are marked, and the model in use is labelled
+* **Skip** leaves the choice to you (the model menu); nothing downloads until a model is chosen, and sending a message first opens the picker
+* Open it again any time from **Settings → Help me choose a model** or the welcome screen
+* If a model is already downloaded (for example after clearing settings), it is used without asking
 
 ## Recommended Models
 
@@ -305,7 +326,7 @@ http://localhost:8080
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `style.css`)
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `style.css`)
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -363,6 +384,7 @@ Cached data may include AI model weights (potentially several GB), vector databa
 | `app.js` | Vue 3 UI — routing, session management, settings, worker bridge |
 | `worker.js` | AI inference worker — WebLLM engine, RAG pipeline, streaming |
 | `index.html` | HTML entry point, CDN imports |
+| `picker.js` | Model picker catalog and device-based recommendation |
 | `quality.js` | Junk-output detection for the model check and the collapsed-reply guard |
 | `context.js` | Fits the conversation into the model's context window |
 | `markdown.js` | Reply rendering (Markdown, code blocks, `<think>` handling), shared by the UI and the worker |

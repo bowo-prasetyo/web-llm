@@ -203,6 +203,56 @@ let sharedImportSessions   = () => {};
 let sharedForgetModelHealth = () => {};
 let sharedOpenPicker = () => {};
 
+// ── Offline / installable app ─────────────────────────────────────────────
+const sharedOnline = vRef(navigator.onLine);
+const sharedOfflineReady = vRef(null);   // null = unknown, true / false
+const sharedInstallPrompt = vRef(null);  // deferred "Install app" prompt
+const sharedSwSupported = "serviceWorker" in navigator;
+
+window.addEventListener("online",  () => { sharedOnline.value = true; });
+window.addEventListener("offline", () => { sharedOnline.value = false; });
+
+// Chrome/Edge/Android offer installing the app; keep the prompt for the
+// "Install app" button instead of showing the browser's own banner.
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  sharedInstallPrompt.value = e;
+});
+window.addEventListener("appinstalled", () => { sharedInstallPrompt.value = null; });
+
+function isInstalledApp() {
+  return window.matchMedia?.("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+}
+
+async function installApp() {
+  const prompt = sharedInstallPrompt.value;
+  if (!prompt) return;
+  prompt.prompt();
+  try { await prompt.userChoice; } catch {}
+  sharedInstallPrompt.value = null;
+}
+
+// Register sw.js and ask it whether everything needed to start offline
+// is saved. Only over https or on localhost (service worker rules).
+function setupOffline() {
+  if (!sharedSwSupported) { sharedOfflineReady.value = false; return; }
+  navigator.serviceWorker.addEventListener("message", e => {
+    if (e.data?.type === "offline-status") sharedOfflineReady.value = !!e.data.ready;
+  });
+  const ask = () => navigator.serviceWorker.ready
+    .then(reg => reg.active && reg.active.postMessage({ type: "offline-status" }))
+    .catch(() => {});
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => { ask(); setTimeout(ask, 5000); })
+    .catch(err => {
+      console.warn("Service worker registration failed", err);
+      sharedOfflineReady.value = false;
+    });
+  navigator.serviceWorker.addEventListener("controllerchange", ask);
+}
+setupOffline();
+
 const Home = {
   template: `
     <div class="container">
@@ -310,7 +360,7 @@ const Home = {
                     <span v-if="o.current" class="picker-badge muted">In use</span>
                   </span>
                   <span class="picker-model">{{ o.name }}</span>
-                  <span class="picker-meta">{{ o.cached ? "Already downloaded" : "~" + formatSize(o.sizeMb) + " download" }}</span>
+                  <span class="picker-meta">{{ o.cached ? "Already downloaded" : (online ? "~" + formatSize(o.sizeMb) + " download" : "Needs internet to download (~" + formatSize(o.sizeMb) + ")") }}</span>
                   <span class="picker-desc">{{ o.desc }}</span>
                 </span>
               </button>
@@ -459,7 +509,8 @@ const Home = {
 
       <div class="status-bar">
         <span class="status-dot" :class="{ active: !modelLoading && !loading }"></span>
-        {{ status }}
+        <span class="status-text">{{ status }}</span>
+        <span v-if="!online" class="offline-badge" title="No internet connection. Downloaded models still work.">Offline</span>
       </div>
 
       <div class="messages" ref="messagesContainer" @click="onMessagesClick">
@@ -1634,6 +1685,13 @@ const Home = {
       }
       postCancelModel.value = ""; // clear on any successful apply
 
+      // Offline: only models that are already downloaded can load.
+      if (!sharedOnline.value && !isModelCached(settings.value.model)) {
+        status.value = "You're offline, and this model isn't downloaded yet. Pick a downloaded model, or connect to download it.";
+        settings.value.model = lastAppliedModel.value;
+        return;
+      }
+
       const isNewModel = settings.value.model !== lastAppliedModel.value;
 
       // Show download confirmation for first-time downloads,
@@ -2422,6 +2480,7 @@ const Home = {
     return {
       prompt,
       promptInput,
+      online: sharedOnline,
       picker,
       uses: USES,
       pickerOptions,
@@ -2677,6 +2736,17 @@ const Settings = {
               <span class="device-val">{{ diagnostics == null || diagnostics.shaderF16 == null ? "Unknown" : (diagnostics.shaderF16 ? "Yes" : "No") }}</span>
             </div>
             <div class="device-row">
+              <span class="device-key">Works offline</span>
+              <span class="device-val" :class="{ warn: offlineReady === false }">{{ offlineText }}</span>
+            </div>
+            <div class="device-row">
+              <span class="device-key">App</span>
+              <span class="device-val">
+                <button v-if="installPrompt" class="action-btn primary install-btn" @click="installApp">Install app</button>
+                <template v-else>{{ installedApp ? "Installed" : "Use your browser's \u201cInstall\u201d or \u201cAdd to Home Screen\u201d" }}</template>
+              </span>
+            </div>
+            <div class="device-row">
               <span class="device-key">16-bit (q4f16) models</span>
               <span class="device-val" :class="{ warn: f16Problem() }">{{ f16Status() }}</span>
             </div>
@@ -2693,6 +2763,7 @@ const Settings = {
           <button v-if="checkedCount" class="action-btn secondary" style="margin-top:10px" @click="forgetModelHealth">
             Forget check results ({{ checkedCount }})
           </button>
+          <p class="section-hint" style="margin-top:8px">Offline, chats work with models you have already downloaded; downloading a model, and the first document upload (which fetches a small search model), need a connection.</p>
           <p class="section-hint" style="margin-top:8px">Each model is checked once after its first load on this device. Forgetting the results checks them again, for example after a browser or driver update.</p>
         </section>
 
@@ -2795,6 +2866,16 @@ const Settings = {
       f16Status,
       forgetModelHealth: () => sharedForgetModelHealth(),
       openPicker: () => sharedOpenPicker(),
+      offlineReady: sharedOfflineReady,
+      offlineText: Vue.computed(() => {
+        if (!sharedSwSupported) return "Not supported in this browser";
+        if (sharedOfflineReady.value === true) return "Yes, the app is saved on this device";
+        if (sharedOfflineReady.value === false) return "Not yet: open the app once while online";
+        return "Checking…";
+      }),
+      installPrompt: sharedInstallPrompt,
+      installedApp: isInstalledApp(),
+      installApp,
       exportSettings:  sharedExportSettings,
       importSettings:  sharedImportSettings,
       exportSessions:  sharedExportSessions,

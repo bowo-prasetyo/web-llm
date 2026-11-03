@@ -21,6 +21,7 @@ https://bowo-prasetyo.github.io/web-llm/
 ## Features
 
 * Fully client-side AI chat — no backend, no data leaves the browser
+* Works offline after the first visit, and installable as an app (PWA) on desktop and phone
 * Multiple chat sessions with automatic save, restore, and delete
 * Full-text search across all chat sessions (titles, questions, and answers)
 * Conversation persistence across tab closures and mobile screen-off events
@@ -282,6 +283,19 @@ All settings are automatically persisted in `localStorage` and survive page relo
 * **Stop generation** — while the model is streaming, the Send button becomes a pulsing red Stop button; tap it to halt and keep the partial response
 * **Cancel download** — while a model is being fetched, a pulsing "Cancel Download" button appears in the toolbar; tap it to abort; the model selection reverts and the download confirmation will re-appear on next selection
 
+## Offline and Installing
+
+After one visit while online, the app works without an internet connection:
+
+* A service worker (`sw.js`) saves the app's own files and the pinned libraries (Vue, Vue Router, marked, DOMPurify, highlight.js, PDF.js, WebLLM, Transformers.js) in the browser
+* Model weights are kept by WebLLM itself, so **any model you have downloaded keeps working offline**
+* Offline, the status bar shows an **Offline** badge; picking a model that isn't downloaded yet explains that it needs a connection instead of failing
+* Downloading a new model, and the first document upload (which fetches a small search model), need a connection
+* App updates still arrive: when online, the app's own files are always fetched fresh first (falling back to the saved copy after 4 seconds or when offline)
+* **Settings → This device** shows whether the app is saved for offline use, and has an **Install app** button where the browser supports it (Chrome, Edge, Android). On iPhone/iPad use Safari's **Share → Add to Home Screen**
+
+Service workers need `https` or `localhost`, so offline mode works on GitHub Pages and with the local server below.
+
 ## Requirements
 
 Modern browser with WebGPU support.
@@ -326,7 +340,7 @@ http://localhost:8080
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `style.css`)
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `style.css`) and the `icons/` folder
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -374,6 +388,7 @@ No uploaded file ever leaves the browser.
 | `localStorage` | Settings, session index, cached-model list, conversation messages per session |
 | OPFS | Vector database (document embeddings), GPU stability flags |
 | Browser cache / IndexedDB | WebLLM model weights |
+| Cache Storage (`webllm-shell-v1`, `webllm-libs-v1`) | The app's files and pinned libraries, for offline use |
 
 Cached data may include AI model weights (potentially several GB), vector databases, user settings, and session history.
 
@@ -389,6 +404,8 @@ Cached data may include AI model weights (potentially several GB), vector databa
 | `context.js` | Fits the conversation into the model's context window |
 | `markdown.js` | Reply rendering (Markdown, code blocks, `<think>` handling), shared by the UI and the worker |
 | `personas.js` | Built-in chat personas (prompt, icon, starter prompts), shared by the UI and the worker |
+| `sw.js` | Service worker: offline copies of the app and its libraries |
+| `manifest.webmanifest`, `icons/` | Installable app (PWA) metadata and icons |
 | `style.css` | UI styling (dark amber design system) |
 
 ### Component overview

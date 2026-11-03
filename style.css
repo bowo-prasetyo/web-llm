@@ -1714,3 +1714,17 @@ html, body, #app {
 .link-btn:hover { color: var(--text); }
 .link-btn.inline { padding: 0; font-size: inherit; color: var(--amber-text); }
 .choose-model-btn { margin-top: 2px; }
+
+/* ── Offline / install ─────────────────────────────────────────── */
+.status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.offline-badge {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--amber-dim);
+  border-radius: 999px;
+  color: var(--amber-text);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+.install-btn { padding: 5px 12px; font-size: 12px; }

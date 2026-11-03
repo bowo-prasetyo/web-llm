@@ -30,6 +30,9 @@ function replaceWorker(onmessage) {
   return worker;
 }
 
+// Built-in system prompt. "Reset to Default" in Settings restores this.
+const DEFAULT_SYSTEM_PROMPT = "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.";
+
 // ── Shared reactive state (accessible to both Home and Settings) ──────────
 const { ref: vRef, reactive } = Vue;
 const sharedSettings  = vRef({
@@ -42,7 +45,7 @@ const sharedSettings  = vRef({
   presence_penalty: 0.0,
   repetition_penalty: 1.0,
   maxFileSizeMB: 50,
-  system_prompt: "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.",
+  system_prompt: DEFAULT_SYSTEM_PROMPT,
 });
 const sharedModels    = vRef([]);
 const sharedModelGroups = vRef([]); // populated after Home setup() runs
@@ -391,6 +394,16 @@ const Home = {
     const streamingText = ref("");
     const models = sharedModels;
     const lastAppliedModel = ref("");
+    // True when settings were restored from localStorage on this page load.
+    // Used so per-model defaults don't overwrite saved settings on reload.
+    let hasSavedSettings = false;
+    // "model|contextWindowSize" the worker's engine was last loaded with.
+    // Reset whenever the worker is replaced. Lets Apply skip a full reload
+    // when only sampling parameters or the system prompt changed.
+    let loadedEngineKey = "";
+    // Set after a GPU crash forced the fallback model on this page load.
+    // A second crash then stops instead of restarting forever.
+    let safeModeActive = false;
 
     // Group the flat models list into labelled tiers for the <optgroup> select.
     // Order and labels match the AVAILABLE_MODELS tiers in worker.js.
@@ -471,6 +484,24 @@ const Home = {
       }
     }
 
+    function engineKey() {
+      return `${settings.value.model}|${settings.value.contextWindowSize}`;
+    }
+
+    // Settings the worker can apply without reloading the model.
+    function liveConfig() {
+      return { ...settings.value };
+    }
+
+    // Conversation turns to hand to the worker as model memory.
+    // Error messages shown in the chat are not real assistant turns.
+    function historyForWorker(msgs) {
+      return msgs
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .filter(m => !(m.role === "assistant" && m.isError))
+        .map(m => ({ role: m.role, content: m.content }));
+    }
+
     function addMessage(role, content) {
       messages.value.push({
         role,
@@ -508,6 +539,7 @@ const Home = {
       getWorker().postMessage({
         type: "generate",
         prompt: text,
+        config: liveConfig(),
       });
     }
 
@@ -579,13 +611,39 @@ const Home = {
 
       if (data.type === "fatal") {
 
-        status.value = data.text;
-
         loading.value = false;
         modelLoading.value = false;
+        isDownloading.value = false;
+
+        const gpuCrash = data.reason === "gpu-crash";
+
+        // A crash while already on the fallback model (or a second crash on
+        // this page load) means restarting would only crash again. Stop and
+        // show the GPU troubleshooting screen instead of looping.
+        if (gpuCrash && (safeModeActive || settings.value.model === data.fallbackModel)) {
+          // Fresh, idle worker: "Try Again" on the error screen loads a
+          // model only when the user asks for it.
+          worker = replaceWorker(onWorkerMessage);
+          getWorker().onerror = onWorkerError;
+          loadedEngineKey = "";
+          status.value = "GPU crashed again in safe mode. Stopped to avoid a crash loop.";
+          webgpuError.value = true;
+          return;
+        }
+
+        status.value = data.text;
+
+        if (gpuCrash && data.fallbackModel) {
+          // Switch to the lightest model. The new worker's "models" message
+          // calls applySettings, which asks before downloading it.
+          safeModeActive = true;
+          settings.value.model = data.fallbackModel;
+        }
 
         // Replace the module-level worker so getWorker() stays consistent
         worker = replaceWorker(onWorkerMessage);
+        getWorker().onerror = onWorkerError;
+        loadedEngineKey = "";
 
         getWorker().postMessage({
           type: "init"
@@ -624,6 +682,15 @@ const Home = {
             if (!conversationRestored.value) {
               conversationRestored.value = true;
               loadConversation();
+            } else if (data.text.includes("Model loaded successfully")) {
+              // The engine was (re)loaded mid-session: after a model switch
+              // or a worker restart. Give it the current conversation so it
+              // continues the chat instead of starting with no memory.
+              const msgs = messages.value.filter(m => m.role !== "assistant-stream");
+              getWorker().postMessage({
+                type: "restore-history",
+                history: historyForWorker(msgs),
+              });
             }
           }
           break;
@@ -667,8 +734,9 @@ const Home = {
           break;
                   
         case "token":
+          // The worker counts whitespace-separated words, not model tokens.
           status.value =
-            `Generating... ${data.count} tokens`;
+            `Generating... ~${data.count} words`;
           break;
                     
         case "response":
@@ -716,6 +784,9 @@ const Home = {
               // or fall back to first in list
               const cachedInList = getCachedModels().find(m => data.models.includes(m));
               settings.value.model = cachedInList || data.models[0];
+              // Saved settings belonged to a different model: use this
+              // model's defaults instead.
+              hasSavedSettings = false;
             }
           }
 
@@ -725,6 +796,7 @@ const Home = {
           break;
                     
         case "webgpu-error":
+          loadedEngineKey = "";
           webgpuError.value = true;
           modelLoading.value = false;
           loading.value = false;
@@ -732,8 +804,13 @@ const Home = {
           break;
 
         case "error":
-          addMessage("assistant", "Error: " + data.text);
+          messages.value.push({ role: "assistant", content: "Error: " + data.text, isError: true });
+          scrollBottom();
           loading.value = false;
+          // A failed model load also reports here; don't leave the UI locked.
+          modelLoading.value = false;
+          isDownloading.value = false;
+          loadedEngineKey = "";
           break;
 
         case "rag-context":
@@ -806,19 +883,34 @@ const Home = {
         }
       }
 
-      // Apply per-model defaults when model changes, but preserve conversation —
-      // the session history is shared across models intentionally.
+      // Apply per-model defaults when the user picks a different model, or
+      // on a first launch with nothing saved. On a normal page load the
+      // saved settings win, so customised values survive a reload.
+      // The conversation is preserved either way.
       if (isNewModel) {
-
-        const defaults = getModelDefaults(settings.value.model);
-        // Merge defaults key-by-key to preserve Vue reactivity on the shared ref
-        Object.assign(settings.value, defaults);
+        if (isUserChange || !hasSavedSettings) {
+          const defaults = getModelDefaults(settings.value.model);
+          // Merge defaults key-by-key to preserve Vue reactivity on the shared ref
+          Object.assign(settings.value, defaults);
+        }
         lastAppliedModel.value = settings.value.model;
       }
-    
-      modelLoading.value = true;
-    
+
       saveSettings();
+
+      // Same model and context window already loaded: only sampling
+      // parameters or the system prompt changed, which apply live.
+      if (loadedEngineKey && loadedEngineKey === engineKey()) {
+        getWorker().postMessage({
+          type: "update-config",
+          config: liveConfig(),
+        });
+        status.value = "Settings applied";
+        return;
+      }
+
+      modelLoading.value = true;
+      loadedEngineKey = engineKey();
     
       status.value =
         `Loading ${settings.value.model}...`;
@@ -875,6 +967,8 @@ const Home = {
       // on its own startup, which will trigger applySettings; we suppress
       // it for the cancelled model via postCancelModel above.
       worker = replaceWorker(onWorkerMessage);
+      getWorker().onerror = onWorkerError;
+      loadedEngineKey = "";
       status.value = "Download cancelled";
 
       // Send init so the worker reports its models list and stays ready
@@ -1080,6 +1174,7 @@ const Home = {
 
       try {
         const parsed = JSON.parse(saved);
+        hasSavedSettings = true;
         // Merge individual keys rather than replacing the whole object.
         // Replacing settings.value would swap out the reactive object and break
         // Vue's dependency tracking — especially for the shared ref used by
@@ -1177,7 +1272,12 @@ const Home = {
         else index.unshift(entry);
         // Keep newest first, cap at MAX_SESSIONS
         index.sort((a, b) => b.ts - a.ts);
-        if (index.length > MAX_SESSIONS) index.splice(MAX_SESSIONS);
+        if (index.length > MAX_SESSIONS) {
+          // Delete the pruned sessions' messages too, or they stay in
+          // localStorage forever and eat into its ~5 MB quota.
+          const pruned = index.splice(MAX_SESSIONS);
+          for (const old of pruned) localStorage.removeItem(sessionKey(old.id));
+        }
         saveIndex(index);
       } catch (err) { console.warn("Failed saving session", err); }
     }
@@ -1206,17 +1306,14 @@ const Home = {
         getWorker().postMessage({
           type: "clear-history",
         });
-        const history = toRestore.map(m => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.content,
-        }));
+        const history = historyForWorker(toRestore);
         getWorker().postMessage({ type: "restore-history", history });
 
         if (unanswered) {
           addMessage("user", unanswered);
           saveConversation();
           loading.value = true;
-          getWorker().postMessage({ type: "generate", prompt: unanswered });
+          getWorker().postMessage({ type: "generate", prompt: unanswered, config: liveConfig() });
         }
       } catch (err) { console.warn("Failed loading session", err); }
     }
@@ -1291,17 +1388,14 @@ const Home = {
         messages.value = toRestore;
         scrollBottom();
 
-        const history = toRestore.map(m => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.content,
-        }));
+        const history = historyForWorker(toRestore);
         getWorker().postMessage({ type: "restore-history", history });
 
         if (unanswered) {
           addMessage("user", unanswered);
           saveConversation();
           loading.value = true;
-          getWorker().postMessage({ type: "generate", prompt: unanswered });
+          getWorker().postMessage({ type: "generate", prompt: unanswered, config: liveConfig() });
         }
       } catch (err) { console.warn("Failed loading latest session", err); }
     }
@@ -1382,6 +1476,21 @@ const Home = {
     const { watchEffect } = Vue;
     watchEffect(() => { sharedModelGroups.value = modelGroups.value; });
 
+    // Save settings as they are edited (sliders, system prompt), so changes
+    // survive a reload even without pressing Apply. Debounced for sliders.
+    let saveTimer = null;
+    Vue.watch(settings, () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        if (settings.value.model) saveSettings();
+      }, 400);
+    }, { deep: true });
+    // Flush a pending save if the tab is closed or hidden mid-debounce.
+    window.addEventListener("pagehide", () => {
+      if (saveTimer && settings.value.model) saveSettings();
+    });
+
     sharedNewChat          = newChat;
     sharedLoadSession      = loadSession;
     sharedDeleteSession    = deleteSession;
@@ -1391,7 +1500,7 @@ const Home = {
     sharedImportSessions   = importSessions;
 
     getWorker().onmessage = onWorkerMessage;
-    getWorker().onerror = (err) => {
+    function onWorkerError(err) {
       const msg = err.message || err.filename
         ? `${err.message || "Unknown"} (${err.filename || "?"}:${err.lineno || "?"})`
         : "Worker failed to load — check browser console for import errors";
@@ -1399,7 +1508,8 @@ const Home = {
       status.value = "⚠ Worker error: " + msg;
       loading.value = false;
       modelLoading.value = false;
-    };
+    }
+    getWorker().onerror = onWorkerError;
 
     onMounted(() => {
     
@@ -1815,8 +1925,6 @@ const Settings = {
   `,
 
   setup() {
-    const DEFAULT_SYSTEM_PROMPT = sharedSettings.value.system_prompt;
-
     function resetSystemPrompt() {
       sharedSettings.value.system_prompt = DEFAULT_SYSTEM_PROMPT;
     }
@@ -1852,7 +1960,15 @@ const router = createRouter({
 });
 
 createApp({
-    template: `<router-view />`
+    // keep-alive: Home must not remount when returning from Settings, or it
+    // re-sends "init" (reloading the model) and loses its local state.
+    template: `
+      <router-view v-slot="{ Component }">
+        <keep-alive>
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
+    `
   })
   .use(router)
   .mount("#app");

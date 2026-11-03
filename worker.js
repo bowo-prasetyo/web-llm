@@ -7,6 +7,7 @@ import {
 } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
 import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
+import { stripThinking } from "./markdown.js";
 
 // The UI sends the current chat persona's prompt as USER_CONFIG.system_prompt.
 // Fallback used when it is not set.
@@ -1003,6 +1004,11 @@ async function generate(prompt) {
 
     SESSION_HISTORY = history
       .filter(msg => msg.role !== "system")
+      // Keep only the answer of reasoning models: replaying <think> blocks
+      // wastes context and the model doesn't need its old reasoning.
+      .map(msg => msg.role === "assistant"
+        ? { ...msg, content: stripThinking(msg.content) }
+        : msg)
       .filter(msg =>
         !msg.content.includes("Continue exactly from where you stopped")
       )

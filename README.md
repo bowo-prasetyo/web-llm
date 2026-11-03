@@ -10,6 +10,7 @@ Pure client-side browser AI chat application built with:
 * OPFS (Origin Private File System)
 * Transformers.js
 * PDF.js
+* marked, DOMPurify and highlight.js (reply rendering)
 
 The application runs entirely inside the browser without any backend server.
 
@@ -36,6 +37,9 @@ https://bowo-prasetyo.github.io/web-llm/
 * Export settings to a JSON file and import on another browser
 * Export all chat sessions to a JSON file and import (merge) on another browser — no duplicates
 * Streaming AI responses with a live word count
+* Replies rendered as Markdown: headings, lists, tables, links and code blocks with syntax highlighting and a Copy button
+* Copy any reply, and regenerate (or retry) the last one
+* Reasoning from thinking models (Qwen3, DeepSeek-R1) shown live, then folded into a collapsible "Thought process"
 * GPU-accelerated inference using WebGPU
 * Friendly WebGPU error screen with troubleshooting steps when GPU is unavailable
 * Web Worker isolation for a fully responsive UI during inference
@@ -218,6 +222,16 @@ All settings are automatically persisted in `localStorage` and survive page relo
 * Sessions survive page reloads, tab closures, and mobile screen-off events
 * Unanswered questions (tab closed mid-generation) are automatically re-sent on next open
 
+## Replies
+
+* Assistant replies are rendered as Markdown with GitHub-style tables, lists and links
+* **Code blocks** show their language and a **Copy** button; syntax colors are applied once the reply finishes streaming
+* **Copy** under a reply copies its Markdown source; **Regenerate** asks again for the last reply (**Retry** after an error)
+* **Thinking models** (Qwen3, DeepSeek-R1): the `<think>` reasoning is shown live while the model works, then folded into a collapsible **Thought process** section. Reasoning is left out of copies, chat previews and the history sent back to the model, which saves context
+* Safety: raw HTML written by the model is shown as text, output is sanitized with DOMPurify, and links open in a new tab
+* Your own messages are shown exactly as typed
+* The Markdown libraries (marked, DOMPurify, highlight.js) load at pinned versions with integrity hashes; if they can't load, replies fall back to plain text
+
 ## Session Search
 
 * Type in the **search box** at the top of the sidebar to search all chats
@@ -275,7 +289,7 @@ http://localhost:8080
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `style.css`)
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `markdown.js`, `style.css`)
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -333,6 +347,7 @@ Cached data may include AI model weights (potentially several GB), vector databa
 | `app.js` | Vue 3 UI — routing, session management, settings, worker bridge |
 | `worker.js` | AI inference worker — WebLLM engine, RAG pipeline, streaming |
 | `index.html` | HTML entry point, CDN imports |
+| `markdown.js` | Reply rendering (Markdown, code blocks, `<think>` handling), shared by the UI and the worker |
 | `personas.js` | Built-in chat personas (prompt, icon, starter prompts), shared by the UI and the worker |
 | `style.css` | UI styling (dark amber design system) |
 
@@ -402,7 +417,8 @@ Streaming Response → UI
 | Duplicate prevention | Manual resend of the same question is deduplicated |
 | Full-content search | Search titles, questions, and answers across all saved messages with highlighted excerpts |
 | Mid-conversation model switch | Switching models continues the current conversation: the chat history is handed to the new model |
-| Pinned dependencies | WebLLM, Vue and Vue Router load at fixed versions, so an upstream release can't change the app unexpectedly |
+| Pinned dependencies | WebLLM, Vue, Vue Router, marked, DOMPurify and highlight.js load at fixed versions (the Markdown libraries with integrity hashes), so an upstream release can't change the app unexpectedly |
+| Safe reply rendering | Model output is rendered as Markdown with raw HTML escaped and the result sanitized by DOMPurify |
 | Legacy migration | Existing single-session data is migrated to the multi-session format on first run |
 | Settings export / import | Transfer all settings to another browser via a JSON file |
 | Session export / import | Transfer all chat sessions to another browser; merges without duplicating |

@@ -1416,3 +1416,177 @@ html, body, #app {
   .persona-select { max-width: 110px; font-size: 12px; }
   .welcome-title { font-size: 17px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   RENDERED REPLIES (markdown, code, thinking, actions)
+══════════════════════════════════════════════════════════════ */
+
+/* Replies are HTML now; whitespace comes from the markup.
+   User messages keep pre-wrap so typed text shows exactly as written. */
+.message.assistant { white-space: normal; min-width: 0; }
+.message.assistant.error { border-color: #5a2a2a; color: #f0b4b4; }
+
+.md { overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md pre, .md table, .md blockquote, .md .code-block { margin: 0 0 10px; }
+.md .md-plain { white-space: pre-wrap; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  margin: 14px 0 6px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--text);
+}
+.md h1 { font-size: 18px; }
+.md h2 { font-size: 16.5px; }
+.md h3 { font-size: 15.5px; }
+.md h4, .md h5, .md h6 { font-size: 14.5px; }
+.md ul, .md ol { padding-left: 22px; }
+.md li { margin: 2px 0; }
+.md li > p { margin: 0; }
+.md strong { font-weight: 600; color: var(--text); }
+.md a { color: var(--amber-text); text-decoration: underline; text-underline-offset: 2px; }
+.md a:hover { color: var(--amber); }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.md blockquote {
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--amber-dim);
+  color: var(--text-2);
+}
+.md :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 5px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--amber-text);
+}
+.md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.md th, .md td {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.md th { background: var(--surface-2); font-weight: 600; }
+
+/* Code blocks */
+.code-block {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #121212;
+  overflow: hidden;
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: lowercase;
+}
+.code-copy {
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.code-copy:hover { color: var(--text); border-color: var(--amber-dim); }
+.code-copy.copied { color: var(--amber); border-color: var(--amber-dim); }
+.code-block pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.code-block code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* Syntax colors (highlight.js classes), tuned for the amber theme */
+.hljs-comment, .hljs-quote { color: #7d776c; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: #ffab1a; }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-tag { color: #b5cc7a; }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: #e8956b; }
+.hljs-title, .hljs-section, .hljs-title.function_ { color: #ffcc66; }
+.hljs-built_in, .hljs-type, .hljs-title.class_ { color: #8fc2d4; }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property { color: #d9b38c; }
+.hljs-meta, .hljs-name, .hljs-tag { color: #a69a86; }
+.hljs-deletion { color: #e07a7a; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+
+/* Thinking (reasoning models) */
+.thinking {
+  margin-bottom: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,.015);
+}
+.thinking summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  user-select: none;
+}
+.thinking summary:hover { color: var(--text-2); }
+.thinking-live { animation: thinkPulse 1.4s ease-in-out infinite; }
+@keyframes thinkPulse { 50% { opacity: .45; } }
+.thinking-body {
+  padding: 0 12px 10px;
+  font-size: 13px;
+  color: var(--text-2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Reply actions */
+.msg-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-3);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.msg-action:hover:not(:disabled) { color: var(--text); border-color: var(--border); background: var(--surface-2); }
+.msg-action:focus-visible, .code-copy:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+.msg-action:disabled { opacity: .4; cursor: not-allowed; }
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-live { animation: none; }
+}

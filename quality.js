@@ -43,3 +43,52 @@ export function checkSample(text) {
   }
   return { ok: true, reason: "" };
 }
+
+// Blank out fenced code blocks (keeping offsets), so repeated lines of code
+// aren't mistaken for a loop.
+function maskCode(text) {
+  return text.replace(/```[\s\S]*?(?:```|$)/g, m => " ".repeat(m.length));
+}
+
+// Finds a reply that keeps repeating the same sentence, e.g.
+// "The document.write() function is a built-in function … The
+// document.write() function is a built-in function …". Looks for a run of
+// `n` words that appears `times` times (not overlapping) in the last
+// `tailWords` words. Returns the character index where the second
+// occurrence starts (moved back to the end of the previous sentence), so
+// the caller can keep the text before the loop, or -1 when there is none.
+export function findRepeatLoop(text, { n = 8, times = 3, tailWords = 300 } = {}) {
+  const masked = maskCode(text || "");
+  const toks = [];
+  const re = /\S+/g;
+  let m;
+  while ((m = re.exec(masked))) {
+    const w = m[0].toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+    if (w) toks.push({ w, i: m.index });
+  }
+  if (toks.length < n * times) return -1;
+
+  const seen = new Map(); // n-word run -> word indexes where it starts
+  let best = -1;
+  for (let k = Math.max(0, toks.length - tailWords); k + n <= toks.length; k++) {
+    const key = toks.slice(k, k + n).map(t => t.w).join(" ");
+    const starts = seen.get(key) || [];
+    if (!starts.length || k - starts[starts.length - 1] >= n) starts.push(k);
+    seen.set(key, starts);
+    if (starts.length >= times) {
+      const pos = toks[starts[1]].i;
+      if (best === -1 || pos < best) best = pos;
+    }
+  }
+  if (best === -1) return -1;
+
+  // End the kept text at a sentence or line end, not mid-sentence: back up
+  // to the last ". ", "! ", "? " or newline before the cut (if one is near).
+  const before = text.slice(Math.max(0, best - 300), best);
+  const ends = [...before.matchAll(/[.!?](?=\s)|\n/g)];
+  if (ends.length) {
+    const last = ends[ends.length - 1];
+    return Math.max(0, best - before.length) + last.index + 1;
+  }
+  return best;
+}

@@ -179,7 +179,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 
 * **Temperature** — randomness of output (0.0–2.0); low = focused, high = creative
 * **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
-* **Max Tokens** — maximum number of tokens to generate per response (16–2048)
+* **Max Tokens** — maximum length of one reply (16–2048, capped at half the context window). Defaults are 256 for the tiniest models, 512 for 0.5–1B, 768 for 1.5–2B and 1024 for 3B and up. A reply that reaches it is marked "Cut off" with a **Continue** button
 * **Context Window** — how many tokens of conversation the model can see (512–8192); the only generation setting that reloads the model. When a chat grows past it, the oldest turns (then document context) are left out of what the model sees
 * **Max Upload Size** — maximum file size for document uploads (1–200 MB, default 50 MB); the extracted text is also limited to 500,000 characters (~200 pages)
 
@@ -379,7 +379,9 @@ app.js
 
 worker.js
 ├── initialize()        — device profile detection, model loading, vector DB restore
-├── generate()          — streaming inference, RAG retrieval, continuation loop
+├── generate()          — RAG retrieval, context fitting, streamed reply
+├── continueReply()     — finishes a cut-off reply when the user presses Continue
+├── streamReply()       — streaming with Stop, time limit, junk and repeat guards
 ├── ingestDocument()    — sentence-aware chunking, embedding, OPFS persistence
 └── onmessage handler   — message routing (init, set-config, generate, ingest, …)
 ```
@@ -397,7 +399,7 @@ Persona System Prompt + History Assembly (system message always pinned)
     ↓
 WebLLM Streaming Generation (temperature · top-p · frequency/presence/repetition penalty)
     ↓
-Continuation Loop (if max_tokens hit)
+Guards: stop on junk words, cut repeated sentences
     ↓
 Streaming Response → UI
 ```
@@ -416,8 +418,9 @@ Streaming Response → UI
 | Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; the generation time limit ends the stream |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |
 | Cancel download | User can abort a model fetch; cached-model list cleaned up so confirmation re-appears |
-| Continuation deduplication | Overlap removal at seam between multi-chunk continuations |
-| Repetition detection | Stops continuing a long answer if the continuation starts looping |
+| Cut-off replies | A reply that hits Max Tokens or the time limit ends cleanly with a note and a **Continue** button; nothing is stitched together automatically |
+| Repeated-sentence guard | A reply that starts repeating the same sentence is cut back to just before the repeats, with a note |
+| Continue seam cleanup | Text the model repeats from the end of the reply is removed, and a space is added where the two parts meet |
 | Model swap guard | Waits for active generation to complete before unloading the engine |
 | Auto-unload | Releases GPU memory after 30 minutes of inactivity |
 | Conservative GPU defaults | Low-end device profile applies smaller token budgets |

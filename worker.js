@@ -11,7 +11,7 @@ import {
 
 import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
-import { looksDegenerate, checkSample } from "./quality.js";
+import { looksDegenerate, checkSample, findRepeatLoop } from "./quality.js";
 import { fitToContext } from "./context.js";
 
 // Keep in sync with the import URL above; shown in Settings → This device.
@@ -236,8 +236,6 @@ let DEVICE_PROFILE = {
 };
 
 let RETRYING_AFTER_CRASH = false;
-let continuationCount = 0;
-const MAX_CONTINUATIONS = 3;
 
 async function saveToOPFS(filename, content) {
   const root = await navigator.storage.getDirectory();
@@ -726,56 +724,211 @@ async function runModelCheck() {
   try { if (engine && engine.resetChat) await engine.resetChat(); } catch {}
 }
 
-async function generate(prompt) {
-  
-  try {
+const STOP_SEQUENCES = ["\nUser:", "\nHuman:", "\nAssistant:"];
 
+// Context window the engine was loaded with (WebLLM's default is 4096),
+// and the reply length: Max Tokens, but never more than half the window.
+function replyBudget() {
+  const contextWindow = MODEL_CONFIG.contextWindowSize || 4096;
+  const maxTokens = Math.min(computeMaxTokens(), Math.floor(contextWindow / 2));
+  return { contextWindow, maxTokens };
+}
+
+// Space to put between a reply that was cut off and its continuation:
+// none if either side already has whitespace, otherwise one (so "used to"
+// + "The" doesn't become "used toThe").
+function joinSeparator(prefix, next) {
+  if (!prefix || /\s$/.test(prefix) || /^[\s.,;:!?)\]]/.test(next)) return "";
+  return " ";
+}
+
+// Stream one completion and post it to the UI as it arrives. `prefix` is
+// reply text already on screen (Continue appends to it). Stops on the Stop
+// button, the time limit, a reply collapsing into junk words, or a reply
+// that keeps repeating the same sentence (cut back to before the repeats).
+// Returns { full, finishReason, stopped, timedOut, degenerate, loopCut,
+// superseded }; `full` is prefix + new text.
+async function streamReply(messages, maxTokens, { prefix = "", generationStart }) {
+  const result = {
+    full: prefix, finishReason: null, stopped: false, timedOut: false,
+    degenerate: false, loopCut: false, superseded: false,
+  };
+
+  IS_GENERATING = true;
+  LAST_STREAM_TIME = 0;
+
+  const completion = await engine.chat.completions.create({
+    messages,
+    temperature:        MODEL_CONFIG.temperature,
+    max_tokens:         maxTokens,
+    top_p:              MODEL_CONFIG.top_p ?? 1.0,
+    frequency_penalty:  MODEL_CONFIG.frequency_penalty ?? 0.0,
+    presence_penalty:   MODEL_CONFIG.presence_penalty ?? 0.0,
+    repetition_penalty: MODEL_CONFIG.repetition_penalty ?? 1.0,
+    stop: STOP_SEQUENCES,
+    stream: true,
+  });
+
+  resetStallTimer();
+  const requestId = ++REQUEST_COUNTER;
+  let head = prefix;   // prefix plus separator, fixed at the first text
+  let text = "";
+  let words = 0;
+  let chunks = 0;
+
+  // Check the reply so far; true when streaming must stop.
+  const guard = () => {
+    const full = head + text;
+    if (looksDegenerate(full)) {
+      result.degenerate = true;
+      return true;
+    }
+    const cut = findRepeatLoop(full);
+    if (cut !== -1) {
+      result.loopCut = true;
+      result.full = full.slice(0, cut).trimEnd();
+      return true;
+    }
+    return false;
+  };
+
+  try {
+    for await (const chunk of completion) {
+      if (STOP_REQUESTED) {
+        result.stopped = true;
+        postMessage({ type: "status", text: "Generation stopped" });
+        break;
+      }
+      if (Date.now() - generationStart > HARD_TIMEOUT_MS) {
+        result.timedOut = true;
+        postMessage({ type: "status", text: "Response cut off: generation time limit reached" });
+        break;
+      }
+      if (requestId !== REQUEST_COUNTER) {
+        result.superseded = true;
+        break;
+      }
+
+      const choice = chunk.choices?.[0];
+      if (choice?.finish_reason) result.finishReason = choice.finish_reason;
+      const delta = choice?.delta?.content || "";
+      if (!delta) continue;
+
+      LAST_STREAM_TIME = Date.now();
+      resetStallTimer();
+
+      if (!text) head = prefix + joinSeparator(prefix, delta);
+      text += delta;
+      words += delta.split(/\s+/).length;
+
+      if (++chunks % 8 === 0 && guard()) break;
+
+      postMessage({ type: "stream", text: head + text });
+      postMessage({ type: "token", count: words });
+    }
+
+    // Final check on the complete reply (the loop only checks every 8 chunks)
+    if (!result.stopped && !result.timedOut && !result.superseded &&
+        !result.degenerate && !result.loopCut) {
+      guard();
+    }
+  } finally {
+    clearTimeout(STALL_TIMEOUT);
+    IS_GENERATING = false;
+  }
+
+  if (!result.loopCut) result.full = text ? head + text : prefix;
+  return result;
+}
+
+// Errors from WebLLM while generating. Throws a clearer error for the UI,
+// or returns true after a GPU crash (the worker is restarting).
+async function handleGenerationError(err) {
+  const message = err?.message || "";
+
+  if (message.includes("exceed context window")) {
+    throw new Error(
+      "This conversation no longer fits in the model's context window. " +
+      "Start a new chat, or raise Context Window in Settings."
+    );
+  }
+
+  // "deleted object as a pointer of type Tokenizer*" means the WASM engine
+  // was destroyed mid-generation (race with set-config). Reset so the next
+  // request reinitialises cleanly instead of crashing again.
+  if (message.includes("deleted object") || message.includes("Tokenizer")) {
+    engine = null;
+    initializingPromise = null;
+    throw err;
+  }
+
+  const gpuCrash =
+    message.includes("Instance reference") ||
+    message.includes("GPUBuffer") ||
+    message.includes("DXGI_ERROR") ||
+    message.includes("Device was lost");
+
+  if (gpuCrash) {
+    await saveToOPFS("gpu-instability.flag", "1");
+    postMessage({
+      type: "fatal",
+      reason: "gpu-crash",
+      fallbackModel: SMALLEST_MODEL,
+      text: "GPU inference crashed. Restarting in safe GPU mode.",
+    });
+    self.close();
+    return true;
+  }
+
+  throw err;
+}
+
+function maxHistory() {
+  return DEVICE_PROFILE.lowEnd ? MAX_HISTORY_LOW : MAX_HISTORY_HIGH;
+}
+
+// Keep the conversation (without the system prompt) as the model's memory.
+// Reasoning models' <think> blocks are dropped: replaying them wastes
+// context and the model doesn't need its old reasoning.
+function rememberConversation(history) {
+  SESSION_HISTORY = history
+    .filter(msg => msg.role !== "system")
+    .map(msg => msg.role === "assistant"
+      ? { ...msg, content: stripThinking(msg.content) }
+      : msg)
+    .slice(-maxHistory());
+}
+
+// Why a reply was cut short, for the "Continue" note in the UI.
+function cutOffReason(result) {
+  if (result.finishReason === "length") return "length";
+  if (result.timedOut) return "time";
+  return null;
+}
+
+async function generate(prompt) {
+  try {
     const generationStart = Date.now();
-    continuationCount = 0;
     ACTIVE_GENERATION = true;
     STOP_REQUESTED = false;
-    
+
     await initialize();
-  
-    // Context window the engine was loaded with (WebLLM's default is 4096).
-    const contextWindow = MODEL_CONFIG.contextWindowSize || 4096;
 
-    // Leave at least half the window for the prompt and history.
-    const maxTokens = Math.min(
-      computeMaxTokens(),
-      Math.floor(contextWindow / 2)
-    );
-
-    let degenerate = false; // reply collapsed into repeated words
-    let degenerateCheck = 0; // chunks since start, to check every few
-    let timedOut = false;
+    const { contextWindow, maxTokens } = replyBudget();
+    const MAX_HISTORY = maxHistory();
 
     let history = [
-      {
-        role: "system",
-        content: getSystemPrompt(),
-      },
-      ...SESSION_HISTORY
+      { role: "system", content: getSystemPrompt() },
+      ...SESSION_HISTORY,
     ];
 
-    // Keep only recent history (use module-level constants)
-    const MAX_HISTORY =
-      DEVICE_PROFILE.lowEnd ?
-      MAX_HISTORY_LOW :
-      MAX_HISTORY_HIGH;
-    
-    let response;
-    let finishReason = null;
-    let tokenCount = 0;
-  
-    try {
-  
-      const relevantChunks =
-        await searchRelevantChunks(prompt);
+    let result;
 
-      // Build the augmented prompt for the API call only — do NOT store
-      // the full context in SESSION_HISTORY (it would be replayed on every
-      // subsequent turn, wasting context window and confusing the model).
+    try {
+      const relevantChunks = await searchRelevantChunks(prompt);
+
+      // Document context goes into this request only, never into
+      // SESSION_HISTORY (it would be replayed on every later turn).
       const context = relevantChunks
         .map(item => `[${item.filename}]\n${item.text}`)
         .join("\n\n---\n\n");
@@ -784,17 +937,12 @@ async function generate(prompt) {
         ? `Relevant context from uploaded documents:\n\n${context}\n\n---\nUser question: ${prompt}`
         : prompt;
 
-      // Push only the bare user prompt into session history
-      history.push({
-        role: "user",
-        content: prompt,
-      });
+      history.push({ role: "user", content: prompt });
 
-      // Track which files contributed context so UI can show it
+      // Which files contributed context, so the UI can show it
       let contextSources = [...new Set(relevantChunks.map(c => c.filename))];
 
-      // Always pin the system message — slice only the non-system tail
-      // so MAX_HISTORY evictions never strip the model's instructions.
+      // Keep the system message; trim only the turns after it
       {
         const sys = history[0]?.role === "system" ? [history[0]] : [];
         const rest = history.slice(sys.length);
@@ -804,404 +952,153 @@ async function generate(prompt) {
       // Fit everything into the context window: drop the oldest turns,
       // then the document context, so WebLLM doesn't reject the prompt.
       {
-        const fitted = fitToContext({
-          history,
-          prompt,
-          augmentedPrompt,
-          contextWindow,
-          maxTokens,
-        });
+        const fitted = fitToContext({ history, prompt, augmentedPrompt, contextWindow, maxTokens });
         history = fitted.history;
         augmentedPrompt = fitted.augmentedPrompt;
         if (fitted.droppedContext) contextSources = [];
       }
 
-      // Build a one-shot history for the API that replaces the last user turn
-      // with the RAG-augmented version. We do this AFTER trimming so the
-      // context doesn't bloat history and get replayed on future turns.
+      // The request uses the document-augmented question in place of the
+      // bare one; the stored history keeps the bare question.
       const apiHistory = augmentedPrompt !== prompt
         ? [...history.slice(0, -1), { role: "user", content: augmentedPrompt }]
         : history;
-      
-      IS_GENERATING = true;
-      LAST_STREAM_TIME = 0;
-      
-      let partial = "";
-      
-      postMessage({
-        type: "thinking",
-      });
-      
-      // Guard: if the engine was torn down between generate() start and here
-      // (e.g. by a concurrent set-config), reinitialise before proceeding.
+
+      postMessage({ type: "thinking" });
+
+      // The engine may have been torn down since generate() started
+      // (e.g. by a concurrent set-config): reinitialise if so.
       if (!engine) {
         postMessage({ type: "status", text: "Engine not ready, reinitialising..." });
         initializingPromise = null;
         await initialize();
       }
       ensureEngine();
-      
-      // Post context sources to UI so user knows RAG was used
+
       if (contextSources.length > 0) {
-        postMessage({
-          type: "rag-context",
-          sources: contextSources,
-        });
+        postMessage({ type: "rag-context", sources: contextSources });
       }
 
-      const completion =
-        await engine.chat.completions.create({
-
-          messages: apiHistory,
-
-          temperature:    MODEL_CONFIG.temperature,
-          max_tokens:     maxTokens,
-          top_p:          MODEL_CONFIG.top_p          ?? 1.0,
-          frequency_penalty: MODEL_CONFIG.frequency_penalty ?? 0.0,
-          presence_penalty:  MODEL_CONFIG.presence_penalty  ?? 0.0,
-          repetition_penalty: MODEL_CONFIG.repetition_penalty ?? 1.0,
-
-          stop: [
-            "\nUser:",
-            "\nHuman:",
-            "\nAssistant:",
-          ],
-
-          stream: true,
-        });
-      
-      resetStallTimer();
-      const requestId = ++REQUEST_COUNTER;
-      
-      for await (const chunk of completion) {
-
-        if (STOP_REQUESTED) {
-          postMessage({
-            type: "status",
-            text: "Generation stopped",
-          });
-          finishReason = null; // prevent continuation loop
-          break;
-        }
-
-        if (
-          Date.now() - generationStart >
-          HARD_TIMEOUT_MS
-        ) {
-          // Deliver what we have rather than discarding it with an error
-          postMessage({
-            type: "status",
-            text: "Response truncated: generation time limit reached",
-          });
-          timedOut = true;
-          finishReason = null; // prevent continuation loop
-          break;
-        }
-                
-        if (requestId !== REQUEST_COUNTER) {
-          return;
-        }
-
-        const choice = chunk.choices?.[0];
-
-        if (choice?.finish_reason) {
-          finishReason = choice.finish_reason;
-        }
-      
-        const delta = choice?.delta?.content || "";
-      
-        if (!delta) {
-          continue;
-        }
-      
-        LAST_STREAM_TIME = Date.now();
-        resetStallTimer();
-      
-        partial += delta;
-        tokenCount += delta.split(/\s+/).length;
-
-        // Stop a reply that has collapsed into repeated junk words
-        if (++degenerateCheck % 8 === 0 && looksDegenerate(partial)) {
-          degenerate = true;
-          finishReason = null; // prevent continuation loop
-          break;
-        }
-      
-        postMessage({
-          type: "stream",
-          text: partial,
-        });
-        
-        postMessage({
-          type: "token",
-          count: tokenCount,
-        });
-      }
-      
-      clearTimeout(STALL_TIMEOUT);
-      
-      IS_GENERATING = false; 
-      
-      response = {
-        choices: [
-          {
-            message: {
-              content: partial
-            }
-          }
-        ]
-      };
-          
+      result = await streamReply(apiHistory, maxTokens, { generationStart });
     } catch (err) {
-
-      const message = err?.message || "";
-
-      if (message.includes("exceed context window")) {
-        throw new Error(
-          "This conversation no longer fits in the model's context window. " +
-          "Start a new chat, or raise Context Window in Settings."
-        );
-      }
-
-      // "deleted object as a pointer of type Tokenizer*" means the WASM engine
-      // was destroyed mid-generation (race with set-config). Reset so next
-      // request reinitialises cleanly instead of crashing again.
-      if (
-        message.includes("deleted object") ||
-        message.includes("Tokenizer")
-      ) {
-        engine = null;
-        initializingPromise = null;
-        throw err; // re-throw to surface as a normal error, not a fatal
-      }
-      
-      const gpuCrash =
-        message.includes("Instance reference") ||
-        message.includes("GPUBuffer") ||
-        message.includes("DXGI_ERROR") ||
-        message.includes("Device was lost");
-      
-      if (gpuCrash) {
-      
-        await saveToOPFS(
-          "gpu-instability.flag",
-          "1"
-        );
-      
-        postMessage({
-          type: "fatal",
-          reason: "gpu-crash",
-          fallbackModel: SMALLEST_MODEL,
-          text:
-            "GPU inference crashed. Restarting in safe GPU mode.",
-        });
-      
-        self.close();
-        return;
-      }
-  
-      throw err;
+      if (await handleGenerationError(err)) return;
     }
-  
-    postMessage({
-      type: "status",
-      text: `Ready (${DEVICE_PROFILE.name})`,
-    });
-  
-    let answer =
-      response.choices[0].message.content;
-    let totalGeneratedChars = answer.length;
 
-    while (
-      finishReason === "length" &&
-      continuationCount < MAX_CONTINUATIONS
-    ) {
+    if (result.superseded) return;
 
-      continuationCount++;
+    postMessage({ type: "status", text: `Ready (${DEVICE_PROFILE.name})` });
 
-      postMessage({
-        type: "status",
-        text: `Continuing response (${continuationCount})...`,
-      });
-
-      // WebLLM requires the last message to be role "user" or "tool" —
-      // it rejects conversations ending with "assistant". We therefore use
-      // a two-message tail: the partial answer as an assistant turn, then a
-      // minimal user directive. The directive is intentionally terse and
-      // instruction-like so the model appends rather than restarts.
-      const systemMsg =
-        history[0]?.role === "system" ? [history[0]] : [];
-      const nonSystem =
-        history.slice(systemMsg.length);
-
-      const trimmed =
-        nonSystem.slice(-Math.max(MAX_HISTORY - 2, 4));
-
-      // Trim the partial answer to its last ~400 chars so the seam context
-      // fits within a small model's attention without eating max_tokens.
-      const SEAM_CONTEXT = 400;
-      const seam = answer.length > SEAM_CONTEXT
-        ? "..." + answer.slice(-SEAM_CONTEXT)
-        : answer;
-
-      const continuationHistory = [
-        ...systemMsg,
-        ...trimmed,
-        { role: "assistant", content: seam },
-        {
-          role: "user",
-          content: "[continue]",
-        },
-      ];
-
-      let continuation = "";
-
-      IS_GENERATING = true;
-      LAST_STREAM_TIME = 0;
-      resetStallTimer();
-
-      const continuationStream =
-        await engine.chat.completions.create({
-          messages: continuationHistory,
-          temperature:    MODEL_CONFIG.temperature,
-          max_tokens:     maxTokens,
-          top_p:          MODEL_CONFIG.top_p          ?? 1.0,
-          frequency_penalty: MODEL_CONFIG.frequency_penalty ?? 0.0,
-          presence_penalty:  MODEL_CONFIG.presence_penalty  ?? 0.0,
-          repetition_penalty: MODEL_CONFIG.repetition_penalty ?? 1.0,
-          stop: ["\nUser:", "\nHuman:", "\nAssistant:"],
-          stream: true,
-        });
-
-      finishReason = null;
-
-      for await (const chunk of continuationStream) {
-
-        if (STOP_REQUESTED) {
-          postMessage({
-            type: "status",
-            text: "Generation stopped",
-          });
-          finishReason = null;
-          break;
-        }
-
-        const choice = chunk.choices?.[0];
-
-        if (choice?.finish_reason) {
-          finishReason = choice.finish_reason;
-        }
-
-        const delta = choice?.delta?.content || "";
-
-        if (!delta) {
-          continue;
-        }
-
-        LAST_STREAM_TIME = Date.now();
-        resetStallTimer();
-
-        continuation += delta;
-        tokenCount += delta.split(/\s+/).length;
-
-        if (++degenerateCheck % 8 === 0 && looksDegenerate(answer + continuation)) {
-          degenerate = true;
-          finishReason = null;
-          break;
-        }
-
-        postMessage({
-          type: "stream",
-          text: answer + continuation,
-        });
-
-        postMessage({
-          type: "token",
-          count: tokenCount,
-        });
-      }
-
-      IS_GENERATING = false;
-
-      // Strip overlap at the seam once, after the full continuation arrives.
-      const cleanContinuation = removeOverlap(answer, continuation);
-
-      if (!cleanContinuation.trim() || isRepeating(answer + cleanContinuation)) {
-        postMessage({
-          type: "status",
-          text: "Stopping: continuation empty or repetitive",
-        });
-        break;
-      }
-
-      answer += cleanContinuation;
-      totalGeneratedChars += cleanContinuation.length;
-
-      // Carry forward clean history (without the continuation scaffold)
-      // so the next loop iteration or SESSION_HISTORY save is consistent.
-      history = [...systemMsg, ...trimmed];
-
-      if (totalGeneratedChars > 4000) {
-        postMessage({
-          type: "status",
-          text: "Response complete",
-        });
-        break;
-      }
-
-      if (Date.now() - generationStart > HARD_TIMEOUT_MS) {
-        postMessage({
-          type: "status",
-          text: "Response truncated: generation time limit reached",
-        });
-        break;
-      }
-
-    }
+    const answer = result.full;
 
     // No usable reply: tell the UI why, and leave the model's memory as it
     // was before this question so a retry starts clean.
-    if (degenerate || !answer.trim()) {
-      const outcome = degenerate
-        ? "degenerate"
-        : timedOut ? "timeout"
-        : STOP_REQUESTED ? "stopped"
+    if (result.degenerate || !answer.trim()) {
+      const outcome = result.degenerate ? "degenerate"
+        : result.timedOut ? "timeout"
+        : result.stopped ? "stopped"
         : "empty";
-      postMessage({ type: "status", text: `Ready (${DEVICE_PROFILE.name})` });
       postMessage({ type: "response", text: "", outcome, model: MODEL });
       return;
     }
 
-    history.push({
-      role: "assistant",
-      content: answer,
-    });
+    history.push({ role: "assistant", content: answer });
+    rememberConversation(history);
 
-    SESSION_HISTORY = history
-      .filter(msg => msg.role !== "system")
-      // Keep only the answer of reasoning models: replaying <think> blocks
-      // wastes context and the model doesn't need its old reasoning.
-      .map(msg => msg.role === "assistant"
-        ? { ...msg, content: stripThinking(msg.content) }
-        : msg)
-      .filter(msg =>
-        !msg.content.includes("Continue exactly from where you stopped")
-      )
-      .slice(-MAX_HISTORY);
-        
     postMessage({
       type: "response",
       text: answer,
+      cutOff: cutOffReason(result),
+      notice: result.loopCut ? "loop" : null,
     });
-
-  }
-  finally {
-  
+  } finally {
     ACTIVE_GENERATION = false;
-  
     clearTimeout(STALL_TIMEOUT);
     resetUnloadTimer();
-  }  
+  }
+}
+
+// The user pressed Continue on a reply that was cut off. Ask the model for
+// the rest and append it to the same reply. `previous` is the reply as
+// shown in the chat.
+const CONTINUE_PROMPT =
+  "Your previous reply was cut off. Continue it from exactly where it stopped. " +
+  "Do not repeat anything you already wrote and do not start over.";
+
+async function continueReply(previous) {
+  try {
+    const generationStart = Date.now();
+    ACTIVE_GENERATION = true;
+    STOP_REQUESTED = false;
+
+    await initialize();
+
+    const last = SESSION_HISTORY[SESSION_HISTORY.length - 1];
+    if (!last || last.role !== "assistant" || !previous) {
+      throw new Error("There is no reply to continue.");
+    }
+
+    const { contextWindow, maxTokens } = replyBudget();
+    const fitted = fitToContext({
+      history: [
+        { role: "system", content: getSystemPrompt() },
+        ...SESSION_HISTORY,
+        { role: "user", content: CONTINUE_PROMPT },
+      ],
+      prompt: CONTINUE_PROMPT,
+      augmentedPrompt: CONTINUE_PROMPT,
+      contextWindow,
+      maxTokens,
+    });
+
+    postMessage({ type: "thinking" });
+    ensureEngine();
+
+    let result;
+    try {
+      result = await streamReply(fitted.history, maxTokens, { prefix: previous, generationStart });
+    } catch (err) {
+      if (await handleGenerationError(err)) return;
+    }
+
+    if (result.superseded) return;
+
+    postMessage({ type: "status", text: `Ready (${DEVICE_PROFILE.name})` });
+
+    // Drop text the model repeated from the end of the reply so far
+    let full = result.full;
+    if (!result.loopCut && full.length > previous.length) {
+      const added = full.slice(previous.length);
+      const clean = removeOverlap(previous, added.trimStart());
+      full = previous + (clean === added.trimStart() ? added : joinSeparator(previous, clean) + clean);
+    }
+
+    // Nothing usable was added: keep the reply as it was, still cut off.
+    if (result.degenerate || full.trim().length <= previous.trim().length) {
+      postMessage({
+        type: "response",
+        text: previous,
+        cutOff: "length",
+        notice: result.stopped ? null : "continue-failed",
+      });
+      return;
+    }
+
+    SESSION_HISTORY = [
+      ...SESSION_HISTORY.slice(0, -1),
+      { role: "assistant", content: stripThinking(full) },
+    ];
+
+    postMessage({
+      type: "response",
+      text: full,
+      cutOff: cutOffReason(result),
+      notice: result.loopCut ? "loop" : null,
+    });
+  } finally {
+    ACTIVE_GENERATION = false;
+    clearTimeout(STALL_TIMEOUT);
+    resetUnloadTimer();
+  }
 }
 
 self.onmessage = async (event) => {
@@ -1288,6 +1185,11 @@ self.onmessage = async (event) => {
         // (system prompt, temperature, …) apply without pressing Apply.
         applySamplingConfig(data.config);
         await generate(data.prompt);
+        break;
+
+      case "continue":
+        applySamplingConfig(data.config);
+        await continueReply(data.previous);
         break;
 
       case "ingest":
@@ -1856,20 +1758,3 @@ function removeOverlap(original, continuation) {
   return continuation;
 }
 
-function isRepeating(text) {
-
-  const sentences =
-    text.split(/[.!?]\s+/);
-
-  if (sentences.length < 6) {
-    return false;
-  }
-
-  const last =
-    sentences.slice(-3);
-
-  const unique =
-    new Set(last);
-
-  return unique.size < 2;
-}

@@ -42,6 +42,48 @@ function replaceWorker(onmessage) {
 // to recognise settings that still hold it unedited (see migrateSettings).
 const LEGACY_DEFAULT_SYSTEM_PROMPT = "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.";
 
+// ── Per-model generation defaults ─────────────────────────────────────────
+// Max Tokens is generous enough for a full answer or code block in one go
+// (replies are no longer stitched together from several continuations), and
+// the tiniest models get a little more temperature so similar questions don't
+// get word-for-word identical replies.
+function modelDefaults(model) {
+  const penalties = {
+    top_p: 1.0,
+    frequency_penalty: 0.0,
+    presence_penalty: 0.0,
+    repetition_penalty: 1.0,
+  };
+  const m = model || "";
+  const d = (temperature, max_tokens, contextWindowSize) =>
+    ({ ...penalties, temperature, max_tokens, contextWindowSize });
+
+  if (m.includes("135M") || m.includes("360M")) return d(0.3, 256, 2048);
+  if (m.includes("0.5B") || m.includes("0.6B")) return d(0.4, 512, 2048);
+  if (m.includes("1.1B") || m.includes("1.7B") || (m.includes("1B") && !m.includes("1.5B"))) return d(0.4, 512, 4096);
+  if (m.includes("1.5B") || m.includes("1.6b") || m.includes("1_6b")) return d(0.4, 768, 4096);
+  if (m.includes("2b") || m.includes("2B")) return d(0.6, 768, 4096);
+  if (m.includes("3B") || m.includes("4B") || m.includes("4b")) return d(0.7, 1024, 8192);
+  if (m.includes("mini")) return d(0.7, 1024, 8192);
+  if (m.includes("7B") || m.includes("8B") || m.includes("9b")) return d(0.7, 1024, 8192);
+  return d(0.7, 1024, 8192);
+}
+
+// The defaults before settings version 2, only to recognise unchanged values.
+function legacyModelDefaults(model) {
+  const m = model || "";
+  if (m.includes("135M") || m.includes("360M")) return { temperature: 0.2, max_tokens: 64 };
+  if (m.includes("0.5B") || m.includes("0.6B")) return { temperature: 0.2, max_tokens: 128 };
+  if (m.includes("1.1B") || m.includes("1.7B") || (m.includes("1B") && !m.includes("1.5B"))) return { temperature: 0.4, max_tokens: 256 };
+  if (m.includes("1.5B") || m.includes("1.6b") || m.includes("1_6b")) return { temperature: 0.4, max_tokens: 512 };
+  if (m.includes("2b") || m.includes("2B")) return { temperature: 0.6, max_tokens: 512 };
+  if (m.includes("3B") || m.includes("4B") || m.includes("4b") || m.includes("mini")) return { temperature: 0.7, max_tokens: 768 };
+  if (m.includes("7B") || m.includes("8B") || m.includes("9b")) return { temperature: 0.7, max_tokens: 1024 };
+  return { temperature: 0.7, max_tokens: 768 };
+}
+
+const SETTINGS_VERSION = 2;
+
 // Bring settings saved before personas existed up to date, in place.
 // Someone who edited the old system prompt keeps it as their Custom persona
 // (and as their default, so nothing changes for them). Everyone else moves
@@ -60,6 +102,16 @@ function migrateSettings(saved) {
   if (!PERSONAS.some(p => p.id === saved.defaultPersona)) {
     saved.defaultPersona = DEFAULT_PERSONA_ID;
   }
+  // Version 2 raised the default Max Tokens (and the tiniest models'
+  // temperature). Upgrade values that are still the old defaults; values
+  // the user changed are kept.
+  if ((saved.settingsVersion || 1) < 2 && saved.model) {
+    const old = legacyModelDefaults(saved.model);
+    const now = modelDefaults(saved.model);
+    if (saved.max_tokens === old.max_tokens) saved.max_tokens = now.max_tokens;
+    if (saved.temperature === old.temperature) saved.temperature = now.temperature;
+  }
+  saved.settingsVersion = SETTINGS_VERSION;
   return saved;
 }
 
@@ -75,6 +127,7 @@ const sharedSettings  = vRef({
   presence_penalty: 0.0,
   repetition_penalty: 1.0,
   maxFileSizeMB: 50,
+  settingsVersion: SETTINGS_VERSION,
   // Persona used for new chats; each chat remembers its own persona.
   defaultPersona: DEFAULT_PERSONA_ID,
   // Prompt for the "Custom" persona. Starts as a copy of the default.
@@ -391,6 +444,18 @@ const Home = {
               <div class="md thinking-body" v-html="item.thinkingHtml"></div>
             </details>
             <div v-if="item.answerHtml" class="md" v-html="item.answerHtml"></div>
+            <p v-if="!item.streaming && item.message.notice === 'loop'" class="msg-note">
+              The reply started repeating itself, so it was stopped there.
+            </p>
+            <p v-if="!item.streaming && item.message.notice === 'continue-failed'" class="msg-note">
+              Couldn't continue: the model didn't add anything new.
+            </p>
+            <p v-if="!item.streaming && item.message.cutOff" class="msg-note">
+              {{ item.message.cutOff === "time"
+                ? "Cut off at the time limit."
+                : "Cut off at the Max Tokens limit (" + settings.max_tokens + ")." }}
+              <span v-if="item.isLast">Press Continue for the rest.</span>
+            </p>
             <div v-if="!item.streaming" class="msg-actions">
               <button
                 type="button"
@@ -401,6 +466,17 @@ const Home = {
                 <svg v-if="copiedIndex !== item.index" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 {{ copiedIndex === item.index ? "Copied" : "Copy" }}
+              </button>
+              <button
+                v-if="item.isLast && item.message.cutOff && !item.message.isError"
+                type="button"
+                class="msg-action msg-action-primary"
+                @click="continueReply"
+                :disabled="loading || modelLoading"
+                title="Continue this reply"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+                Continue
               </button>
               <button
                 v-if="item.isLast"
@@ -811,6 +887,24 @@ const Home = {
       }
     }
 
+    // Ask the model to finish a reply that was cut off; the new text is
+    // appended to the same reply.
+    function continueReply() {
+      if (loading.value || modelLoading.value) return;
+      const last = messages.value[messages.value.length - 1];
+      if (!last || last.role !== "assistant" || !last.cutOff || last.isError) return;
+      const previous = last.content;
+      last.role = "assistant-stream";
+      last.cutOff = null;
+      last.notice = null;
+      loading.value = true;
+      getWorker().postMessage({
+        type: "continue",
+        previous,
+        config: liveConfig(),
+      });
+    }
+
     // Replace the last reply with a fresh one for the same question.
     function regenerate() {
       if (loading.value || modelLoading.value) return;
@@ -1093,10 +1187,18 @@ const Home = {
           ) {
         
             lastMessage.role = "assistant";
+            // The final text can differ from the last streamed update
+            // (e.g. a repeating tail cut off)
+            lastMessage.content = data.text;
         
           } else {
         
             addMessage("assistant", data.text);
+          }
+          {
+            const reply = messages.value[messages.value.length - 1];
+            reply.cutOff = data.cutOff || null;   // "length" | "time" | null
+            reply.notice = data.notice || null;   // "loop" | "continue-failed" | null
           }
         
           status.value = "Ready";
@@ -1160,7 +1262,14 @@ const Home = {
           status.value = "WebGPU unavailable";
           break;
 
-        case "error":
+        case "error": {
+          // Keep any text already streamed as a normal reply (or drop an
+          // empty bubble) before adding the error.
+          const tail = messages.value[messages.value.length - 1];
+          if (tail && tail.role === "assistant-stream") {
+            if (tail.content && tail.content.trim()) tail.role = "assistant";
+            else messages.value.pop();
+          }
           messages.value.push({ role: "assistant", content: "Error: " + data.text, isError: true });
           scrollBottom();
           loading.value = false;
@@ -1168,7 +1277,9 @@ const Home = {
           modelLoading.value = false;
           isDownloading.value = false;
           loadedEngineKey = "";
+          saveConversation();
           break;
+        }
 
         case "rag-context":
           ragSources.value = data.sources || [];
@@ -1894,60 +2005,7 @@ const Home = {
     }
 
     function getModelDefaults(model) {
-
-      // Micro: SmolLM2-135M, 360M
-      // Shared penalty defaults — same across all model sizes
-      const penaltyDefaults = {
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        repetition_penalty: 1.0,
-      };
-
-      if (model.includes("135M") || model.includes("360M")) {
-        return { ...penaltyDefaults, temperature: 0.2, max_tokens: 64,  contextWindowSize: 2048 };
-      }
-
-      // ~0.5–0.6B
-      if (model.includes("0.5B") || model.includes("0.6B")) {
-        return { ...penaltyDefaults, temperature: 0.2, max_tokens: 128, contextWindowSize: 2048 };
-      }
-
-      // ~1–1.1B (TinyLlama, Llama-3.2-1B, SmolLM2-1.7B)
-      if (
-        model.includes("1.1B") || model.includes("1.7B") ||
-        (model.includes("1B") && !model.includes("1.5B"))
-      ) {
-        return { ...penaltyDefaults, temperature: 0.4, max_tokens: 256, contextWindowSize: 4096 };
-      }
-
-      // ~1.5–1.6B
-      if (model.includes("1.5B") || model.includes("1.6b") || model.includes("1_6b")) {
-        return { ...penaltyDefaults, temperature: 0.4, max_tokens: 512, contextWindowSize: 4096 };
-      }
-
-      // ~2B (Gemma-2-2B)
-      if (model.includes("2b") || model.includes("2B")) {
-        return { ...penaltyDefaults, temperature: 0.6, max_tokens: 512, contextWindowSize: 4096 };
-      }
-
-      // ~3–4B
-      if (model.includes("3B") || model.includes("4B") || model.includes("4b")) {
-        return { ...penaltyDefaults, temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
-      }
-
-      // ~3.8B (Phi-3.5-mini)
-      if (model.includes("mini")) {
-        return { ...penaltyDefaults, temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
-      }
-
-      // ~7–9B large models
-      if (model.includes("7B") || model.includes("8B") || model.includes("9b")) {
-        return { ...penaltyDefaults, temperature: 0.7, max_tokens: 1024, contextWindowSize: 8192 };
-      }
-
-      // Unknown / fallback
-      return { ...penaltyDefaults, temperature: 0.7, max_tokens: 768, contextWindowSize: 8192 };
+      return modelDefaults(model);
     }
         
     // Expose functions to Settings page
@@ -2178,6 +2236,7 @@ const Home = {
       copyMessage,
       onMessagesClick,
       regenerate,
+      continueReply,
       personas: PERSONAS,
       currentPersonaId,
       currentPersona,

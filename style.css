@@ -1590,3 +1590,35 @@ html, body, #app {
 @media (prefers-reduced-motion: reduce) {
   .thinking-live { animation: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   MODEL HEALTH / THIS DEVICE
+══════════════════════════════════════════════════════════════ */
+.health-suggestion { margin-top: -4px; }
+.modal-body em { color: var(--text-2); font-family: var(--font-mono); font-size: 12px; font-style: normal; }
+
+.device-info {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.device-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.device-row:last-child { border-bottom: none; }
+.device-key { color: var(--text-2); flex-shrink: 0; }
+.device-val { color: var(--text); text-align: right; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; }
+.device-val.warn { color: var(--amber-text); }
+.device-failed { margin-top: 10px; font-size: 13px; }
+.device-failed ul { margin: 6px 0 0 18px; }
+.device-failed li { margin: 3px 0; overflow-wrap: anywhere; }
+.device-failed code { font-family: var(--font-mono); font-size: 12px; color: var(--amber-text); }
+.device-sample { margin-left: 6px; color: var(--text-3); font-size: 12px; }

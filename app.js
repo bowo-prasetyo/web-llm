@@ -92,6 +92,43 @@ const sharedIsDownloading = vRef(false);  // true while model weights are fetchi
 const sharedIndexedDocs = vRef([]);   // [{filename, chunks}]
 const sharedIngestState = vRef(null); // {filename, current, total} | null
 const sharedWebgpuError = vRef(false); // true when WebGPU is unavailable
+
+// ── GPU / model health ────────────────────────────────────────────────────
+// Some GPUs compute 16-bit math wrongly, so q4f16 models reply with junk
+// ("outer outer outer…"). Each model gets a quick check after its first
+// load on this device; results are remembered here.
+const HEALTH_KEY = "webllm-model-health";
+const sharedAltModels   = vRef([]);   // q4f32 versions shown when 16-bit fails
+const sharedDiagnostics = vRef(null); // {webllmVersion, webgpu, gpu, shaderF16}
+const sharedModelHealth = vRef(loadModelHealth()); // {modelId: {ok, reason, sample, ts}}
+
+function loadModelHealth() {
+  try { return JSON.parse(localStorage.getItem(HEALTH_KEY) || "{}") || {}; }
+  catch { return {}; }
+}
+function saveModelHealth() {
+  try { localStorage.setItem(HEALTH_KEY, JSON.stringify(sharedModelHealth.value)); } catch {}
+}
+
+function isF16Model(id) { return /q4f16|q0f16/.test(id || ""); }
+
+// True when 16-bit models are known not to work here: no shader-f16
+// support, or a q4f16 model failed its check on this device.
+function f16Problem() {
+  if (sharedDiagnostics.value && sharedDiagnostics.value.shaderF16 === false) return true;
+  return Object.entries(sharedModelHealth.value)
+    .some(([id, h]) => isF16Model(id) && h && h.ok === false);
+}
+
+// Text for a model in the pickers, with a warning where it won't work well.
+function modelOptionLabel(id) {
+  const h = sharedModelHealth.value[id];
+  if (h && h.ok === false) {
+    return `${id}  ⚠ ${h.reason === "no-f16" ? "needs 16-bit GPU support" : "garbled on this GPU"}`;
+  }
+  if (isF16Model(id) && f16Problem()) return `${id}  ⚠ 16-bit, may not work here`;
+  return id;
+}
 // These are populated once Home mounts; Settings reads them directly.
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
@@ -103,6 +140,7 @@ let sharedExportSettings   = () => {};
 let sharedImportSettings   = () => {};
 let sharedExportSessions   = () => {};
 let sharedImportSessions   = () => {};
+let sharedForgetModelHealth = () => {};
 
 const Home = {
   template: `
@@ -124,6 +162,36 @@ const Home = {
           <div class="modal-actions">
             <button class="action-btn secondary" @click="confirmModal.show = false; settings.model = confirmModal.previousModel">Cancel</button>
             <button class="action-btn primary" @click="confirmDownload">Download & Load</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model doesn't work on this GPU (failed check or collapsed reply) -->
+      <div class="modal-overlay" v-if="healthModal.show" @click.self="keepModelAnyway">
+        <div class="modal" role="alertdialog" aria-labelledby="health-title">
+          <div class="modal-icon">⚠</div>
+          <h2 class="modal-title" id="health-title">
+            {{ healthModal.reason === "degenerate" ? "This model may not work on your GPU" : "This model doesn't work on your GPU" }}
+          </h2>
+          <p class="modal-body">
+            <strong>{{ healthModal.model }}</strong>
+            <template v-if="healthModal.reason === 'no-f16'"> needs 16-bit GPU support, which this browser doesn't offer.</template>
+            <template v-else-if="healthModal.reason === 'degenerate'"> just gave a reply that collapsed into repeated words.</template>
+            <template v-else> gave garbled text in a quick check<span v-if="healthModal.sample">: <em>“{{ healthModal.sample }}…”</em></span>.</template>
+            <br><br>
+            This usually means the GPU does 16-bit math incorrectly. Models marked <strong>q4f32</strong> avoid it.
+          </p>
+          <p v-if="healthModal.suggestion" class="modal-body health-suggestion">
+            Suggested: <strong>{{ healthModal.suggestion }}</strong>
+            <span v-if="modelSizes[healthModal.suggestion]">
+              (~{{ modelSizes[healthModal.suggestion] >= 1024
+                ? (modelSizes[healthModal.suggestion] / 1024).toFixed(1) + " GB"
+                : modelSizes[healthModal.suggestion] + " MB" }})
+            </span>
+          </p>
+          <div class="modal-actions">
+            <button class="action-btn secondary" @click="keepModelAnyway">Keep this model</button>
+            <button v-if="healthModal.suggestion" class="action-btn primary" @click="switchToSuggestion">Switch model</button>
           </div>
         </div>
       </div>
@@ -412,7 +480,7 @@ const Home = {
             <template v-for="group in modelGroups" :key="group.label">
               <optgroup :label="group.label">
                 <option v-for="model in group.models" :key="model" :value="model">
-                  {{ model }}
+                  {{ modelOptionLabel(model) }}
                 </option>
               </optgroup>
             </template>
@@ -535,15 +603,26 @@ const Home = {
     ];
 
     const { computed } = Vue;
+    // Main list, plus the q4f32 alternatives when 16-bit models don't work
+    // here (and whichever alternative is currently selected).
+    const visibleModels = computed(() => {
+      const list = [...models.value];
+      for (const m of sharedAltModels.value) {
+        if (f16Problem() || m === settings.value.model) list.push(m);
+      }
+      return list;
+    });
+    const allModels = () => [...models.value, ...sharedAltModels.value];
+
     const modelGroups = computed(() => {
       const assigned = new Set();
       const groups = MODEL_GROUPS_DEF.map(g => {
-        const matched = models.value.filter(m => g.test(m) && !assigned.has(m));
+        const matched = visibleModels.value.filter(m => g.test(m) && !assigned.has(m));
         matched.forEach(m => assigned.add(m));
         return { label: g.label, models: matched };
       });
       // Catch any unmatched models in an "Other" group
-      const other = models.value.filter(m => !assigned.has(m));
+      const other = visibleModels.value.filter(m => !assigned.has(m));
       if (other.length) groups.push({ label: "Other", models: other });
       return groups.filter(g => g.models.length > 0);
     });
@@ -997,6 +1076,11 @@ const Home = {
           break;
                     
         case "response":
+
+          if (data.outcome) {
+            handleFailedReply(data);
+            break;
+          }
         
           // convert streaming message into final message
         
@@ -1023,17 +1107,19 @@ const Home = {
         
           break;
 
-        case "models":
+        case "models": {
           models.value = data.models;
+          sharedAltModels.value = data.altModels || [];
           if (data.sizes) {
             modelSizes.value = data.sizes;
           }
+          const known = allModels();
 
           if (
             !settings.value.model ||
-            !data.models.includes(settings.value.model)
+            !known.includes(settings.value.model)
           ) {
-            if (lastAppliedModel.value && data.models.includes(lastAppliedModel.value)) {
+            if (lastAppliedModel.value && known.includes(lastAppliedModel.value)) {
               // Restore last known good model after worker restart
               settings.value.model = lastAppliedModel.value;
             } else if (!postCancelModel.value) {
@@ -1050,6 +1136,20 @@ const Home = {
           if (settings.value.model) {
             await applySettings();
           }
+          break;
+        }
+
+        case "diagnostics":
+          sharedDiagnostics.value = {
+            webllmVersion: data.webllmVersion,
+            webgpu: data.webgpu,
+            gpu: data.gpu,
+            shaderF16: data.shaderF16,
+          };
+          break;
+
+        case "model-check":
+          handleModelCheck(data);
           break;
                     
         case "webgpu-error":
@@ -1100,6 +1200,115 @@ const Home = {
           status.value = `⏳ ${data.filename} queued — waiting for generation to finish...`;
           break;
       }
+    }
+
+    // ── Model health ─────────────────────────────────────────────────────
+    const healthModal = ref({ show: false, model: "", reason: "", sample: "", suggestion: "" });
+
+    // The q4f32 version of a q4f16 model, or else the q4f32 model closest in
+    // size, as a replacement that avoids 16-bit GPU math.
+    function f32Suggestion(id) {
+      const all = allModels();
+      const twin = id.replace(/q4f16_1|q0f16/, "q4f32_1");
+      if (twin !== id && all.includes(twin)) return twin;
+      const size = modelSizes.value[id] || 1000;
+      const candidates = all.filter(m => !isF16Model(m) && sharedModelHealth.value[m]?.ok !== false);
+      candidates.sort((a, b) =>
+        Math.abs((modelSizes.value[a] || 0) - size) - Math.abs((modelSizes.value[b] || 0) - size));
+      return candidates[0] || "";
+    }
+
+    // Models the user chose to keep despite a problem: don't ask again
+    // this session.
+    const keptAnyway = new Set();
+
+    function offerReplacement(model, reason, sample) {
+      if (healthModal.value.show || keptAnyway.has(model)) return;
+      healthModal.value = {
+        show: true,
+        model,
+        reason,
+        sample: (sample || "").trim().slice(0, 80),
+        suggestion: f32Suggestion(model),
+      };
+    }
+
+    function handleModelCheck(data) {
+      sharedModelHealth.value = {
+        ...sharedModelHealth.value,
+        [data.model]: { ok: data.ok, reason: data.reason || "", sample: data.sample || "", ts: Date.now() },
+      };
+      saveModelHealth();
+      if (!data.ok) {
+        if (data.reason === "no-f16") {
+          // The engine didn't load at all
+          modelLoading.value = false;
+          isDownloading.value = false;
+          loadedEngineKey = "";
+          status.value = "This model needs 16-bit GPU support, which this browser doesn't offer";
+        }
+        offerReplacement(data.model, data.reason, data.sample);
+      }
+    }
+
+    function keepModelAnyway() {
+      keptAnyway.add(healthModal.value.model);
+      healthModal.value.show = false;
+    }
+
+    function switchToSuggestion() {
+      const target = healthModal.value.suggestion;
+      healthModal.value.show = false;
+      if (!target) return;
+      settings.value.model = target;
+      applySettings();
+    }
+
+    // A reply that ended with nothing usable (collapsed into junk, timed out
+    // before the first word, stopped before any text, or empty). Show why,
+    // instead of junk or an empty bubble. Marked as an error, so it is left
+    // out of the model's memory and offers Retry.
+    const FAILED_REPLY_TEXT = {
+      degenerate: "⚠ The reply collapsed into repeated words, so it was stopped.",
+      timeout: "⚠ No reply: the model didn't start answering within the time limit. A smaller model may be faster on this device.",
+      empty: "⚠ The model returned an empty reply.",
+    };
+
+    function handleFailedReply(data) {
+      const list = messages.value;
+      const last = list[list.length - 1];
+      const hasBubble = last && last.role === "assistant-stream";
+      loading.value = false;
+      status.value = "Ready";
+
+      if (data.outcome === "stopped") {
+        // Stopped before any text: just drop the empty bubble
+        if (hasBubble) list.splice(list.length - 1, 1);
+        status.value = "Stopped";
+        saveConversation();
+        return;
+      }
+
+      let text = FAILED_REPLY_TEXT[data.outcome] || FAILED_REPLY_TEXT.empty;
+      if (data.outcome === "degenerate") {
+        text += isF16Model(data.model)
+          ? " This 16-bit (q4f16) model may not run correctly on your GPU; a q4f32 model usually fixes it."
+          : " Try Regenerate, or a larger model.";
+      }
+      const msg = { role: "assistant", content: text, isError: true };
+      if (hasBubble) list.splice(list.length - 1, 1, msg);
+      else list.push(msg);
+      scrollBottom();
+      saveConversation();
+
+      if (data.outcome === "degenerate" && isF16Model(data.model)) {
+        offerReplacement(data.model, "degenerate", "");
+      }
+    }
+
+    function forgetModelHealth() {
+      sharedModelHealth.value = {};
+      saveModelHealth();
     }
 
     async function applySettings(skipConfirm = false) {
@@ -1174,7 +1383,8 @@ const Home = {
     
       getWorker().postMessage({
         type: "set-config",
-        config: liveConfig(),
+        // Check the model once per device (see handleModelCheck)
+        config: { ...liveConfig(), selfTest: !sharedModelHealth.value[settings.value.model] },
       });
     }
             
@@ -1771,6 +1981,7 @@ const Home = {
     sharedImportSettings   = importSettings;
     sharedExportSessions   = exportSessions;
     sharedImportSessions   = importSessions;
+    sharedForgetModelHealth = forgetModelHealth;
 
     getWorker().onmessage = onWorkerMessage;
     function onWorkerError(err) {
@@ -1958,6 +2169,10 @@ const Home = {
     return {
       prompt,
       promptInput,
+      modelOptionLabel,
+      healthModal,
+      switchToSuggestion,
+      keepModelAnyway,
       viewMessages,
       copiedIndex,
       copyMessage,
@@ -2039,7 +2254,7 @@ const Settings = {
             <option disabled value="">Select Model</option>
             <template v-for="group in modelGroups" :key="group.label">
               <optgroup :label="group.label">
-                <option v-for="model in group.models" :key="model" :value="model">{{ model }}</option>
+                <option v-for="model in group.models" :key="model" :value="model">{{ modelOptionLabel(model) }}</option>
               </optgroup>
             </template>
           </select>
@@ -2178,6 +2393,42 @@ const Settings = {
         </section>
 
         <section class="settings-section">
+          <h2 class="section-label">This device</h2>
+          <p class="section-hint" style="margin-bottom:12px">What the app found about this browser and GPU. Useful when a model gives garbled replies.</p>
+          <div class="device-info">
+            <div class="device-row">
+              <span class="device-key">WebLLM version</span>
+              <span class="device-val">{{ diagnostics?.webllmVersion || "…" }}</span>
+            </div>
+            <div class="device-row">
+              <span class="device-key">GPU</span>
+              <span class="device-val">{{ diagnostics ? (diagnostics.webgpu ? (diagnostics.gpu || "No GPU adapter found") : "WebGPU not available") : "…" }}</span>
+            </div>
+            <div class="device-row">
+              <span class="device-key">16-bit GPU support</span>
+              <span class="device-val">{{ diagnostics == null || diagnostics.shaderF16 == null ? "Unknown" : (diagnostics.shaderF16 ? "Yes" : "No") }}</span>
+            </div>
+            <div class="device-row">
+              <span class="device-key">16-bit (q4f16) models</span>
+              <span class="device-val" :class="{ warn: f16Problem() }">{{ f16Status() }}</span>
+            </div>
+          </div>
+          <div v-if="failedModels.length" class="device-failed">
+            <span class="device-key">Failed the model check here:</span>
+            <ul>
+              <li v-for="f in failedModels" :key="f.id">
+                <code>{{ f.id }}</code>
+                <span class="device-sample" v-if="f.sample">“{{ f.sample.slice(0, 40) }}…”</span>
+              </li>
+            </ul>
+          </div>
+          <button v-if="checkedCount" class="action-btn secondary" style="margin-top:10px" @click="forgetModelHealth">
+            Forget check results ({{ checkedCount }})
+          </button>
+          <p class="section-hint" style="margin-top:8px">Each model is checked once after its first load on this device. Forgetting the results checks them again, for example after a browser or driver update.</p>
+        </section>
+
+        <section class="settings-section">
           <h2 class="section-label">Export / Import</h2>
           <p class="section-hint" style="margin-bottom:12px">Transfer your settings and chat history to another browser or device.</p>
 
@@ -2239,6 +2490,21 @@ const Settings = {
     const defaultPersona = Vue.computed(() =>
       getPersona(sharedSettings.value.defaultPersona));
 
+    const failedModels = Vue.computed(() =>
+      Object.entries(sharedModelHealth.value)
+        .filter(([, h]) => h && h.ok === false)
+        .map(([id, h]) => ({ id, sample: h.sample || "" })));
+    const checkedCount = Vue.computed(() => Object.keys(sharedModelHealth.value).length);
+
+    function f16Status() {
+      const d = sharedDiagnostics.value;
+      if (d && d.shaderF16 === false) return "Not supported: use q4f32 models";
+      const f16 = Object.entries(sharedModelHealth.value).filter(([id]) => isF16Model(id));
+      if (f16.some(([, h]) => h && h.ok === false)) return "Garbled output detected: use q4f32 models";
+      if (f16.some(([, h]) => h && h.ok)) return "Working";
+      return "Not checked yet";
+    }
+
     return {
       settings: sharedSettings,
       models: sharedModels,
@@ -2253,6 +2519,13 @@ const Settings = {
       resetSystemPrompt,
       personas: PERSONAS,
       defaultPersona,
+      modelOptionLabel,
+      diagnostics: sharedDiagnostics,
+      failedModels,
+      checkedCount,
+      f16Problem,
+      f16Status,
+      forgetModelHealth: () => sharedForgetModelHealth(),
       exportSettings:  sharedExportSettings,
       importSettings:  sharedImportSettings,
       exportSessions:  sharedExportSessions,

@@ -42,6 +42,9 @@ https://bowo-prasetyo.github.io/web-llm/
 * Reasoning from thinking models (Qwen3, DeepSeek-R1) shown live, then folded into a collapsible "Thought process"
 * GPU-accelerated inference using WebGPU
 * Friendly WebGPU error screen with troubleshooting steps when GPU is unavailable
+* Quick model check after a model's first load on each device: catches GPUs whose 16-bit math is broken (q4f16 models reply with junk like "outer outer outer…") and offers the q4f32 version
+* Replies that collapse into repeated words are stopped, explained, and kept out of the conversation history
+* "This device" panel in Settings: WebLLM version, GPU, 16-bit support and model check results
 * Web Worker isolation for a fully responsive UI during inference
 * Local document ingestion and semantic retrieval (RAG)
 * PDF, TXT, and Markdown file support
@@ -141,6 +144,13 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 | gemma-2-9b-it-q4f16_1-MLC | ~6.4 GB |
 
 Sizes are approximate VRAM footprints. Actual download size may vary.
+
+**q4f16 vs q4f32.** q4f16 models are smaller and faster but need the GPU's
+16-bit math. Some GPUs and browsers get that math wrong, and those models then
+reply with garbage. The app checks each model once per device; if 16-bit
+models fail (or the GPU doesn't support them), the model list also shows q4f32
+versions of the q4f16-only models (Qwen2.5-Coder, Qwen3, Hermes-3, DeepSeek-R1,
+gemma-2-9b and others) and marks q4f16 models with ⚠.
 Models are cached locally in the browser after the first download.
 
 ## Recommended Models
@@ -170,7 +180,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 * **Temperature** — randomness of output (0.0–2.0); low = focused, high = creative
 * **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
 * **Max Tokens** — maximum number of tokens to generate per response (16–2048)
-* **Context Window** — conversation history visible to the model (512–8192 tokens); the only generation setting that reloads the model
+* **Context Window** — how many tokens of conversation the model can see (512–8192); the only generation setting that reloads the model. When a chat grows past it, the oldest turns (then document context) are left out of what the model sees
 * **Max Upload Size** — maximum file size for document uploads (1–200 MB, default 50 MB); the extracted text is also limited to 500,000 characters (~200 pages)
 
 ### Repetition Control
@@ -200,6 +210,12 @@ conversation so far is kept).
 * Personas only change the system prompt; temperature and the other generation settings stay as you set them
 * Persona prompts are kept short on purpose: small in-browser models follow short, plain instructions much better than long rule lists. They live in `personas.js`.
 * Settings from earlier versions are migrated automatically: if you had edited the old system prompt, it becomes your Custom persona and stays your default; otherwise you move to Friendly
+
+### This device
+
+* Shows the WebLLM version, the GPU, and whether it supports 16-bit math
+* Shows whether q4f16 models work here, and lists models that failed the model check (with a sample of their output)
+* **Forget check results** re-runs the checks, for example after a browser or GPU driver update
 
 ### Export / Import
 
@@ -289,7 +305,7 @@ http://localhost:8080
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `markdown.js`, `style.css`)
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `style.css`)
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -347,6 +363,8 @@ Cached data may include AI model weights (potentially several GB), vector databa
 | `app.js` | Vue 3 UI — routing, session management, settings, worker bridge |
 | `worker.js` | AI inference worker — WebLLM engine, RAG pipeline, streaming |
 | `index.html` | HTML entry point, CDN imports |
+| `quality.js` | Junk-output detection for the model check and the collapsed-reply guard |
+| `context.js` | Fits the conversation into the model's context window |
 | `markdown.js` | Reply rendering (Markdown, code blocks, `<think>` handling), shared by the UI and the worker |
 | `personas.js` | Built-in chat personas (prompt, icon, starter prompts), shared by the UI and the worker |
 | `style.css` | UI styling (dark amber design system) |
@@ -391,7 +409,10 @@ Streaming Response → UI
 | GPU crash recovery | Detects lost-device errors and restarts on the lightest model (asking before downloading it); a second crash stops and shows the troubleshooting screen instead of looping |
 | WebGPU unavailable | Catches incompatible GPU errors, shows friendly troubleshooting screen with retry |
 | Tokenizer crash recovery | Detects WASM `Tokenizer*` errors, resets engine for clean next request |
-| Generation timeout | Hard time limit per generation; delivers partial result rather than discarding |
+| Generation timeout | Hard time limit per generation; delivers partial result rather than discarding, or explains why there is no reply |
+| Model check | After a model's first load on a device, a short reply is checked for junk; q4f16 models that fail (or need 16-bit support the GPU lacks) get a q4f32 replacement offer |
+| Collapsed-reply guard | A reply that turns into a few repeated words is stopped, replaced by an explanation with Retry, and left out of the model's memory |
+| Context fitting | Before each reply, the oldest turns and then document context are dropped so the prompt fits the context window |
 | Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; the generation time limit ends the stream |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |
 | Cancel download | User can abort a model fetch; cached-model list cleaned up so confirmation re-appears |

@@ -1,0 +1,23 @@
+{
+  "name": "webllm-browser-chat",
+  "private": true,
+  "type": "module",
+  "description": "Test tooling only. The app itself has no build step: index.html and the .js files are served as they are.",
+  "scripts": {
+    "test": "playwright test",
+    "test:unit": "playwright test --project=unit",
+    "test:e2e": "playwright test --project=e2e",
+    "serve": "node tests/support/server.js"
+  },
+  "devDependencies": {
+    "@highlightjs/cdn-assets": "11.12.0",
+    "@playwright/test": "1.63.0",
+    "dompurify": "3.4.17",
+    "marked": "18.1.1",
+    "vue": "3.5.44",
+    "vue-router": "4.6.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -174,3 +174,25 @@ export function legacyChatItems(chats) {
   for (const c of chats) items["webllm-session:" + c.id] = c.messages || [];
   return items;
 }
+
+// Documents stored for a chat (or for all chats), from IndexedDB.
+export function readAttachments(page, chatId = null) {
+  return page.evaluate(id => new Promise((resolve, reject) => {
+    const open = indexedDB.open("webllm-chats");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains("attachments")) { db.close(); resolve([]); return; }
+      const req = db.transaction("attachments").objectStore("attachments").getAll();
+      req.onsuccess = () => { db.close(); resolve(req.result.filter(a => !id || a.chatId === id)); };
+      req.onerror = () => reject(req.error);
+    };
+  }), chatId);
+}
+
+// Attach a text file to the chat on screen
+export function attachText(page, name, text) {
+  return page.setInputFiles(".upload-btn input[type=file]", {
+    name, mimeType: "text/plain", buffer: Buffer.from(text),
+  });
+}

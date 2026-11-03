@@ -6,6 +6,7 @@ import {
 } from "./personas.js";
 import { renderMarkdown, splitThinking, stripThinking } from "./markdown.js";
 import { openChatStore, FALLBACK_MAX_MESSAGES, FALLBACK_MAX_CHATS } from "./chatstore.js";
+import { INDEX_MIN_CHARS, MAX_ATTACHMENT_CHARS } from "./attachments.js";
 import {
   USES,
   TIERS,
@@ -150,8 +151,6 @@ const sharedSessions  = vRef([]);   // [{id, title, model, ts, preview}]
 const sharedSidebarOpen = vRef(false);
 const sharedModelSizes  = vRef({});  // {modelId: sizeInMB}
 const sharedIsDownloading = vRef(false);  // true while model weights are fetching
-const sharedIndexedDocs = vRef([]);   // [{filename, chunks}]
-const sharedIngestState = vRef(null); // {filename, current, total} | null
 const sharedWebgpuError = vRef(false); // true when WebGPU is unavailable
 
 // ── GPU / model health ────────────────────────────────────────────────────
@@ -633,48 +632,31 @@ const Home = {
         </div>
       </div>
 
-      <!-- RAG context indicator — shown above footer when RAG was used -->
-      <div v-if="ragSources.length > 0" class="rag-banner">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Answer informed by: <span class="rag-sources">{{ ragSources.join(", ") }}</span>
-        <button class="rag-dismiss" @click="ragSources = []">×</button>
-      </div>
-
-      <!-- Ingest progress bar -->
-      <div v-if="ingestState" class="ingest-progress-bar">
-        <div class="ingest-label">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          Indexing {{ ingestState.filename }} — chunk {{ ingestState.current }} / {{ ingestState.total }}
-        </div>
-        <div class="ingest-track">
-          <div class="ingest-fill" :style="{ width: Math.round(ingestState.current / ingestState.total * 100) + '%' }"></div>
-        </div>
-      </div>
-
-      <!-- Document manager panel -->
-      <div v-if="docsOpen" class="docs-panel">
-        <div class="docs-panel-header">
-          <span class="docs-panel-title">Indexed Documents</span>
-          <div class="docs-panel-actions">
-            <button v-if="indexedDocuments.length > 0" class="action-btn danger" style="font-size:11px;padding:4px 9px" @click="clearDocuments">Clear All</button>
-            <button class="icon-btn" @click="docsOpen = false" style="width:26px;height:26px">×</button>
-          </div>
-        </div>
-        <div v-if="indexedDocuments.length === 0" class="docs-empty">
-          No documents indexed yet. Upload a file to enable document-aware answers.
-        </div>
-        <div v-for="doc in indexedDocuments" :key="doc.filename" class="doc-item">
-          <div class="doc-info">
-            <span class="doc-name">{{ doc.filename }}</span>
-            <span class="doc-chunks">{{ doc.chunks }} chunks</span>
-          </div>
-          <button class="doc-delete" @click="deleteDocument(doc.filename)" title="Remove">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
+      <!-- Documents from earlier versions were shared by all chats -->
+      <div v-if="legacyDocs.length" class="legacy-docs-note">
+        <span>
+          Documents added in an earlier version ({{ legacyDocs.join(", ") }}) were shared by all chats and are no longer used.
+          Attach the files you need to a chat instead.
+        </span>
+        <button type="button" class="link-btn inline" @click="removeLegacyDocs">Remove them</button>
       </div>
 
       <div class="footer-container">
+        <!-- Documents attached to this chat -->
+        <div v-if="attachments.length" class="attachments" aria-label="Documents attached to this chat">
+          <div
+            v-for="a in attachments"
+            :key="a.id"
+            class="attachment-chip"
+            :class="a.status"
+            :title="a.status === 'error' ? a.error : a.name"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            <span class="attachment-name">{{ a.name }}</span>
+            <span class="attachment-meta">{{ attachmentMeta(a) }}</span>
+            <button type="button" class="attachment-remove" @click="removeAttachment(a.id)" :aria-label="'Remove ' + a.name" title="Remove from this chat">×</button>
+          </div>
+        </div>
         <div class="toolbar">
           <select
             :value="currentPersonaId"
@@ -701,17 +683,6 @@ const Home = {
             </template>
           </select>
 
-          <!-- Documents button — badge shows indexed doc count -->
-          <button
-            class="clear-btn docs-btn"
-            :class="{ 'has-docs': indexedDocuments.length > 0 }"
-            @click="docsOpen = !docsOpen"
-            title="Indexed documents"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            Docs<span v-if="indexedDocuments.length > 0" class="doc-badge">{{ indexedDocuments.length }}</span>
-          </button>
-
           <button
             class="clear-btn"
             @click="clearConversation"
@@ -724,12 +695,12 @@ const Home = {
             Clear
           </button>
 
-          <label class="upload-btn" title="Upload file">
+          <label class="upload-btn" title="Attach a document to this chat (PDF, TXT, Markdown)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
-            <span>{{ uploadedFileName || 'Upload' }}</span>
-            <input type="file" accept=".pdf,.txt,.md" @change="uploadFile" style="display:none" />
+            <span>Attach</span>
+            <input type="file" accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" style="display:none" />
           </label>
 
           <!-- Cancel download button — shown only while model is downloading -->
@@ -842,17 +813,17 @@ const Home = {
       return groups.filter(g => g.models.length > 0);
     });
     const conversationRestored = ref(false); // guard: restore once per page load
-    const uploadedFileName = ref("");
     const currentSessionId = ref("");
     const sessions = sharedSessions;
     const sidebarOpen = sharedSidebarOpen;
-    const docsOpen = ref(false);
     const modelSizes = sharedModelSizes;
     const isDownloading = sharedIsDownloading;
-    const indexedDocuments = sharedIndexedDocs;
-    const ingestState = sharedIngestState;
     const webgpuError = sharedWebgpuError;
-    const ragSources = ref([]);       // filenames used in last response
+    // Documents attached to the chat on screen: attachments for the chips,
+    // attachmentRecords with the full text (and chunks) for the worker.
+    const attachments = ref([]);  // [{ id, name, chars, status, current, total, error }]
+    let attachmentRecords = [];
+    const legacyDocs = ref([]);   // file names in the old shared index
     const CACHED_KEY = "webllm-cached-models";
     // Tracks the model that was cancelled so applySettings won't re-trigger it
     const postCancelModel = ref("");
@@ -1063,7 +1034,6 @@ const Home = {
       });
 
       loading.value = true;
-      ragSources.value = [];
       getWorker().postMessage({
         type: "generate",
         prompt: question.content,
@@ -1109,7 +1079,6 @@ const Home = {
 
       prompt.value = "";
       loading.value = true;
-      ragSources.value = []; // clear previous indicator
 
       getWorker().postMessage({
         type: "generate",
@@ -1118,67 +1087,122 @@ const Home = {
       });
     }
 
-    async function uploadFile(event) {
-      const file = event.target.files[0];
+    // ── Attached documents ───────────────────────────────────────────────
 
-      if (!file) {
-        return;
+    function attachmentView(record, extra = {}) {
+      const needsIndex = !record.chunks && record.chars > INDEX_MIN_CHARS;
+      return {
+        id: record.id,
+        name: record.name,
+        chars: record.chars,
+        status: needsIndex ? "indexing" : "ready",
+        current: 0,
+        total: 0,
+        error: "",
+        ...extra,
+      };
+    }
+
+    function attachmentMeta(a) {
+      if (a.status === "reading") return "Reading…";
+      if (a.status === "indexing") return a.total ? `Indexing ${a.current}/${a.total}` : "Indexing…";
+      if (a.status === "error") return "Can't search it";
+      return a.chars >= 1000 ? `${Math.round(a.chars / 1000)}k chars` : `${a.chars} chars`;
+    }
+
+    // Tell the worker which documents belong to the chat on screen
+    function sendAttachments() {
+      getWorker().postMessage({
+        type: "set-attachments",
+        chatId: currentSessionId.value,
+        docs: attachmentRecords.map(r => ({ id: r.id, name: r.name, text: r.text, chunks: r.chunks || null })),
+      });
+    }
+
+    async function loadAttachments(chatId) {
+      let list = [];
+      try { list = await (await chatStoreReady).listAttachments(chatId); } catch {}
+      if (chatId !== currentSessionId.value) return; // another chat opened meanwhile
+      attachmentRecords = list;
+      attachments.value = list.map(r => attachmentView(r));
+      sendAttachments();
+    }
+
+    async function readDocumentText(file) {
+      const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+      if (!isPdf) return await file.text();
+      const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+      let text = "";
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const content = await (await pdf.getPage(n)).getTextContent();
+        text += content.items.map(item => item.str).join(" ") + "\n";
       }
+      return text;
+    }
+
+    // Attach a file to the chat on screen
+    async function attachFile(event) {
+      const file = event.target.files[0];
+      event.target.value = ""; // so the same file can be attached again
+      if (!file) return;
 
       const maxMB = settings.value.maxFileSizeMB || 50;
-      const MAX_FILE_BYTES = maxMB * 1024 * 1024;
-      if (file.size > MAX_FILE_BYTES) {
+      if (file.size > maxMB * 1024 * 1024) {
         status.value = `⚠ ${file.name} is too large (${(file.size / 1048576).toFixed(1)} MB). Maximum is ${maxMB} MB.`;
-        event.target.value = "";
         return;
       }
 
-      uploadedFileName.value = file.name;
-      status.value = `Reading ${file.name}...`;
+      const id = genId();
+      const chatId = currentSessionId.value;
+      attachments.value = [...attachments.value, { id, name: file.name, chars: 0, status: "reading" }];
+      const drop = message => {
+        attachments.value = attachments.value.filter(a => a.id !== id);
+        status.value = message;
+      };
 
-      let text = "";
-
-      if (file.type === "application/pdf") {
-
-        const arrayBuffer =
-          await file.arrayBuffer();
-
-        const pdf =
-          await pdfjsLib.getDocument({
-            data: arrayBuffer,
-          }).promise;
-
-        for (
-          let pageNum = 1; pageNum <= pdf.numPages; pageNum++
-        ) {
-
-          const page =
-            await pdf.getPage(pageNum);
-
-          const content =
-            await page.getTextContent();
-
-          const strings =
-            content.items.map(
-              item => item.str
-            );
-
-          text += strings.join(" ") + "\n";
-        }
-
-      } else {
-
-        text = await file.text();
+      let text;
+      try {
+        text = (await readDocumentText(file)).trim();
+      } catch (err) {
+        drop(`⚠ Couldn't read ${file.name}: ${err.message}`);
+        return;
+      }
+      if (!text) {
+        drop(`⚠ No text found in ${file.name} (scanned PDFs without a text layer can't be read)`);
+        return;
+      }
+      if (text.length > MAX_ATTACHMENT_CHARS) {
+        drop(`⚠ ${file.name} is too long (${Math.round(text.length / 1000)}k characters). The maximum is ${MAX_ATTACHMENT_CHARS / 1000}k (~200 pages).`);
+        return;
       }
 
-      getWorker().postMessage({
-        type: "ingest",
-        filename: file.name,
-        text,
-      });
+      const record = { id, chatId, name: file.name, text, chars: text.length, ts: Date.now(), chunks: null };
+      writeQueue = writeQueue
+        .then(async () => (await chatStoreReady).saveAttachment(record))
+        .catch(err => { status.value = `⚠ Couldn't save ${file.name}: ${err.message}`; });
+      if (chatId !== currentSessionId.value) return; // chat changed while reading
 
-      // Reset so re-uploading the same file triggers onChange again
-      event.target.value = "";
+      attachmentRecords = [...attachmentRecords, record];
+      attachments.value = attachments.value.map(a => a.id === id ? attachmentView(record) : a);
+      saveConversation(); // keeps a chat that so far only has a document
+      sendAttachments();
+      status.value = `📎 ${file.name} attached to this chat`;
+    }
+
+    function removeAttachment(id) {
+      attachmentRecords = attachmentRecords.filter(r => r.id !== id);
+      attachments.value = attachments.value.filter(a => a.id !== id);
+      writeQueue = writeQueue
+        .then(async () => (await chatStoreReady).deleteAttachment(id))
+        .catch(err => console.warn("Failed removing attachment", err));
+      sendAttachments();
+      // A chat that was only an attachment goes away with it
+      if (!messages.value.length && !attachmentRecords.length) removeChat(currentSessionId.value);
+    }
+
+    function removeLegacyDocs() {
+      getWorker().postMessage({ type: "delete-legacy-documents" });
+      legacyDocs.value = [];
     }
 
     async function onWorkerMessage(event) {
@@ -1266,6 +1290,7 @@ const Home = {
                 type: "restore-history",
                 history: historyForWorker(msgs),
               });
+              sendAttachments();
             }
           }
           break;
@@ -1435,34 +1460,36 @@ const Home = {
           break;
         }
 
-        case "rag-context":
-          ragSources.value = data.sources || [];
+        case "legacy-documents":
+          legacyDocs.value = data.files || [];
           break;
 
-        case "documents-updated":
-          indexedDocuments.value = data.documents || [];
+        case "attachment-progress":
+          if (data.chatId !== currentSessionId.value) break;
+          attachments.value = attachments.value.map(a => a.id === data.id
+            ? { ...a, status: "indexing", current: data.current, total: data.total }
+            : a);
           break;
 
-        case "ingest-progress":
-          ingestState.value = {
-            filename: data.filename,
-            current: data.current,
-            total: data.total,
-          };
+        case "attachment-indexed": {
+          const record = attachmentRecords.find(r => r.id === data.id);
+          if (record) {
+            record.chunks = data.chunks;
+            writeQueue = writeQueue
+              .then(async () => (await chatStoreReady).saveAttachment(record))
+              .catch(err => console.warn("Failed saving document index", err));
+          }
+          if (data.chatId === currentSessionId.value) {
+            attachments.value = attachments.value.map(a => a.id === data.id ? { ...a, status: "ready" } : a);
+          }
           break;
+        }
 
-        case "ingest-done":
-          ingestState.value = null;
-          status.value = `✓ ${data.filename} indexed (${data.chunks} chunks)`;
-          break;
-
-        case "ingest-error":
-          ingestState.value = null;
-          status.value = `⚠ Failed to index ${data.filename}: ${data.error}`;
-          break;
-
-        case "ingest-queued":
-          status.value = `⏳ ${data.filename} queued — waiting for generation to finish...`;
+        case "attachment-error":
+          if (data.chatId !== currentSessionId.value) break;
+          attachments.value = attachments.value.map(a => a.id === data.id
+            ? { ...a, status: "error", error: `Couldn't prepare this document for search (${data.error}). The beginning of it is still used.` }
+            : a);
           break;
       }
     }
@@ -1770,15 +1797,6 @@ const Home = {
       // UI will update when the worker sends "response" with partial text
     }
 
-    function deleteDocument(filename) {
-      getWorker().postMessage({ type: "delete-document", filename });
-    }
-
-    function clearDocuments() {
-      getWorker().postMessage({ type: "clear-documents" });
-      indexedDocuments.value = [];
-    }
-
     function cancelDownload() {
       if (!isDownloading.value) return;
       isDownloading.value = false;
@@ -1886,8 +1904,12 @@ const Home = {
       const allSessions = [];
       for (const entry of sessions.value) {
         let msgs = [];
+        let docs = [];
         try { msgs = await store.getMessages(entry.id); } catch {}
-        allSessions.push({ ...entry, messages: msgs });
+        try { docs = await store.listAttachments(entry.id); } catch {}
+        // Documents travel as text; large ones are prepared for search again on import
+        const attachedDocs = docs.map(d => ({ id: d.id, name: d.name, text: d.text, chars: d.chars, ts: d.ts }));
+        allSessions.push({ ...entry, messages: msgs, ...(attachedDocs.length ? { attachments: attachedDocs } : {}) });
       }
       // Also include the chat on screen if it hasn't been saved yet
       if (messages.value.length > 0 && !sessions.value.some(s => s.id === currentSessionId.value)) {
@@ -1963,12 +1985,21 @@ const Home = {
             persona:  session.persona || DEFAULT_PERSONA_ID,
             ts:       session.ts      || Date.now(),
             messages: session.messages,
+            attachments: (Array.isArray(session.attachments) ? session.attachments : [])
+              .filter(d => d && typeof d.text === "string" && d.text && d.name),
           });
           existingIds.add(session.id);
           if (fp) existingFingerprints.add(fp);
         }
 
-        writeQueue = writeQueue.then(() => store.putMany(toAdd));
+        writeQueue = writeQueue.then(async () => {
+          await store.putMany(toAdd);
+          for (const chat of toAdd) {
+            for (const d of chat.attachments) {
+              await store.saveAttachment({ id: d.id || genId(), chatId: chat.id, name: d.name, text: d.text, chars: d.text.length, ts: d.ts || Date.now(), chunks: null });
+            }
+          }
+        });
         await writeQueue;
         await refreshSessions();
         const added = toAdd.length;
@@ -2076,11 +2107,11 @@ const Home = {
     function saveConversation() {
       if (!currentSessionId.value) return writeQueue;
       const toSave = plainMessages(messages.value);
-      if (!toSave.length) return writeQueue;
+      if (!toSave.length && !attachmentRecords.length) return writeQueue;
 
       const meta = {
         id: currentSessionId.value,
-        title: titleFromMessages(toSave),
+        title: toSave.length ? titleFromMessages(toSave) : `📎 ${attachmentRecords[0].name}`,
         preview: previewFromMessages(toSave),
         model: settings.value.model || "",
         persona: currentPersonaId.value,
@@ -2115,6 +2146,13 @@ const Home = {
         getWorker().postMessage({ type: "generate", prompt: unanswered, config: liveConfig() });
       }
     }
+
+    // Whenever another chat is on screen, load its attachments
+    Vue.watch(currentSessionId, id => {
+      attachmentRecords = [];
+      attachments.value = [];
+      if (id) loadAttachments(id);
+    });
 
     // Open a chat from the sidebar
     async function loadSession(id) {
@@ -2166,6 +2204,8 @@ const Home = {
         // Empty the screen first, or starting a new chat would save the
         // deleted one again
         messages.value = [];
+        attachmentRecords = [];
+        attachments.value = [];
         removeChat(id);
         newChat();
         return;
@@ -2459,8 +2499,12 @@ const Home = {
       messages,
       messagesContainer,
       send,
-      uploadFile,
-      uploadedFileName,
+      attachFile,
+      attachments,
+      attachmentMeta,
+      removeAttachment,
+      legacyDocs,
+      removeLegacyDocs,
       models,
       modelGroups,
       settings,
@@ -2486,12 +2530,6 @@ const Home = {
       searchResults,
       searchPending,
       onSearchInput,
-      indexedDocuments,
-      ingestState,
-      ragSources,
-      docsOpen,
-      deleteDocument,
-      clearDocuments,
       webgpuError,
       exportSettings,
       importSettings,
@@ -2711,7 +2749,7 @@ const Settings = {
           <button v-if="checkedCount" class="action-btn secondary" style="margin-top:10px" @click="forgetModelHealth">
             Forget check results ({{ checkedCount }})
           </button>
-          <p class="section-hint" style="margin-top:8px">Offline, chats work with models you have already downloaded; downloading a model, and the first document upload (which fetches a small search model), need a connection.</p>
+          <p class="section-hint" style="margin-top:8px">Offline, chats work with models you have already downloaded; downloading a model, and the first large document you attach (which fetches a small search model), need a connection.</p>
           <p class="section-hint" style="margin-top:8px">Each model is checked once after its first load on this device. Forgetting the results checks them again, for example after a browser or driver update.</p>
         </section>
 

@@ -1,8 +1,10 @@
 // Chat storage.
 //
 // Chats live in IndexedDB (database "webllm-chats"):
-//   chats     { id, title, preview, model, persona, ts }   - the sidebar list
-//   messages  { id, messages: [...] }                       - one record per chat
+//   chats        { id, title, preview, model, persona, ts }   - the sidebar list
+//   messages     { id, messages: [...] }                       - one record per chat
+//   attachments  { id, chatId, name, text, chars, ts, chunks } - documents attached
+//                to a chat (chunks: [{ text, embedding }] for large ones)
 // so the sidebar loads without reading every message. There is no limit on
 // the number of chats or messages beyond the browser's storage quota.
 //
@@ -15,7 +17,7 @@
 // works.
 
 const DB_NAME = "webllm-chats";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // 2: attachments
 
 const LEGACY_INDEX = "webllm-sessions-index";
 const LEGACY_PREFIX = "webllm-session:";
@@ -71,6 +73,9 @@ function openDatabase(timeoutMs = 5000) {
       const db = request.result;
       if (!db.objectStoreNames.contains("chats")) db.createObjectStore("chats", { keyPath: "id" });
       if (!db.objectStoreNames.contains("messages")) db.createObjectStore("messages", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("attachments")) {
+        db.createObjectStore("attachments", { keyPath: "id" }).createIndex("chatId", "chatId");
+      }
     };
     request.onsuccess = () => { clearTimeout(timer); resolve(request.result); };
     request.onerror = () => { clearTimeout(timer); reject(request.error); };
@@ -110,10 +115,33 @@ class IndexedDbStore {
     return this.putMany([{ ...meta, messages }]);
   }
 
+  // Delete a chat with its messages and attachments
   async delete(id) {
-    const tx = this.db.transaction(["chats", "messages"], "readwrite");
+    const tx = this.db.transaction(["chats", "messages", "attachments"], "readwrite");
     tx.objectStore("chats").delete(id);
     tx.objectStore("messages").delete(id);
+    const attachments = tx.objectStore("attachments");
+    const keys = await promisify(attachments.index("chatId").getAllKeys(id));
+    keys.forEach(k => attachments.delete(k));
+    await committed(tx);
+  }
+
+  // ── attachments ──
+  async listAttachments(chatId) {
+    const tx = this.db.transaction("attachments", "readonly");
+    const all = await promisify(tx.objectStore("attachments").index("chatId").getAll(chatId));
+    return all.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  }
+
+  async saveAttachment(attachment) {
+    const tx = this.db.transaction("attachments", "readwrite");
+    tx.objectStore("attachments").put(plain(attachment));
+    await committed(tx);
+  }
+
+  async deleteAttachment(id) {
+    const tx = this.db.transaction("attachments", "readwrite");
+    tx.objectStore("attachments").delete(id);
     await committed(tx);
   }
 }
@@ -122,6 +150,9 @@ class IndexedDbStore {
 class LocalStorageStore {
   constructor() {
     this.kind = "localstorage";
+    // Documents would overflow localStorage's ~5 MB quota, so attachments
+    // are kept for this visit only.
+    this.attachments = new Map();
   }
 
   readIndex() {
@@ -168,6 +199,19 @@ class LocalStorageStore {
   async delete(id) {
     localStorage.removeItem(LEGACY_PREFIX + id);
     localStorage.setItem(LEGACY_INDEX, JSON.stringify(this.readIndex().filter(c => c.id !== id)));
+    for (const [key, a] of this.attachments) if (a.chatId === id) this.attachments.delete(key);
+  }
+
+  async listAttachments(chatId) {
+    return [...this.attachments.values()].filter(a => a.chatId === chatId).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  }
+
+  async saveAttachment(attachment) {
+    this.attachments.set(attachment.id, plain(attachment));
+  }
+
+  async deleteAttachment(id) {
+    this.attachments.delete(id);
   }
 }
 

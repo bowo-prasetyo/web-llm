@@ -11,6 +11,11 @@ import {
 
 import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
+import { looksDegenerate, checkSample } from "./quality.js";
+import { fitToContext } from "./context.js";
+
+// Keep in sync with the import URL above; shown in Settings → This device.
+const WEBLLM_VERSION = "0.2.84";
 
 // The UI sends the current chat persona's prompt as USER_CONFIG.system_prompt.
 // Fallback used when it is not set.
@@ -82,6 +87,60 @@ const MODEL_SIZES_MB = {
   // StableLM
   "stablelm-2-zephyr-1_6b-q4f16_1-MLC":           2088,
 };
+
+// q4f32 versions of models the main list only has as q4f16. They are shown
+// only on devices where 16-bit models fail or aren't supported (some GPUs
+// compute 16-bit math wrongly and q4f16 models then reply with garbage).
+const F32_ALTERNATIVES_MB = {
+  "Qwen2.5-Coder-0.5B-Instruct-q4f32_1-MLC":   1060,
+  "Qwen3-0.6B-q4f32_1-MLC":                    1925,
+  "Qwen3-1.7B-q4f32_1-MLC":                    2635,
+  "stablelm-2-zephyr-1_6b-q4f32_1-MLC":        2999,
+  "Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC":   1889,
+  "Qwen2.5-Math-1.5B-Instruct-q4f32_1-MLC":    1889,
+  "Hermes-3-Llama-3.2-3B-q4f32_1-MLC":         2952,
+  "Qwen2.5-Coder-3B-Instruct-q4f32_1-MLC":     2894,
+  "Qwen3-4B-q4f32_1-MLC":                      4328,
+  "Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC":     5900,
+  "Qwen3-8B-q4f32_1-MLC":                      6853,
+  "Hermes-3-Llama-3.1-8B-q4f32_1-MLC":         5779,
+  "DeepSeek-R1-Distill-Qwen-7B-q4f32_1-MLC":   5900,
+  "DeepSeek-R1-Distill-Llama-8B-q4f32_1-MLC":  6101,
+  "gemma-2-9b-it-q4f32_1-MLC":                 8383,
+};
+const ALT_MODELS = Object.keys(F32_ALTERNATIVES_MB);
+Object.assign(MODEL_SIZES_MB, F32_ALTERNATIVES_MB);
+
+function modelsMessage() {
+  return {
+    type: "models",
+    models: AVAILABLE_MODELS,
+    altModels: ALT_MODELS,
+    sizes: MODEL_SIZES_MB,
+  };
+}
+
+// WebLLM version, GPU name and 16-bit shader support, for Settings.
+async function postDiagnostics() {
+  let gpu = null;
+  let shaderF16 = null;
+  try {
+    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null;
+    if (adapter) {
+      const info = adapter.info || {};
+      gpu = [info.vendor, info.architecture, info.description]
+        .filter(Boolean).join(" ") || "Unknown GPU";
+      shaderF16 = adapter.features.has("shader-f16");
+    }
+  } catch {}
+  postMessage({
+    type: "diagnostics",
+    webllmVersion: WEBLLM_VERSION,
+    webgpu: !!navigator.gpu,
+    gpu,
+    shaderF16,
+  });
+}
 
 const AVAILABLE_MODELS = [
   // ── ~100–400M — ultra-micro ─────────────────────────────────────────
@@ -512,11 +571,16 @@ async function initialize() {
 
     try {
 
+      // The context window is a chat option (third argument); WebLLM
+      // ignores it in the engine config. sliding_window_size must be off
+      // when a context window size is given.
+      const chatOpts = MODEL_CONFIG.contextWindowSize
+        ? { context_window_size: MODEL_CONFIG.contextWindowSize, sliding_window_size: -1 }
+        : undefined;
+
       engine = await CreateMLCEngine(
         MODEL,
         {
-          contextWindowSize:
-            MODEL_CONFIG.contextWindowSize,
           initProgressCallback: (progress) => {
             const pct = Math.round((progress.progress || 0) * 100);
             const isDownloading =
@@ -529,7 +593,8 @@ async function initialize() {
               progress: pct,
             });
           },
-        }
+        },
+        chatOpts
       );
 
     } catch (err) {
@@ -549,6 +614,22 @@ async function initialize() {
         message.includes("Failed to create WebGPU") ||
         message.includes("GPU device lost") ||
         message.includes("requestAdapter");
+
+      // q4f16 model on a GPU without 16-bit shader support: report it like
+      // a failed model check so the UI can offer the q4f32 version.
+      if (message.includes("shader-f16")) {
+        engine = null;
+        initializingPromise = null;
+        postMessage({
+          type: "model-check",
+          model: MODEL,
+          ok: false,
+          reason: "no-f16",
+          sample: "",
+        });
+        postMessage({ type: "status", text: "This model needs 16-bit GPU support" });
+        return;
+      }
 
       if (gpuCrash) {
 
@@ -588,6 +669,12 @@ async function initialize() {
     // so a past crash doesn't pin the device to safe mode forever.
     saveToOPFS("gpu-instability.flag", "0").catch(() => {});
 
+    if (USER_CONFIG && USER_CONFIG.selfTest) {
+      // Only once per load request; re-inits (auto-unload) skip it.
+      USER_CONFIG.selfTest = false;
+      await runModelCheck();
+    }
+
     await loadVectorDB();
 
     // If we have indexed documents, pre-load the embedder now so
@@ -613,6 +700,32 @@ async function initialize() {
   return initializingPromise;
 }
 
+// Ask for a few words and make sure they aren't junk. Catches GPUs whose
+// 16-bit math is broken, where q4f16 models reply "outer outer outer…".
+async function runModelCheck() {
+  postMessage({ type: "status", text: "Checking that the model works on this GPU..." });
+  try {
+    const reply = await engine.chat.completions.create({
+      messages: [{ role: "user", content: "Say hello in one short sentence." }],
+      max_tokens: 12,
+      temperature: 0,
+    });
+    const sample = reply.choices?.[0]?.message?.content || "";
+    const verdict = checkSample(sample);
+    postMessage({
+      type: "model-check",
+      model: MODEL,
+      ok: verdict.ok,
+      reason: verdict.reason,
+      sample: sample.slice(0, 120),
+    });
+  } catch (err) {
+    // A check that can't run says nothing about the model; skip it.
+    console.warn("Model check skipped", err);
+  }
+  try { if (engine && engine.resetChat) await engine.resetChat(); } catch {}
+}
+
 async function generate(prompt) {
   
   try {
@@ -624,9 +737,19 @@ async function generate(prompt) {
     
     await initialize();
   
-    const maxTokens =
-      computeMaxTokens();
-    
+    // Context window the engine was loaded with (WebLLM's default is 4096).
+    const contextWindow = MODEL_CONFIG.contextWindowSize || 4096;
+
+    // Leave at least half the window for the prompt and history.
+    const maxTokens = Math.min(
+      computeMaxTokens(),
+      Math.floor(contextWindow / 2)
+    );
+
+    let degenerate = false; // reply collapsed into repeated words
+    let degenerateCheck = 0; // chunks since start, to check every few
+    let timedOut = false;
+
     let history = [
       {
         role: "system",
@@ -657,7 +780,7 @@ async function generate(prompt) {
         .map(item => `[${item.filename}]\n${item.text}`)
         .join("\n\n---\n\n");
 
-      const augmentedPrompt = context
+      let augmentedPrompt = context
         ? `Relevant context from uploaded documents:\n\n${context}\n\n---\nUser question: ${prompt}`
         : prompt;
 
@@ -668,7 +791,7 @@ async function generate(prompt) {
       });
 
       // Track which files contributed context so UI can show it
-      const contextSources = [...new Set(relevantChunks.map(c => c.filename))];
+      let contextSources = [...new Set(relevantChunks.map(c => c.filename))];
 
       // Always pin the system message — slice only the non-system tail
       // so MAX_HISTORY evictions never strip the model's instructions.
@@ -676,6 +799,21 @@ async function generate(prompt) {
         const sys = history[0]?.role === "system" ? [history[0]] : [];
         const rest = history.slice(sys.length);
         history = [...sys, ...rest.slice(-Math.max(MAX_HISTORY - 1, 4))];
+      }
+
+      // Fit everything into the context window: drop the oldest turns,
+      // then the document context, so WebLLM doesn't reject the prompt.
+      {
+        const fitted = fitToContext({
+          history,
+          prompt,
+          augmentedPrompt,
+          contextWindow,
+          maxTokens,
+        });
+        history = fitted.history;
+        augmentedPrompt = fitted.augmentedPrompt;
+        if (fitted.droppedContext) contextSources = [];
       }
 
       // Build a one-shot history for the API that replaces the last user turn
@@ -755,6 +893,7 @@ async function generate(prompt) {
             type: "status",
             text: "Response truncated: generation time limit reached",
           });
+          timedOut = true;
           finishReason = null; // prevent continuation loop
           break;
         }
@@ -780,6 +919,13 @@ async function generate(prompt) {
       
         partial += delta;
         tokenCount += delta.split(/\s+/).length;
+
+        // Stop a reply that has collapsed into repeated junk words
+        if (++degenerateCheck % 8 === 0 && looksDegenerate(partial)) {
+          degenerate = true;
+          finishReason = null; // prevent continuation loop
+          break;
+        }
       
         postMessage({
           type: "stream",
@@ -809,6 +955,13 @@ async function generate(prompt) {
     } catch (err) {
 
       const message = err?.message || "";
+
+      if (message.includes("exceed context window")) {
+        throw new Error(
+          "This conversation no longer fits in the model's context window. " +
+          "Start a new chat, or raise Context Window in Settings."
+        );
+      }
 
       // "deleted object as a pointer of type Tokenizer*" means the WASM engine
       // was destroyed mid-generation (race with set-config). Reset so next
@@ -951,6 +1104,12 @@ async function generate(prompt) {
         continuation += delta;
         tokenCount += delta.split(/\s+/).length;
 
+        if (++degenerateCheck % 8 === 0 && looksDegenerate(answer + continuation)) {
+          degenerate = true;
+          finishReason = null;
+          break;
+        }
+
         postMessage({
           type: "stream",
           text: answer + continuation,
@@ -1000,6 +1159,19 @@ async function generate(prompt) {
 
     }
 
+    // No usable reply: tell the UI why, and leave the model's memory as it
+    // was before this question so a retry starts clean.
+    if (degenerate || !answer.trim()) {
+      const outcome = degenerate
+        ? "degenerate"
+        : timedOut ? "timeout"
+        : STOP_REQUESTED ? "stopped"
+        : "empty";
+      postMessage({ type: "status", text: `Ready (${DEVICE_PROFILE.name})` });
+      postMessage({ type: "response", text: "", outcome, model: MODEL });
+      return;
+    }
+
     history.push({
       role: "assistant",
       content: answer,
@@ -1038,11 +1210,8 @@ self.onmessage = async (event) => {
   try {
     switch (data.type) {
       case "init":
-        postMessage({
-          type: "models",
-          models: AVAILABLE_MODELS,
-          sizes: MODEL_SIZES_MB,
-        });
+        postMessage(modelsMessage());
+        postDiagnostics();
         break;
               
       case "set-config": {
@@ -1163,11 +1332,7 @@ self.onmessage = async (event) => {
         break;
 
       case "models":
-        postMessage({
-          type: "models",
-          models: AVAILABLE_MODELS,
-          sizes: MODEL_SIZES_MB,
-        });
+        postMessage(modelsMessage());
         break;
 
       case "restore-history":

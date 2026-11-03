@@ -257,6 +257,67 @@ function setupOffline() {
 }
 setupOffline();
 
+// ── "New version available" ───────────────────────────────────────────────
+// A tab can stay open across a deploy (and the service worker only notices
+// changes to sw.js itself). So the app fingerprints its own files when it
+// starts and checks again every 30 minutes and when the tab comes back into
+// view; if anything changed it offers to reload. The check also refreshes
+// the offline copies, so the reload gets the new version even when slow.
+const sharedUpdateAvailable = vRef(false);
+const APP_FILES = [
+  "./index.html", "./app.js", "./worker.js", "./sw.js", "./style.css",
+  "./personas.js", "./markdown.js", "./quality.js", "./context.js",
+  "./picker.js", "./chatstore.js", "./attachments.js",
+];
+const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
+const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
+let appFingerprint = null;
+let lastUpdateCheck = 0;
+
+// FNV-1a over the files' text: enough to notice a change
+async function fingerprintAppFiles() {
+  const texts = await Promise.all(APP_FILES.map(async file => {
+    const res = await fetch(file, { cache: "no-cache" });
+    if (!res.ok) throw new Error(`${file}: ${res.status}`);
+    return res.text();
+  }));
+  let h = 2166136261;
+  const all = texts.join("\u0000");
+  for (let i = 0; i < all.length; i++) h = Math.imul(h ^ all.charCodeAt(i), 16777619);
+  return (h >>> 0).toString(16) + ":" + all.length;
+}
+
+// Returns true when a newer version was found. Offline or failed checks
+// change nothing.
+async function checkForUpdate() {
+  if (!navigator.onLine) return false;
+  try {
+    const fingerprint = await fingerprintAppFiles();
+    lastUpdateCheck = Date.now();
+    if (appFingerprint === null) {
+      appFingerprint = fingerprint;
+      return false;
+    }
+    if (fingerprint !== appFingerprint) {
+      sharedUpdateAvailable.value = true;
+      return true;
+    }
+  } catch (err) {
+    console.warn("Update check failed", err);
+  }
+  return false;
+}
+
+setTimeout(checkForUpdate, 3000);
+setInterval(checkForUpdate, UPDATE_CHECK_EVERY_MS);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && Date.now() - lastUpdateCheck > UPDATE_CHECK_MIN_GAP_MS) {
+    checkForUpdate();
+  }
+});
+// For tests and debugging: check right away
+window.webllmCheckForUpdate = checkForUpdate;
+
 const Home = {
   template: `
     <div class="container">
@@ -515,6 +576,15 @@ const Home = {
         <span class="status-dot" :class="{ active: !modelLoading && !loading }"></span>
         <span class="status-text">{{ status }}</span>
         <span v-if="!online" class="offline-badge" title="No internet connection. Downloaded models still work.">Offline</span>
+      </div>
+
+      <!-- A newer version of the app was deployed while this tab was open -->
+      <div v-if="updateAvailable && !updateDismissed" class="update-banner" role="status">
+        <span class="update-text">A new version of the app is available.</span>
+        <button type="button" class="action-btn primary update-reload" @click="reloadApp" :disabled="loading">
+          {{ loading ? "Reload after this reply" : "Reload" }}
+        </button>
+        <button type="button" class="update-dismiss" @click="updateDismissed = true" title="Later" aria-label="Dismiss">×</button>
       </div>
 
       <div class="messages" ref="messagesContainer" @click="onMessagesClick">
@@ -2461,9 +2531,21 @@ const Home = {
       }, 280);
     }
 
+    // Reload into the new version once the chat on screen is saved
+    const updateDismissed = ref(false);
+    async function reloadApp() {
+      if (loading.value) return;
+      saveConversation();
+      try { await writeQueue; } catch {}
+      location.reload();
+    }
+
     return {
       prompt,
       promptInput,
+      updateAvailable: sharedUpdateAvailable,
+      updateDismissed,
+      reloadApp,
       online: sharedOnline,
       picker,
       uses: USES,

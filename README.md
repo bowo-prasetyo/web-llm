@@ -224,6 +224,7 @@ conversation so far is kept).
 * **Custom persona** — fully editable instructions; changes take effect on the next message without reloading the model; **Reset to Friendly instructions** restores a starting point
 * Personas only change the system prompt; temperature and the other generation settings stay as you set them
 * Persona prompts are kept short on purpose: small in-browser models follow short, plain instructions much better than long rule lists. They live in `personas.js`.
+* Every built-in persona is told to stay consistent with what it said earlier, and to gently correct the user instead of agreeing with something that isn't right (small models otherwise tend to go along with whatever the user says)
 * Settings from earlier versions are migrated automatically: if you had edited the old system prompt, it becomes your Custom persona and stays your default; otherwise you move to Friendly
 
 ### This device
@@ -286,6 +287,7 @@ After one visit while online, the app works without an internet connection:
 * Offline, the status bar shows an **Offline** badge; picking a model that isn't downloaded yet explains that it needs a connection instead of failing
 * Downloading a new model, and the first large document attached (which fetches a small search model), need a connection
 * App updates still arrive: when online, the app's own files are always fetched fresh first (falling back to the saved copy after 4 seconds or when offline)
+* A tab left open across an update shows **"A new version of the app is available"** with a **Reload** button: the app checks its files when it starts, every 30 minutes, and when the tab comes back into view
 * **Settings → This device** shows whether the app is saved for offline use, and has an **Install app** button where the browser supports it (Chrome, Edge, Android). On iPhone/iPad use Safari's **Share → Add to Home Screen**
 
 Service workers need `https` or `localhost`, so offline mode works on GitHub Pages and with the local server below.

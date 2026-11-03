@@ -1,9 +1,12 @@
 // Pinned to 0.2.84. WebLLM 0.2.86 produces garbage text ("outer outer
 // outer…") with the same models and settings that work on 0.2.84, so check
 // a real chat before moving this pin to a newer version.
+// Loaded straight from jsDelivr (esm.run only redirects there), so the
+// service worker (sw.js) can keep a copy for offline use; keep the URL in
+// sync with the LIBS list in sw.js.
 import {
   CreateMLCEngine
-} from "https://esm.run/@mlc-ai/web-llm@0.2.84";
+} from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm";
 
 import {
   pipeline

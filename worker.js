@@ -1,6 +1,6 @@
 import {
   CreateMLCEngine
-} from "https://esm.run/@mlc-ai/web-llm";
+} from "https://esm.run/@mlc-ai/web-llm@0.2.86";
 
 import {
   pipeline
@@ -479,6 +479,26 @@ async function detectBestModel() {
   };
 }
 
+// Copy the sampling parameters (everything that can change without
+// reloading the model) from a UI config object into MODEL_CONFIG.
+function applySamplingConfig(config) {
+  if (!config) return;
+  USER_CONFIG = { ...(USER_CONFIG || {}), ...config };
+  const keys = [
+    "max_tokens",
+    "temperature",
+    "top_p",
+    "frequency_penalty",
+    "presence_penalty",
+    "repetition_penalty",
+  ];
+  for (const key of keys) {
+    if (typeof config[key] === "number" && !Number.isNaN(config[key])) {
+      MODEL_CONFIG[key] = config[key];
+    }
+  }
+}
+
 async function initialize() {
 
   if (initializingPromise) {
@@ -543,6 +563,8 @@ async function initialize() {
 
         postMessage({
           type: "fatal",
+          reason: "gpu-crash",
+          fallbackModel: SMALLEST_MODEL,
           text: "GPU became unstable. Restarting in safe GPU mode.",
         });
 
@@ -566,6 +588,10 @@ async function initialize() {
       throw err;
     }
     
+    // A successful load means the GPU is healthy again: clear the flag
+    // so a past crash doesn't pin the device to safe mode forever.
+    saveToOPFS("gpu-instability.flag", "0").catch(() => {});
+
     await loadVectorDB();
 
     // If we have indexed documents, pre-load the embedder now so
@@ -815,6 +841,8 @@ async function generate(prompt) {
       
         postMessage({
           type: "fatal",
+          reason: "gpu-crash",
+          fallbackModel: SMALLEST_MODEL,
           text:
             "GPU inference crashed. Restarting in safe GPU mode.",
         });
@@ -1036,14 +1064,9 @@ self.onmessage = async (event) => {
           });
         }
 
-        const prevModel = USER_CONFIG?.model;
+        // SESSION_HISTORY is intentionally kept across model switches so
+        // the new model continues the same conversation.
         USER_CONFIG = data.config;
-
-        // Clear SESSION_HISTORY only when the model actually changes —
-        // not on same-model reloads caused by tab resume / engine restart.
-        if (prevModel && prevModel !== data.config.model) {
-          SESSION_HISTORY = [];
-        }
 
         // If an initialize() is already in flight, wait for it to settle
         // before tearing down, to avoid racing with an ongoing load.
@@ -1085,7 +1108,15 @@ self.onmessage = async (event) => {
         break;
       }
               
+      case "update-config":
+        // Sampling parameters and system prompt: no model reload needed.
+        applySamplingConfig(data.config);
+        break;
+
       case "generate":
+        // The UI sends its current settings with every message so edits
+        // (system prompt, temperature, …) apply without pressing Apply.
+        applySamplingConfig(data.config);
         await generate(data.prompt);
         break;
 

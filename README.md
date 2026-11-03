@@ -25,17 +25,17 @@ https://bowo-prasetyo.github.io/web-llm/
 * Conversation persistence across tab closures and mobile screen-off events
 * Auto-resume of unanswered questions after tab suspension
 * Duplicate send prevention on manual resend after tab resume
-* 40+ selectable LLM models across 10+ model families, grouped by size tier
+* 40 selectable LLM models across 10+ model families, grouped by size tier
 * Switch models mid-conversation without clearing chat history
 * Download confirmation with size estimate on first model use
 * Cancel download at any time during model fetch
 * Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
-* Persistent local settings (model, temperature, top-p, penalties, context window, system prompt)
+* Persistent local settings (model, temperature, top-p, penalties, context window, system prompt), saved as you edit them
 * Configurable maximum file upload size (1–200 MB, default 50 MB)
 * Export settings to a JSON file and import on another browser
 * Export all chat sessions to a JSON file and import (merge) on another browser — no duplicates
-* Streaming AI responses with live token display
+* Streaming AI responses with a live word count
 * GPU-accelerated inference using WebGPU
 * Friendly WebGPU error screen with troubleshooting steps when GPU is unavailable
 * Web Worker isolation for a fully responsive UI during inference
@@ -57,7 +57,7 @@ https://bowo-prasetyo.github.io/web-llm/
 
 ## Supported Models
 
-40+ models are available, ordered from lightest to heaviest. The model
+40 models are available, ordered from lightest to heaviest. The model
 dropdown in the app groups them by size tier using `<optgroup>` labels.
 
 ### Ultra-micro (100–400M)
@@ -158,15 +158,15 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 
 ### Model
 
-* **Model selection** — choose from 40+ models grouped by size tier; switching models preserves the current conversation
+* **Model selection** — choose from 40 models grouped by size tier; switching models keeps the current conversation, and the new model continues it with the same history. Picking a different model applies that model's recommended generation defaults.
 
 ### Generation
 
 * **Temperature** — randomness of output (0.0–2.0); low = focused, high = creative
 * **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
 * **Max Tokens** — maximum number of tokens to generate per response (16–2048)
-* **Context Window** — conversation history visible to the model (512–8192 tokens); requires model reload
-* **Max Upload Size** — maximum file size for document uploads (1–200 MB, default 50 MB)
+* **Context Window** — conversation history visible to the model (512–8192 tokens); the only generation setting that reloads the model
+* **Max Upload Size** — maximum file size for document uploads (1–200 MB, default 50 MB); the extracted text is also limited to 500,000 characters (~200 pages)
 
 ### Repetition Control
 
@@ -177,7 +177,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 ### System Prompt
 
 * Fully editable instructions given to the model before every conversation
-* Changes take effect on the next message without reloading the model
+* Changes are saved as you type and take effect on the next message without reloading the model
 * **Reset to Default** restores the built-in factual accuracy prompt
 
 ### Export / Import
@@ -187,7 +187,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 * **Export Chats** — download all saved sessions as a `webllm-sessions-YYYY-MM-DD.json` file including full message content
 * **Import Chats** — merge sessions from an exported file into the current browser; duplicate sessions are detected by ID and content fingerprint and skipped automatically
 
-All settings are automatically persisted in `localStorage`.
+All settings are automatically persisted in `localStorage` and survive page reloads. Generation settings (temperature, top-p, max tokens, penalties) and the system prompt apply to the next message; **Apply Settings** reloads the model only when the model or context window changed.
 
 ## Multi-session Chat
 
@@ -196,7 +196,8 @@ All settings are automatically persisted in `localStorage`.
 * Previously saved chats are listed with auto-generated title, preview, model, and timestamp
 * Tap any session to restore it — messages and model context are both recovered
 * Tap the **🗑 trash icon** on any session to delete it
-* Up to 50 sessions are retained; oldest are pruned automatically
+* Up to 50 sessions are retained; the oldest are deleted automatically, including their stored messages
+* Each session keeps its most recent 40 messages
 * Sessions survive page reloads, tab closures, and mobile screen-off events
 * Unanswered questions (tab closed mid-generation) are automatically re-sent on next open
 
@@ -277,7 +278,7 @@ Supported document formats for RAG ingestion:
 * TXT
 * Markdown
 
-Maximum file size is configurable in Settings (default **50 MB**, up to 200 MB). Files exceeding the limit are rejected before parsing.
+Maximum file size is configurable in Settings (default **50 MB**, up to 200 MB). Files exceeding the limit are rejected before parsing. Extracted text over 500,000 characters (~200 pages) is rejected before indexing.
 
 Uploaded files are processed entirely locally:
 
@@ -354,15 +355,15 @@ Streaming Response → UI
 
 | Feature | Description |
 |---|---|
-| GPU crash recovery | Detects lost-device errors, saves flag to OPFS, restarts in safe GPU mode |
+| GPU crash recovery | Detects lost-device errors and restarts on the lightest model (asking before downloading it); a second crash stops and shows the troubleshooting screen instead of looping |
 | WebGPU unavailable | Catches incompatible GPU errors, shows friendly troubleshooting screen with retry |
 | Tokenizer crash recovery | Detects WASM `Tokenizer*` errors, resets engine for clean next request |
 | Generation timeout | Hard time limit per generation; delivers partial result rather than discarding |
-| Streaming stall detection | Kills hung streams after configurable inactivity timeout |
+| Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; the generation time limit ends the stream |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |
 | Cancel download | User can abort a model fetch; cached-model list cleaned up so confirmation re-appears |
 | Continuation deduplication | Overlap removal at seam between multi-chunk continuations |
-| Repetition detection | Stops generation if output becomes looping |
+| Repetition detection | Stops continuing a long answer if the continuation starts looping |
 | Model swap guard | Waits for active generation to complete before unloading the engine |
 | Auto-unload | Releases GPU memory after 30 minutes of inactivity |
 | Conservative GPU defaults | Low-end device profile applies smaller token budgets |
@@ -381,8 +382,9 @@ Streaming Response → UI
 | Tab-resume restore | On page reload or mobile resume, the last session is restored automatically |
 | Unanswered question resume | If the tab closed mid-generation, the question is automatically re-sent on next open |
 | Duplicate prevention | Manual resend of the same question is deduplicated |
-| Full-content search | Search titles, questions, and answers across all sessions with highlighted excerpts |
-| Mid-conversation model switch | Switching models continues the current conversation rather than clearing it |
+| Full-content search | Search titles, questions, and answers across all saved messages with highlighted excerpts |
+| Mid-conversation model switch | Switching models continues the current conversation: the chat history is handed to the new model |
+| Pinned dependencies | WebLLM, Vue and Vue Router load at fixed versions, so an upstream release can't change the app unexpectedly |
 | Legacy migration | Existing single-session data is migrated to the multi-session format on first run |
 | Settings export / import | Transfer all settings to another browser via a JSON file |
 | Session export / import | Transfer all chat sessions to another browser; merges without duplicating |
@@ -399,7 +401,7 @@ Streaming Response → UI
 * 3B+ models work best on dedicated GPUs with 4+ GB VRAM
 * 7B+ models require 6+ GB VRAM and may not run on most mobile devices
 * WebGPU support is still evolving — Chrome and Edge are most reliable
-* Switching models mid-conversation is supported; generation defaults update automatically
+* Switching models mid-conversation is supported; the new model keeps the conversation and its recommended generation defaults are applied
 * Safari WebGPU support is available from macOS 14 / iOS 17 but may be less stable
 * The embedding model for RAG (~23 MB) is downloaded separately on first document upload
 * Imported sessions are merged non-destructively — existing sessions are never overwritten

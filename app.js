@@ -4,6 +4,7 @@ import {
   DEFAULT_PERSONA_PROMPT,
   getPersona,
 } from "./personas.js";
+import { renderMarkdown, splitThinking, stripThinking } from "./markdown.js";
 
 const {
   createApp,
@@ -264,7 +265,7 @@ const Home = {
         {{ status }}
       </div>
 
-      <div class="messages" ref="messagesContainer">
+      <div class="messages" ref="messagesContainer" @click="onMessagesClick">
         <!-- Welcome screen for an empty chat: pick a persona, try a starter -->
         <div v-if="messages.length === 0" class="welcome">
           <h2 class="welcome-title">What would you like to chat about?</h2>
@@ -299,16 +300,53 @@ const Home = {
           </p>
         </div>
         <div
-          v-for="(message, index) in messages"
-          :key="index"
+          v-for="item in viewMessages"
+          :key="item.index"
           :class="[
             'message',
-            message.role === 'assistant-stream'
-              ? 'assistant'
-              : message.role
+            item.message.role === 'user' ? 'user' : 'assistant',
+            { streaming: item.streaming, error: item.message.isError }
           ]"
         >
-          {{ message.content }}
+          <template v-if="item.message.role === 'user'">{{ item.message.content }}</template>
+          <template v-else>
+            <!-- Reasoning of thinking models: live while streaming, then folded -->
+            <details
+              v-if="item.thinking !== null"
+              class="thinking"
+              :open="item.streaming && !item.thinkingDone"
+            >
+              <summary>
+                <span v-if="item.thinkingDone">Thought process</span>
+                <span v-else class="thinking-live">Thinking…</span>
+              </summary>
+              <div class="md thinking-body" v-html="item.thinkingHtml"></div>
+            </details>
+            <div v-if="item.answerHtml" class="md" v-html="item.answerHtml"></div>
+            <div v-if="!item.streaming" class="msg-actions">
+              <button
+                type="button"
+                class="msg-action"
+                @click="copyMessage(item)"
+                :title="copiedIndex === item.index ? 'Copied' : 'Copy reply'"
+              >
+                <svg v-if="copiedIndex !== item.index" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {{ copiedIndex === item.index ? "Copied" : "Copy" }}
+              </button>
+              <button
+                v-if="item.isLast"
+                type="button"
+                class="msg-action"
+                @click="regenerate"
+                :disabled="loading || modelLoading"
+                :title="item.message.isError ? 'Try again' : 'Regenerate reply'"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                {{ item.message.isError ? "Retry" : "Regenerate" }}
+              </button>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -613,7 +651,112 @@ const Home = {
       return msgs
         .filter(m => m.role === "user" || m.role === "assistant")
         .filter(m => !(m.role === "assistant" && m.isError))
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => ({
+          role: m.role,
+          content: m.role === "assistant" ? stripThinking(m.content) : m.content,
+        }))
+        .filter(m => m.content.trim());
+    }
+
+    // Messages prepared for display. Assistant replies are rendered as
+    // sanitized markdown (memoized, so only the streaming reply re-renders),
+    // with any <think> reasoning split out.
+    const copiedIndex = ref(-1);
+    const viewMessages = Vue.computed(() => {
+      const list = messages.value;
+      return list.map((message, index) => {
+        const isLast = index === list.length - 1;
+        if (message.role === "user") {
+          return { message, index, isLast, streaming: false };
+        }
+        const streaming = message.role === "assistant-stream";
+        const parts = splitThinking(message.content);
+        const highlight = !streaming;
+        return {
+          message,
+          index,
+          isLast,
+          streaming,
+          thinking: parts.thinking,
+          thinkingDone: parts.thinkingDone,
+          thinkingHtml: parts.thinking ? renderMarkdown(parts.thinking, { highlight }) : "",
+          answerHtml: parts.answer ? renderMarkdown(parts.answer, { highlight }) : "",
+        };
+      });
+    });
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Clipboard API unavailable (e.g. plain-HTTP origin): old fallback
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand("copy"); } catch {}
+        ta.remove();
+        return ok;
+      }
+    }
+
+    let copiedTimer = null;
+    async function copyMessage(item) {
+      // Copy the markdown source of the answer, without the reasoning.
+      if (await copyText(stripThinking(item.message.content))) {
+        copiedIndex.value = item.index;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => { copiedIndex.value = -1; }, 1500);
+      }
+    }
+
+    // Copy buttons inside rendered code blocks (plain HTML from v-html,
+    // so they are handled by delegation).
+    async function onMessagesClick(event) {
+      const button = event.target.closest && event.target.closest(".code-copy");
+      if (!button) return;
+      const code = button.closest(".code-block")?.querySelector("code");
+      if (!code) return;
+      if (await copyText(code.textContent)) {
+        button.textContent = "Copied";
+        button.classList.add("copied");
+        setTimeout(() => {
+          button.textContent = "Copy";
+          button.classList.remove("copied");
+        }, 1500);
+      }
+    }
+
+    // Replace the last reply with a fresh one for the same question.
+    function regenerate() {
+      if (loading.value || modelLoading.value) return;
+      const list = messages.value;
+      const last = list[list.length - 1];
+      const question = list[list.length - 2];
+      if (!last || last.role !== "assistant" || !question || question.role !== "user") return;
+
+      list.splice(list.length - 1, 1);
+      saveConversation();
+
+      // Rewind the model's memory to just before the question; generate
+      // then adds the question again.
+      getWorker().postMessage({
+        type: "restore-history",
+        history: historyForWorker(list.slice(0, -1)),
+      });
+
+      loading.value = true;
+      ragSources.value = [];
+      getWorker().postMessage({
+        type: "generate",
+        prompt: question.content,
+        config: liveConfig(),
+      });
     }
 
     function addMessage(role, content) {
@@ -1338,7 +1481,8 @@ const Home = {
     function previewFromMessages(msgs) {
       const last = [...msgs].reverse().find(m => m.role === "assistant");
       if (!last) return "";
-      return last.content.trim().slice(0, 60) + (last.content.length > 60 ? "…" : "");
+      const text = stripThinking(last.content).trim();
+      return text.slice(0, 60) + (text.length > 60 ? "…" : "");
     }
 
     function loadIndex() {
@@ -1814,6 +1958,11 @@ const Home = {
     return {
       prompt,
       promptInput,
+      viewMessages,
+      copiedIndex,
+      copyMessage,
+      onMessagesClick,
+      regenerate,
       personas: PERSONAS,
       currentPersonaId,
       currentPersona,

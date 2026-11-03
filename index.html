@@ -9,6 +9,19 @@
 
   <script src="https://unpkg.com/vue@3.5.44/dist/vue.global.prod.js"></script>
   <script src="https://unpkg.com/vue-router@4.6.4/dist/vue-router.global.prod.js"></script>
+
+  <!-- Markdown rendering for replies: parser, sanitizer, syntax highlighting.
+       Pinned versions with integrity hashes. If they fail to load, replies
+       are shown as plain text. -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.1.1/lib/marked.umd.js"
+    integrity="sha384-rATToyt6602Jnq8c7w8HZwmyOUgPL7mzxX01FBWoV48ns/EgkakGozpES+PnaYOI"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.17/dist/purify.min.js"
+    integrity="sha384-P0JNneQf81HOl9VwNXK76cQ9VMD6Nfsnepxb0cCOg8+UzEdzgPHAPV4wVQrvYQSx"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.12.0/highlight.min.js"
+    integrity="sha384-wjfDDhOPPdjtva8vWBhWeVprSpmxisEu5aYT3q1JyACqXpdKpo3PWZTMVq24MBix"
+    crossorigin="anonymous"></script>
 </head>
 <body>
   <div id="app"></div>

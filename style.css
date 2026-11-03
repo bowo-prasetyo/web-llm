@@ -1265,3 +1265,154 @@ html, body, #app {
   font-size: 12px;
   padding: 8px 12px;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   PERSONAS
+══════════════════════════════════════════════════════════════ */
+
+/* Toolbar persona picker */
+.persona-select {
+  flex-shrink: 0;
+  max-width: 140px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color .15s;
+}
+.persona-select:hover { border-color: var(--amber-dim); }
+.persona-select:focus { border-color: var(--amber); }
+
+/* Welcome screen shown in an empty chat */
+.welcome {
+  margin: auto;
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 12px 0;
+  animation: msgIn .25s ease-out;
+}
+.welcome-title {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+}
+.welcome-sub {
+  font-size: 13.5px;
+  color: var(--text-2);
+  margin-top: -6px;
+}
+
+.persona-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.persona-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.persona-card:hover { border-color: var(--amber-dim); background: var(--surface-2); }
+.persona-card:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.persona-card.active {
+  border-color: var(--amber);
+  background: var(--amber-glow);
+  box-shadow: var(--glow);
+}
+.persona-icon { font-size: 18px; line-height: 1.2; }
+.persona-name { font-size: 13.5px; font-weight: 600; }
+.persona-card.active .persona-name { color: var(--amber-text); }
+.persona-tagline {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.starter-list {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.starter-chip {
+  max-width: 100%;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+.starter-chip:hover { color: var(--text); border-color: var(--amber-dim); }
+.starter-chip:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+.welcome-note {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* Persona icon before a chat title in the sidebar */
+.session-persona { margin-right: 5px; }
+
+/* Settings: persona section */
+.subsection-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 18px 0 4px;
+}
+.persona-default-select { min-width: 170px; }
+.persona-prompt-preview {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.persona-prompt-preview summary { cursor: pointer; padding: 4px 0; }
+.persona-prompt-preview summary:hover { color: var(--text); }
+.persona-prompt-preview pre {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--text-2);
+}
+
+@media (max-width: 500px) {
+  .persona-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .persona-select { max-width: 110px; font-size: 12px; }
+  .welcome-title { font-size: 17px; }
+}

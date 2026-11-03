@@ -6,19 +6,11 @@ import {
   pipeline
 } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
-// System prompt is now user-configurable via Settings.
-// Fallback used when USER_CONFIG.system_prompt is not set.
-const DEFAULT_SYSTEM_PROMPT = `You are a concise, factually accurate AI assistant.
+import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 
-Rules you must never break:
-- Never contradict established science, physics, or basic facts (e.g. humans have mass).
-- NEVER guess or invent an answer. If you are not certain, respond only with "I'm not sure." Do not elaborate.
-- Do not add philosophical or metaphysical tangents to simple factual questions.
-- Do not contradict yourself within the same conversation.
-- Keep answers short and direct unless the user asks for detail.
-- Never redefine ordinary words in unusual ways to rescue a wrong answer.
-- If the user states a correct fact, accept it. Do not contradict correct information the user provides.
-- Only correct the user if you are certain they are factually wrong.`;
+// The UI sends the current chat persona's prompt as USER_CONFIG.system_prompt.
+// Fallback used when it is not set.
+const DEFAULT_SYSTEM_PROMPT = DEFAULT_PERSONA_PROMPT;
 
 function getSystemPrompt() {
   return (USER_CONFIG && USER_CONFIG.system_prompt)

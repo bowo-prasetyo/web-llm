@@ -5,6 +5,13 @@ import {
   getPersona,
 } from "./personas.js";
 import { renderMarkdown, splitThinking, stripThinking } from "./markdown.js";
+import {
+  USES,
+  TIERS,
+  pickModelId,
+  recommendTier,
+  friendlyModelName,
+} from "./picker.js";
 
 const {
   createApp,
@@ -194,6 +201,7 @@ let sharedImportSettings   = () => {};
 let sharedExportSessions   = () => {};
 let sharedImportSessions   = () => {};
 let sharedForgetModelHealth = () => {};
+let sharedOpenPicker = () => {};
 
 const Home = {
   template: `
@@ -246,6 +254,74 @@ const Home = {
             <button class="action-btn secondary" @click="keepModelAnyway">Keep this model</button>
             <button v-if="healthModal.suggestion" class="action-btn primary" @click="switchToSuggestion">Switch model</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Model picker: first launch, or "Help me choose a model" -->
+      <div v-if="picker.show" class="modal-overlay" @click.self="closePicker">
+        <div class="modal picker" role="dialog" aria-labelledby="picker-title">
+          <template v-if="picker.step === 1">
+            <h2 class="modal-title" id="picker-title">
+              {{ picker.firstRun ? "Welcome! Let's pick a model" : "Choose a model" }}
+            </h2>
+            <p class="modal-body picker-intro">
+              Everything runs privately in your browser. The model downloads once and is kept for next time.
+            </p>
+            <p class="picker-question">What will you mostly use it for?</p>
+            <div class="picker-options">
+              <button
+                v-for="u in uses"
+                :key="u.id"
+                type="button"
+                class="picker-option"
+                :class="{ active: picker.use === u.id }"
+                @click="chooseUse(u.id)"
+              >
+                <span class="picker-icon" aria-hidden="true">{{ u.icon }}</span>
+                <span class="picker-text">
+                  <strong>{{ u.title }}</strong>
+                  <span class="picker-desc">{{ u.desc }}</span>
+                </span>
+              </button>
+            </div>
+            <div class="modal-actions picker-actions">
+              <button type="button" class="link-btn" @click="closePicker">
+                {{ picker.firstRun ? "Skip, I'll choose myself" : "Cancel" }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <h2 class="modal-title" id="picker-title">Pick a size</h2>
+            <p class="picker-device">{{ deviceSummary }}</p>
+            <div class="picker-options">
+              <button
+                v-for="o in pickerOptions"
+                :key="o.id"
+                type="button"
+                class="picker-option tier"
+                :class="{ active: picker.tier === o.id }"
+                @click="picker.tier = o.id"
+              >
+                <span class="picker-text">
+                  <span class="picker-head">
+                    <strong>{{ o.title }}</strong>
+                    <span v-if="o.recommended" class="picker-badge">Recommended</span>
+                    <span v-if="o.current" class="picker-badge muted">In use</span>
+                  </span>
+                  <span class="picker-model">{{ o.name }}</span>
+                  <span class="picker-meta">{{ o.cached ? "Already downloaded" : "~" + formatSize(o.sizeMb) + " download" }}</span>
+                  <span class="picker-desc">{{ o.desc }}</span>
+                </span>
+              </button>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="action-btn secondary" @click="picker.step = 1">Back</button>
+              <button type="button" class="action-btn primary" @click="confirmPick" :disabled="!selectedPick">
+                {{ selectedPick && selectedPick.cached ? "Start" : "Download & start" }}
+              </button>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -416,8 +492,15 @@ const Home = {
               @click="useStarter(s)"
             >{{ s }}</button>
           </div>
+          <button
+            v-if="!lastAppliedModel && !modelLoading"
+            type="button"
+            class="action-btn primary choose-model-btn"
+            @click="openPicker()"
+          >Choose a model to start</button>
           <p class="welcome-note">
             Runs privately in your browser. AI can make mistakes, so double-check important facts.
+            <button v-if="lastAppliedModel" type="button" class="link-btn inline" @click="openPicker()">Help me choose a model</button>
           </p>
         </div>
         <div
@@ -944,6 +1027,12 @@ const Home = {
     async function send() {
       const text = prompt.value.trim();
 
+      // No model chosen yet (first launch, picker skipped): choose one first
+      if (text && !lastAppliedModel.value && !modelLoading.value) {
+        openPicker();
+        return;
+      }
+
       if (!text || loading.value || modelLoading.value) {
         return;
       }
@@ -1225,13 +1314,22 @@ const Home = {
               // Restore last known good model after worker restart
               settings.value.model = lastAppliedModel.value;
             } else if (!postCancelModel.value) {
-              // First launch or stale saved model — auto-select lightest cached model,
-              // or fall back to first in list
-              const cachedInList = getCachedModels().find(m => data.models.includes(m));
-              settings.value.model = cachedInList || data.models[0];
-              // Saved settings belonged to a different model: use this
+              // First launch, or a saved model that no longer exists. Use a
+              // model that is already downloaded if there is one; otherwise
+              // let the user choose instead of downloading one unasked.
+              const cachedInList = getCachedModels().find(m => known.includes(m));
+              // Saved settings belonged to a different model: use the new
               // model's defaults instead.
               hasSavedSettings = false;
+              if (cachedInList) {
+                settings.value.model = cachedInList;
+              } else {
+                settings.value.model = "";
+                sessions.value = loadIndex();
+                if (!currentSessionId.value) currentSessionId.value = genId();
+                status.value = "Choose a model to start";
+                openPicker({ firstRun: true });
+              }
             }
           }
 
@@ -1420,6 +1518,102 @@ const Home = {
     function forgetModelHealth() {
       sharedModelHealth.value = {};
       saveModelHealth();
+    }
+
+    // ── Model picker ─────────────────────────────────────────────────────
+    const picker = ref({ show: false, step: 1, use: "chat", tier: "balanced", firstRun: false });
+
+    function deviceInfo() {
+      const uaMobile = navigator.userAgentData?.mobile;
+      const mobile = typeof uaMobile === "boolean"
+        ? uaMobile
+        : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+      const memoryGB = typeof navigator.deviceMemory === "number" ? navigator.deviceMemory : undefined;
+      return { mobile, memoryGB };
+    }
+
+    // q4f16 models only where 16-bit GPU math is known not to be a problem
+    function f16Usable() {
+      return !f16Problem();
+    }
+
+    const deviceSummary = computed(() => {
+      const { mobile, memoryGB } = deviceInfo();
+      const parts = [mobile ? "Phone or tablet" : "Computer"];
+      if (memoryGB) parts.push(`about ${memoryGB} GB memory`);
+      const d = sharedDiagnostics.value;
+      if (!f16Usable()) parts.push("16-bit GPU math not reliable, so these are q4f32 models");
+      else if (d && d.shaderF16 === true) parts.push("16-bit GPU math supported");
+      return "Your device: " + parts.join(" · ");
+    });
+
+    const pickerOptions = computed(() => {
+      const recommended = recommendTier(deviceInfo());
+      const known = allModels();
+      return TIERS.map(t => {
+        const id = pickModelId(picker.value.use, t.id, f16Usable());
+        return {
+          ...t,
+          model: id,
+          name: friendlyModelName(id),
+          sizeMb: modelSizes.value[id] || 0,
+          cached: isModelCached(id),
+          recommended: t.id === recommended,
+          current: id === lastAppliedModel.value,
+          available: known.length === 0 || known.includes(id),
+        };
+      }).filter(o => o.available);
+    });
+
+    const selectedPick = computed(() =>
+      pickerOptions.value.find(o => o.id === picker.value.tier) || null);
+
+    function formatSize(mb) {
+      if (!mb) return "?";
+      return mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB";
+    }
+
+    function openPicker({ firstRun = false } = {}) {
+      const persona = settings.value.defaultPersona;
+      const use = (USES.find(u => u.persona === persona) || USES[0]).id;
+      picker.value = {
+        show: true,
+        step: 1,
+        use,
+        tier: recommendTier(deviceInfo()),
+        firstRun,
+      };
+      sidebarOpen.value = false;
+    }
+
+    function chooseUse(id) {
+      picker.value.use = id;
+      picker.value.step = 2;
+    }
+
+    function closePicker() {
+      picker.value.show = false;
+      if (!lastAppliedModel.value && !modelLoading.value) {
+        status.value = "Choose a model to start";
+      }
+    }
+
+    // Load the chosen model. The picker already showed the download size,
+    // so the separate download confirmation is skipped. The use also sets
+    // the default persona (and this chat's, if it hasn't started yet).
+    function confirmPick() {
+      const pick = selectedPick.value;
+      if (!pick) return;
+      const use = USES.find(u => u.id === picker.value.use) || USES[0];
+      picker.value.show = false;
+      settings.value.defaultPersona = use.persona;
+      if (messages.value.length === 0) currentPersonaId.value = use.persona;
+      if (pick.model === lastAppliedModel.value) {
+        saveSettings();
+        return;
+      }
+      settings.value.model = pick.model;
+      applySettings(true);
     }
 
     async function applySettings(skipConfirm = false) {
@@ -2040,6 +2234,7 @@ const Home = {
     sharedExportSessions   = exportSessions;
     sharedImportSessions   = importSessions;
     sharedForgetModelHealth = forgetModelHealth;
+    sharedOpenPicker = () => openPicker();
 
     getWorker().onmessage = onWorkerMessage;
     function onWorkerError(err) {
@@ -2227,6 +2422,17 @@ const Home = {
     return {
       prompt,
       promptInput,
+      picker,
+      uses: USES,
+      pickerOptions,
+      selectedPick,
+      deviceSummary,
+      formatSize,
+      openPicker,
+      chooseUse,
+      closePicker,
+      confirmPick,
+      lastAppliedModel,
       modelOptionLabel,
       healthModal,
       switchToSuggestion,
@@ -2318,6 +2524,9 @@ const Settings = {
             </template>
           </select>
           <p class="section-hint">You can switch models mid-conversation. Generation defaults will update automatically.</p>
+          <button class="action-btn secondary" style="margin-top:10px" @click="$router.push('/'); openPicker()">
+            Help me choose a model
+          </button>
         </section>
 
         <section class="settings-section">
@@ -2585,6 +2794,7 @@ const Settings = {
       f16Problem,
       f16Status,
       forgetModelHealth: () => sharedForgetModelHealth(),
+      openPicker: () => sharedOpenPicker(),
       exportSettings:  sharedExportSettings,
       importSettings:  sharedImportSettings,
       exportSessions:  sharedExportSessions,

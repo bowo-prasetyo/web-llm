@@ -1,6 +1,9 @@
+// Pinned to 0.2.84. WebLLM 0.2.86 produces garbage text ("outer outer
+// outer…") with the same models and settings that work on 0.2.84, so check
+// a real chat before moving this pin to a newer version.
 import {
   CreateMLCEngine
-} from "https://esm.run/@mlc-ai/web-llm@0.2.86";
+} from "https://esm.run/@mlc-ai/web-llm@0.2.84";
 
 import {
   pipeline

@@ -417,7 +417,7 @@ Streaming Response → UI
 | Duplicate prevention | Manual resend of the same question is deduplicated |
 | Full-content search | Search titles, questions, and answers across all saved messages with highlighted excerpts |
 | Mid-conversation model switch | Switching models continues the current conversation: the chat history is handed to the new model |
-| Pinned dependencies | WebLLM, Vue, Vue Router, marked, DOMPurify and highlight.js load at fixed versions (the Markdown libraries with integrity hashes), so an upstream release can't change the app unexpectedly |
+| Pinned dependencies | WebLLM (0.2.84; 0.2.86 produced garbage output), Vue, Vue Router, marked, DOMPurify and highlight.js load at fixed versions (the Markdown libraries with integrity hashes), so an upstream release can't change the app unexpectedly |
 | Safe reply rendering | Model output is rendered as Markdown with raw HTML escaped and the result sanitized by DOMPurify |
 | Legacy migration | Existing single-session data is migrated to the multi-session format on first run |
 | Settings export / import | Transfer all settings to another browser via a JSON file |

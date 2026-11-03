@@ -337,6 +337,24 @@ Then open:
 http://localhost:8080
 ```
 
+## Testing
+
+The app has no build step; `package.json` only holds the test tooling ([Playwright](https://playwright.dev)).
+
+```bash
+npm ci
+npx playwright install chromium
+npm test              # everything (about a minute)
+npm run test:unit     # pure modules only, no browser
+npm run test:e2e      # the app in Chromium
+```
+
+* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js` and `picker.js`
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
+* The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
+* GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
+* When you change a pinned library version, update `index.html`, `sw.js`, `package.json` and `tests/support/fixtures.js` together
+
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository

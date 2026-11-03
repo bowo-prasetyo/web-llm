@@ -1,3 +1,10 @@
+import {
+  PERSONAS,
+  DEFAULT_PERSONA_ID,
+  DEFAULT_PERSONA_PROMPT,
+  getPersona,
+} from "./personas.js";
+
 const {
   createApp,
   ref,
@@ -30,8 +37,30 @@ function replaceWorker(onmessage) {
   return worker;
 }
 
-// Built-in system prompt. "Reset to Default" in Settings restores this.
-const DEFAULT_SYSTEM_PROMPT = "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.";
+// The strict prompt used as the default before personas existed. Kept only
+// to recognise settings that still hold it unedited (see migrateSettings).
+const LEGACY_DEFAULT_SYSTEM_PROMPT = "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.";
+
+// Bring settings saved before personas existed up to date, in place.
+// Someone who edited the old system prompt keeps it as their Custom persona
+// (and as their default, so nothing changes for them). Everyone else moves
+// to the Friendly persona.
+function migrateSettings(saved) {
+  if (!saved || typeof saved !== "object") return saved;
+  if (!("defaultPersona" in saved)) {
+    const prompt = (saved.system_prompt || "").trim();
+    if (prompt && prompt !== LEGACY_DEFAULT_SYSTEM_PROMPT.trim()) {
+      saved.defaultPersona = "custom";
+    } else {
+      saved.defaultPersona = DEFAULT_PERSONA_ID;
+      saved.system_prompt = DEFAULT_PERSONA_PROMPT;
+    }
+  }
+  if (!PERSONAS.some(p => p.id === saved.defaultPersona)) {
+    saved.defaultPersona = DEFAULT_PERSONA_ID;
+  }
+  return saved;
+}
 
 // ── Shared reactive state (accessible to both Home and Settings) ──────────
 const { ref: vRef, reactive } = Vue;
@@ -45,7 +74,10 @@ const sharedSettings  = vRef({
   presence_penalty: 0.0,
   repetition_penalty: 1.0,
   maxFileSizeMB: 50,
-  system_prompt: DEFAULT_SYSTEM_PROMPT,
+  // Persona used for new chats; each chat remembers its own persona.
+  defaultPersona: DEFAULT_PERSONA_ID,
+  // Prompt for the "Custom" persona. Starts as a copy of the default.
+  system_prompt: DEFAULT_PERSONA_PROMPT,
 });
 const sharedModels    = vRef([]);
 const sharedModelGroups = vRef([]); // populated after Home setup() runs
@@ -196,7 +228,7 @@ const Home = {
             @click="loadSession(s.id)"
           >
             <div class="session-meta">
-              <span class="session-title">{{ s.title }}</span>
+              <span class="session-title"><span v-if="s.persona" class="session-persona" :title="personaName(s.persona)">{{ personaIcon(s.persona) }}</span>{{ s.title }}</span>
               <span class="session-date">{{ formatDate(s.ts) }}</span>
             </div>
             <div class="session-preview">{{ s.preview }}</div>
@@ -233,6 +265,39 @@ const Home = {
       </div>
 
       <div class="messages" ref="messagesContainer">
+        <!-- Welcome screen for an empty chat: pick a persona, try a starter -->
+        <div v-if="messages.length === 0" class="welcome">
+          <h2 class="welcome-title">What would you like to chat about?</h2>
+          <p class="welcome-sub">Pick a persona for this chat. You can switch at any time.</p>
+          <div class="persona-grid" role="radiogroup" aria-label="Persona">
+            <button
+              v-for="p in personas"
+              :key="p.id"
+              type="button"
+              role="radio"
+              :aria-checked="p.id === currentPersonaId"
+              class="persona-card"
+              :class="{ active: p.id === currentPersonaId }"
+              @click="setPersona(p.id)"
+            >
+              <span class="persona-icon" aria-hidden="true">{{ p.icon }}</span>
+              <span class="persona-name">{{ p.name }}</span>
+              <span class="persona-tagline">{{ p.tagline }}</span>
+            </button>
+          </div>
+          <div v-if="currentPersona.starters.length" class="starter-list">
+            <button
+              v-for="s in currentPersona.starters"
+              :key="s"
+              type="button"
+              class="starter-chip"
+              @click="useStarter(s)"
+            >{{ s }}</button>
+          </div>
+          <p class="welcome-note">
+            Runs privately in your browser. AI can make mistakes, so double-check important facts.
+          </p>
+        </div>
         <div
           v-for="(message, index) in messages"
           :key="index"
@@ -290,6 +355,15 @@ const Home = {
 
       <div class="footer-container">
         <div class="toolbar">
+          <select
+            :value="currentPersonaId"
+            @change="setPersona($event.target.value)"
+            class="persona-select"
+            title="Persona for this chat"
+            aria-label="Persona for this chat"
+          >
+            <option v-for="p in personas" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
+          </select>
           <select
             v-model="settings.model"
             @change="applySettings"
@@ -351,6 +425,7 @@ const Home = {
 
         <div class="footer">
           <textarea
+            ref="promptInput"
             v-model="prompt"
             placeholder="Ask something… (Enter to send, Shift+Enter for newline)"
             @keydown.enter.exact.prevent="send"
@@ -385,6 +460,10 @@ const Home = {
 
   setup() {
     const prompt = ref("");
+    const promptInput = ref(null);
+    // Persona of the chat on screen. Saved with the chat in the session index.
+    const currentPersonaId = ref(DEFAULT_PERSONA_ID);
+    const currentPersona = Vue.computed(() => getPersona(currentPersonaId.value));
     // Use module-level shared refs so Settings page can read/write the same state
     const loading = sharedLoading;
     const modelLoading = sharedModelLoading;
@@ -490,7 +569,42 @@ const Home = {
 
     // Settings the worker can apply without reloading the model.
     function liveConfig() {
-      return { ...settings.value };
+      return { ...settings.value, system_prompt: effectiveSystemPrompt() };
+    }
+
+    // System prompt for the current chat's persona. Custom uses the prompt
+    // edited in Settings (or the default one if that was left empty).
+    function effectiveSystemPrompt() {
+      const persona = currentPersona.value;
+      if (persona.id === "custom") {
+        return (settings.value.system_prompt || "").trim() || DEFAULT_PERSONA_PROMPT;
+      }
+      return persona.prompt;
+    }
+
+    function personaIcon(id) { return getPersona(id).icon; }
+    function personaName(id) { return getPersona(id).name; }
+
+    // Change the current chat's persona. Applies from the next message;
+    // the chat so far is kept.
+    function setPersona(id) {
+      const persona = getPersona(id);
+      if (persona.id === currentPersonaId.value) return;
+      currentPersonaId.value = persona.id;
+      if (messages.value.length > 0) {
+        saveConversation();
+        status.value = `${persona.icon} ${persona.name} persona: applies from your next message`;
+      }
+    }
+
+    async function useStarter(text) {
+      prompt.value = text;
+      await nextTick();
+      const el = promptInput.value;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(text.length, text.length);
+      }
     }
 
     // Conversation turns to hand to the worker as model memory.
@@ -917,7 +1031,7 @@ const Home = {
     
       getWorker().postMessage({
         type: "set-config",
-        config: { ...settings.value },
+        config: liveConfig(),
       });
     }
             
@@ -1030,7 +1144,7 @@ const Home = {
           throw new Error("Not a valid WebLLM settings file");
         }
         // Merge imported settings into current, skip model to avoid auto-load
-        const { model: _skip, ...rest } = data.settings;
+        const { model: _skip, ...rest } = migrateSettings({ ...data.settings });
         Object.keys(rest).forEach(key => {
           if (key in settings.value || key === "system_prompt") {
             settings.value[key] = rest[key];
@@ -1065,6 +1179,7 @@ const Home = {
             title: titleFromMessages(messages.value) || "Current chat",
             preview: previewFromMessages(messages.value) || "",
             model: settings.value.model || "",
+            persona: currentPersonaId.value,
             ts: Date.now(),
             messages: messages.value.filter(m => m.role !== "assistant-stream"),
           });
@@ -1144,6 +1259,7 @@ const Home = {
             title:   session.title   || "Imported chat",
             preview: session.preview || "",
             model:   session.model   || "",
+            persona: session.persona || DEFAULT_PERSONA_ID,
             ts:      session.ts      || Date.now(),
           });
           existingIds.add(session.id);
@@ -1173,7 +1289,7 @@ const Home = {
       if (!saved) return;
 
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = migrateSettings(JSON.parse(saved));
         hasSavedSettings = true;
         // Merge individual keys rather than replacing the whole object.
         // Replacing settings.value would swap out the reactive object and break
@@ -1266,6 +1382,7 @@ const Home = {
           title: titleFromMessages(toSave),
           preview: previewFromMessages(toSave),
           model: settings.value.model || "",
+          persona: currentPersonaId.value,
           ts: Date.now(),
         };
         if (idx >= 0) index[idx] = entry;
@@ -1295,6 +1412,7 @@ const Home = {
         const parsed = raw ? JSON.parse(raw) : [];
 
         currentSessionId.value = id;
+        currentPersonaId.value = personaForSession(id);
         sidebarOpen.value = false;
 
         const last = parsed[parsed.length - 1];
@@ -1318,11 +1436,19 @@ const Home = {
       } catch (err) { console.warn("Failed loading session", err); }
     }
 
+    // Persona saved with a chat. Chats from before personas existed use
+    // the default persona.
+    function personaForSession(id) {
+      const entry = loadIndex().find(s => s.id === id);
+      return getPersona(entry?.persona || settings.value.defaultPersona).id;
+    }
+
     // Create a brand-new chat session
     function newChat() {
       if (loading.value || modelLoading.value) return;
       saveConversation();
       currentSessionId.value = genId();
+      currentPersonaId.value = settings.value.defaultPersona || DEFAULT_PERSONA_ID;
       messages.value = [];
       conversationRestored.value = true; // suppress auto-restore for new chats
       getWorker().postMessage({ type: "clear-history" });
@@ -1369,12 +1495,14 @@ const Home = {
       if (index.length === 0) {
         // First ever launch — create initial session
         currentSessionId.value = genId();
+        currentPersonaId.value = settings.value.defaultPersona || DEFAULT_PERSONA_ID;
         return;
       }
 
       // Load the most recent session
       const latest = index[0];
       currentSessionId.value = latest.id;
+      currentPersonaId.value = personaForSession(latest.id);
 
       try {
         const raw = localStorage.getItem(sessionKey(latest.id));
@@ -1407,6 +1535,7 @@ const Home = {
       const index = loadIndex().filter(s => s.id !== currentSessionId.value);
       saveIndex(index);
       currentSessionId.value = genId();
+      currentPersonaId.value = settings.value.defaultPersona || DEFAULT_PERSONA_ID;
       getWorker().postMessage({ type: "clear-history" });
     }
 
@@ -1514,6 +1643,7 @@ const Home = {
     onMounted(() => {
     
       loadSettings();
+      currentPersonaId.value = settings.value.defaultPersona || DEFAULT_PERSONA_ID;
       getWorker().postMessage({
         type: "init",
       });
@@ -1683,6 +1813,14 @@ const Home = {
 
     return {
       prompt,
+      promptInput,
+      personas: PERSONAS,
+      currentPersonaId,
+      currentPersona,
+      setPersona,
+      useStarter,
+      personaIcon,
+      personaName,
       loading,
       modelLoading,
       status,
@@ -1856,17 +1994,37 @@ const Settings = {
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">System Prompt</h2>
-          <p class="section-hint" style="margin-bottom:10px">Instructions given to the model before every conversation. Changes take effect on the next message.</p>
+          <h2 class="section-label">Personas</h2>
+          <p class="section-hint" style="margin-bottom:12px">A persona sets how the assistant talks. Each chat keeps its own persona; you can switch it from the chat toolbar at any time.</p>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Default for new chats</span>
+              <span class="setting-desc">{{ defaultPersona.tagline }}</span>
+            </div>
+            <div class="setting-control">
+              <select v-model="settings.defaultPersona" class="settings-select persona-default-select">
+                <option v-for="p in personas" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
+              </select>
+            </div>
+          </div>
+
+          <details v-if="defaultPersona.prompt" class="persona-prompt-preview">
+            <summary>Show the {{ defaultPersona.name }} instructions</summary>
+            <pre>{{ defaultPersona.prompt }}</pre>
+          </details>
+
+          <h3 class="subsection-label">🛠 Custom persona</h3>
+          <p class="section-hint" style="margin-bottom:10px">Write your own instructions, then pick the Custom persona in a chat. Changes take effect on the next message.</p>
           <textarea
             class="system-prompt-editor"
             v-model="settings.system_prompt"
-            placeholder="Enter system prompt..."
+            placeholder="Enter instructions for the Custom persona..."
             rows="7"
             spellcheck="false"
           ></textarea>
           <button class="action-btn secondary" style="margin-top:8px" @click="resetSystemPrompt">
-            Reset to Default
+            Reset to Friendly instructions
           </button>
         </section>
 
@@ -1926,8 +2084,11 @@ const Settings = {
 
   setup() {
     function resetSystemPrompt() {
-      sharedSettings.value.system_prompt = DEFAULT_SYSTEM_PROMPT;
+      sharedSettings.value.system_prompt = DEFAULT_PERSONA_PROMPT;
     }
+
+    const defaultPersona = Vue.computed(() =>
+      getPersona(sharedSettings.value.defaultPersona));
 
     return {
       settings: sharedSettings,
@@ -1941,6 +2102,8 @@ const Settings = {
       clearConversation: sharedClearConversation,
       newChat: sharedNewChat,
       resetSystemPrompt,
+      personas: PERSONAS,
+      defaultPersona,
       exportSettings:  sharedExportSettings,
       importSettings:  sharedImportSettings,
       exportSessions:  sharedExportSessions,

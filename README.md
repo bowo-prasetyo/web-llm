@@ -31,7 +31,7 @@ https://bowo-prasetyo.github.io/web-llm/
 * Cancel download at any time during model fetch
 * Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
-* Persistent local settings (model, temperature, top-p, penalties, context window, system prompt), saved as you edit them
+* Persistent local settings (model, temperature, top-p, penalties, context window, personas), saved as you edit them
 * Configurable maximum file upload size (1–200 MB, default 50 MB)
 * Export settings to a JSON file and import on another browser
 * Export all chat sessions to a JSON file and import (merge) on another browser — no duplicates
@@ -52,7 +52,8 @@ https://bowo-prasetyo.github.io/web-llm/
 * Automatic model unload after inactivity to free GPU memory
 * Conversation history memory with configurable context window
 * Dedicated Settings page with sliders for all generation parameters
-* Editable system prompt with reset-to-default option
+* Six chat personas (Friendly, Precise, Writer, Coder, Brainstorm, Custom), chosen per chat and switchable mid-conversation
+* Welcome screen for new chats with persona cards and starter prompts
 * Mobile-friendly responsive UI with slide-in session sidebar
 
 ## Supported Models
@@ -174,11 +175,27 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 * **Presence Penalty** — encourages the model to introduce new topics (−2 to 2)
 * **Repetition Penalty** — MLC-native multiplicative penalty on repeated tokens (1.0–2.0)
 
-### System Prompt
+### Personas
 
-* Fully editable instructions given to the model before every conversation
-* Changes are saved as you type and take effect on the next message without reloading the model
-* **Reset to Default** restores the built-in factual accuracy prompt
+A persona sets how the assistant talks. Each chat keeps its own persona:
+pick one on the welcome screen of a new chat, or switch at any time from the
+persona menu in the chat toolbar (it applies from your next message, and the
+conversation so far is kept).
+
+| Persona | Best for |
+|---|---|
+| 💬 **Friendly** (default) | Everyday help and easygoing chat |
+| 🎯 **Precise** | Short, factual answers with no tangents; says "I'm not sure" rather than guessing |
+| ✍️ **Writer** | Drafting, rewriting and polishing emails, messages, essays and stories |
+| 💻 **Coder** | Writing, explaining and debugging code |
+| 💡 **Brainstorm** | Exploring ideas and options |
+| 🛠 **Custom** | Your own instructions, written in Settings |
+
+* **Default for new chats** — choose which persona new chats start with
+* **Custom persona** — fully editable instructions; changes take effect on the next message without reloading the model; **Reset to Friendly instructions** restores a starting point
+* Personas only change the system prompt; temperature and the other generation settings stay as you set them
+* Persona prompts are kept short on purpose: small in-browser models follow short, plain instructions much better than long rule lists. They live in `personas.js`.
+* Settings from earlier versions are migrated automatically: if you had edited the old system prompt, it becomes your Custom persona and stays your default; otherwise you move to Friendly
 
 ### Export / Import
 
@@ -187,7 +204,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 * **Export Chats** — download all saved sessions as a `webllm-sessions-YYYY-MM-DD.json` file including full message content
 * **Import Chats** — merge sessions from an exported file into the current browser; duplicate sessions are detected by ID and content fingerprint and skipped automatically
 
-All settings are automatically persisted in `localStorage` and survive page reloads. Generation settings (temperature, top-p, max tokens, penalties) and the system prompt apply to the next message; **Apply Settings** reloads the model only when the model or context window changed.
+All settings are automatically persisted in `localStorage` and survive page reloads. Generation settings (temperature, top-p, max tokens, penalties) and personas apply to the next message; **Apply Settings** reloads the model only when the model or context window changed.
 
 ## Multi-session Chat
 
@@ -258,7 +275,7 @@ http://localhost:8080
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `style.css`)
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `personas.js`, `style.css`)
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -316,6 +333,7 @@ Cached data may include AI model weights (potentially several GB), vector databa
 | `app.js` | Vue 3 UI — routing, session management, settings, worker bridge |
 | `worker.js` | AI inference worker — WebLLM engine, RAG pipeline, streaming |
 | `index.html` | HTML entry point, CDN imports |
+| `personas.js` | Built-in chat personas (prompt, icon, starter prompts), shared by the UI and the worker |
 | `style.css` | UI styling (dark amber design system) |
 
 ### Component overview
@@ -323,7 +341,7 @@ Cached data may include AI model weights (potentially several GB), vector databa
 ```
 app.js
 ├── Home component      — chat view, sidebar, search, model select, toolbar
-├── Settings component  — all generation sliders, system prompt, export/import
+├── Settings component  — all generation sliders, personas, export/import
 └── Shared state        — reactive refs shared between both pages
 
 worker.js
@@ -342,7 +360,7 @@ Semantic Retrieval (OPFS vector DB · relevance threshold 0.25 · top-4 chunks)
     ↓
 Context Injection (current turn only — not stored in conversation history)
     ↓
-System Prompt + History Assembly (system message always pinned)
+Persona System Prompt + History Assembly (system message always pinned)
     ↓
 WebLLM Streaming Generation (temperature · top-p · frequency/presence/repetition penalty)
     ↓
@@ -377,7 +395,7 @@ Streaming Response → UI
 
 | Feature | Description |
 |---|---|
-| Multi-session | Up to 50 saved conversations with auto-generated title, preview, model, and timestamp |
+| Multi-session | Up to 50 saved conversations with auto-generated title, preview, model, persona, and timestamp |
 | Auto-save | Every user message and assistant response is persisted immediately |
 | Tab-resume restore | On page reload or mobile resume, the last session is restored automatically |
 | Unanswered question resume | If the tab closed mid-generation, the question is automatically re-sent on next open |

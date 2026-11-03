@@ -27,7 +27,7 @@ https://bowo-prasetyo.github.io/web-llm/
 * Conversation persistence across tab closures and mobile screen-off events
 * Auto-resume of unanswered questions after tab suspension
 * Duplicate send prevention on manual resend after tab resume
-* 40 selectable LLM models across 10+ model families, grouped by size tier
+* 55 selectable LLM models across 15 model families (including Qwen3.5, Phi-4-mini, Gemma 3, Ministral 3 and OLMo 2), grouped by size tier
 * Switch models mid-conversation without clearing chat history
 * First-run model picker: choose what it's for (chat, coding, writing) and a size (Fast / Balanced / Smart); picks suit the device and avoid 16-bit models where they don't work
 * Download confirmation with size estimate on first model use
@@ -60,8 +60,10 @@ https://bowo-prasetyo.github.io/web-llm/
 
 ## Supported Models
 
-40 models are available, ordered from lightest to heaviest. The model
+55 models are available, ordered from lightest to heaviest. The model
 dropdown in the app groups them by size tier using `<optgroup>` labels.
+**New** marks models added after the original list; all of them are
+supported by the WebLLM version the app uses (0.2.84).
 
 ### Ultra-micro (100–400M)
 
@@ -71,10 +73,12 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 | SmolLM2-360M-Instruct-q4f32_1-MLC | ~580 MB |
 | SmolLM2-360M-Instruct-q0f32-MLC | ~1.7 GB |
 
-### Micro (0.5–0.6B)
+### Micro (0.5–0.8B)
 
 | Model | Approx Size |
 |---|---|
+| Qwen3.5-0.8B-q4f16_1-MLC (new) | ~1.6 GB |
+| Qwen3.5-0.8B-q4f32_1-MLC (new) | ~1.9 GB |
 | Qwen2.5-0.5B-Instruct-q4f16_1-MLC | ~945 MB |
 | Qwen2.5-0.5B-Instruct-q4f32_1-MLC | ~1.1 GB |
 | Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC | ~945 MB |
@@ -84,6 +88,9 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 
 | Model | Approx Size |
 |---|---|
+| gemma3-1b-it-q4f16_1-MLC (new) | ~711 MB |
+| OLMo-2-0425-1B-Instruct-q4f16_1-MLC (new) | ~1.8 GB |
+| OLMo-2-0425-1B-Instruct-q4f32_1-MLC (new) | ~2.5 GB |
 | TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC | ~840 MB |
 | Llama-3.2-1B-Instruct-q4f16_1-MLC | ~879 MB |
 | Llama-3.2-1B-Instruct-q4f32_1-MLC | ~1.1 GB |
@@ -105,6 +112,12 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 
 | Model | Approx Size |
 |---|---|
+| Qwen3.5-2B-q4f16_1-MLC (new) | ~2.2 GB |
+| Qwen3.5-2B-q4f32_1-MLC (new) | ~2.6 GB |
+| Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC (new) | ~2.9 GB |
+| Ministral-3-3B-Instruct-2512-BF16-q4f32_1-MLC (new) | ~3.5 GB |
+| Qwen3.5-4B-q4f16_1-MLC (new) | ~3.9 GB |
+| Qwen3.5-4B-q4f32_1-MLC (new) | ~4.7 GB |
 | gemma-2-2b-it-q4f16_1-MLC | ~1.9 GB |
 | gemma-2-2b-it-q4f32_1-MLC | ~2.5 GB |
 | Llama-3.2-3B-Instruct-q4f16_1-MLC | ~2.3 GB |
@@ -119,6 +132,8 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 
 | Model | Approx Size |
 |---|---|
+| Phi-4-mini-instruct-q4f16_1-MLC (new) | ~3.4 GB |
+| Phi-4-mini-instruct-q4f32_1-MLC (new) | ~4.2 GB |
 | Phi-3.5-mini-instruct-q4f16_1-MLC | ~3.7 GB |
 | Phi-3.5-mini-instruct-q4f32_1-MLC | ~5.5 GB |
 
@@ -126,6 +141,8 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 
 | Model | Approx Size |
 |---|---|
+| Qwen3.5-9B-q4f16_1-MLC (new) | ~6.4 GB |
+| Qwen3.5-9B-q4f32_1-MLC (new) | ~7.5 GB |
 | Qwen2.5-7B-Instruct-q4f16_1-MLC | ~5.1 GB |
 | Qwen2.5-7B-Instruct-q4f32_1-MLC | ~5.9 GB |
 | Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC | ~5.1 GB |
@@ -157,9 +174,11 @@ On first launch the app asks two questions instead of downloading anything:
 
 | Use | Fast | Balanced | Smart |
 |---|---|---|---|
-| Everyday chat | Llama 3.2 1B | Qwen2.5 1.5B | Qwen2.5 3B |
-| Coding | Qwen2.5 Coder 1.5B | Qwen2.5 Coder 3B | Qwen2.5 Coder 7B |
-| Writing | Llama 3.2 1B | Llama 3.2 3B | Llama 3.1 8B |
+| Everyday chat | Qwen3.5 0.8B | Qwen3.5 2B | Qwen3.5 4B |
+| Coding | Qwen3.5 2B | Qwen3.5 4B | Qwen3.5 9B |
+| Writing | Qwen3.5 2B | Qwen3.5 4B | Qwen3.5 9B |
+
+* Qwen3.5 is the newest model generation WebLLM 0.2.84 supports (also what Kovrune recommends for the browser); coding and writing start at 2B, since smaller models mix up code and lose the thread of longer texts
 
 * Fast is recommended on phones and devices reporting 4 GB of memory or less, Balanced otherwise; Smart needs a strong GPU
 * Devices where 16-bit GPU math is unsupported or broken get the q4f32 version of each pick automatically
@@ -172,15 +191,16 @@ On first launch the app asks two questions instead of downloading anything:
 
 | Use Case | Recommended Model |
 |---|---|
-| Lowest resource usage | SmolLM2-360M or Qwen2.5-0.5B |
-| Best stability (mobile) | Llama-3.2-1B |
-| Best general chat | Qwen2.5-1.5B or Qwen3-1.7B |
-| Best coding | Qwen2.5-Coder-3B or Qwen2.5-Coder-7B |
-| Best reasoning | DeepSeek-R1-Distill-Qwen-7B |
-| Best multilingual | Qwen2.5-3B or Qwen3-4B |
-| Best instruction following | Phi-3.5-mini or Hermes-3-Llama-3.1-8B |
-| Best math | Qwen2.5-Math-1.5B |
-| Most capable (high VRAM) | Qwen3-8B or gemma-2-9b |
+| Lowest resource usage | Gemma 3 1B (q4f16 only) or Qwen3.5-0.8B |
+| Phones | Qwen3.5-0.8B or Llama-3.2-1B |
+| General chat | Qwen3.5-2B, or Qwen3.5-4B with a stronger GPU |
+| Coding | Qwen3.5-4B or Qwen3.5-9B (Qwen2.5-Coder is still available) |
+| Writing | Qwen3.5-4B or Ministral-3-3B-Instruct |
+| Reasoning | Qwen3.5 with "Let reasoning models think first" on, or DeepSeek-R1-Distill-Qwen-7B |
+| Multilingual | Qwen3.5-2B or Qwen3.5-4B |
+| Instruction following | Phi-4-mini |
+| Fully open (data and code) | OLMo-2-1B |
+| Most capable (high VRAM) | Qwen3.5-9B |
 
 ## User Settings
 
@@ -188,7 +208,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 
 ### Model
 
-* **Model selection** — choose from 40 models grouped by size tier; switching models keeps the current conversation, and the new model continues it with the same history. Picking a different model applies that model's recommended generation defaults.
+* **Model selection** — choose from 55 models grouped by size tier; switching models keeps the current conversation, and the new model continues it with the same history. Picking a different model applies that model's recommended generation defaults.
 
 ### Generation
 
@@ -196,6 +216,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 * **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
 * **Max Tokens** — maximum length of one reply (16–2048, capped at half the context window). Defaults are 256 for the tiniest models, 512 for 0.5–1B, 768 for 1.5–2B and 1024 for 3B and up. A reply that reaches it is marked "Cut off" with a **Continue** button
 * **Context Window** — how many tokens of conversation the model can see (512–8192); the only generation setting that reloads the model. When a chat grows past it, the oldest turns (then document context) are left out of what the model sees
+* **Let reasoning models think first** — off by default. Qwen3 and Qwen3.5 can reason step by step before answering; that sometimes helps with hard questions but is slower and uses up the reply length, so it's off unless you turn it on (the reasoning then shows as a collapsible "Thought process"). DeepSeek-R1 always reasons
 * **Max Upload Size** — maximum file size for document uploads (1–200 MB, default 50 MB); the extracted text is also limited to 500,000 characters (~200 pages)
 
 ### Repetition Control

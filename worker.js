@@ -41,6 +41,22 @@ const SMALLEST_MODEL = "SmolLM2-360M-Instruct-q4f32_1-MLC";
 // Approximate download sizes (MB) for first-time download confirmation.
 // Derived from VRAM footprints in the WebLLM model registry.
 const MODEL_SIZES_MB = {
+  // Newer models (all supported by WebLLM 0.2.84)
+  "Qwen3.5-0.8B-q4f16_1-MLC":                     1629,
+  "Qwen3.5-0.8B-q4f32_1-MLC":                     1894,
+  "Qwen3.5-2B-q4f16_1-MLC":                       2245,
+  "Qwen3.5-2B-q4f32_1-MLC":                       2592,
+  "Qwen3.5-4B-q4f16_1-MLC":                       3868,
+  "Qwen3.5-4B-q4f32_1-MLC":                       4680,
+  "Qwen3.5-9B-q4f16_1-MLC":                       6433,
+  "Qwen3.5-9B-q4f32_1-MLC":                       7545,
+  "Phi-4-mini-instruct-q4f16_1-MLC":              3438,
+  "Phi-4-mini-instruct-q4f32_1-MLC":              4221,
+  "gemma3-1b-it-q4f16_1-MLC":                      711,
+  "Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC": 2864,
+  "Ministral-3-3B-Instruct-2512-BF16-q4f32_1-MLC": 3532,
+  "OLMo-2-0425-1B-Instruct-q4f16_1-MLC":          1777,
+  "OLMo-2-0425-1B-Instruct-q4f32_1-MLC":          2454,
   // SmolLM2
   "SmolLM2-135M-Instruct-q0f32-MLC":               720,
   "SmolLM2-360M-Instruct-q4f32_1-MLC":             580,
@@ -157,13 +173,18 @@ const AVAILABLE_MODELS = [
   "SmolLM2-360M-Instruct-q4f32_1-MLC",
   "SmolLM2-360M-Instruct-q0f32-MLC",
 
-  // ── ~0.5–0.6B — micro ───────────────────────────────────────────────
+  // ── ~0.5–0.8B — micro ───────────────────────────────────────────────
+  "Qwen3.5-0.8B-q4f16_1-MLC",
+  "Qwen3.5-0.8B-q4f32_1-MLC",
   "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
   "Qwen2.5-0.5B-Instruct-q4f32_1-MLC",
   "Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC",
   "Qwen3-0.6B-q4f16_1-MLC",
 
   // ── ~1–1.7B — lightweight ───────────────────────────────────────────
+  "gemma3-1b-it-q4f16_1-MLC",
+  "OLMo-2-0425-1B-Instruct-q4f16_1-MLC",
+  "OLMo-2-0425-1B-Instruct-q4f32_1-MLC",
   "TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC",
   "Llama-3.2-1B-Instruct-q4f16_1-MLC",
   "Llama-3.2-1B-Instruct-q4f32_1-MLC",
@@ -178,7 +199,13 @@ const AVAILABLE_MODELS = [
   "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
   "Qwen2.5-Math-1.5B-Instruct-q4f16_1-MLC",
 
-  // ── ~2–3B — mid ─────────────────────────────────────────────────────
+  // ── ~2–4B — mid ─────────────────────────────────────────────────────
+  "Qwen3.5-2B-q4f16_1-MLC",
+  "Qwen3.5-2B-q4f32_1-MLC",
+  "Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC",
+  "Ministral-3-3B-Instruct-2512-BF16-q4f32_1-MLC",
+  "Qwen3.5-4B-q4f16_1-MLC",
+  "Qwen3.5-4B-q4f32_1-MLC",
   "gemma-2-2b-it-q4f16_1-MLC",
   "gemma-2-2b-it-q4f32_1-MLC",
   "Llama-3.2-3B-Instruct-q4f16_1-MLC",
@@ -190,10 +217,14 @@ const AVAILABLE_MODELS = [
   "Qwen3-4B-q4f16_1-MLC",
 
   // ── ~3.8B — upper-mid ───────────────────────────────────────────────
+  "Phi-4-mini-instruct-q4f16_1-MLC",
+  "Phi-4-mini-instruct-q4f32_1-MLC",
   "Phi-3.5-mini-instruct-q4f16_1-MLC",
   "Phi-3.5-mini-instruct-q4f32_1-MLC",
 
   // ── ~7–9B — large (needs ≥6 GB VRAM) ───────────────────────────────
+  "Qwen3.5-9B-q4f16_1-MLC",
+  "Qwen3.5-9B-q4f32_1-MLC",
   "Qwen2.5-7B-Instruct-q4f16_1-MLC",
   "Qwen2.5-7B-Instruct-q4f32_1-MLC",
   "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
@@ -703,6 +734,7 @@ async function runModelCheck() {
       messages: [{ role: "user", content: "Say hello in one short sentence." }],
       max_tokens: 12,
       temperature: 0,
+      ...thinkingOptions(true), // 12 tokens: no room for reasoning
     });
     const sample = reply.choices?.[0]?.message?.content || "";
     const verdict = checkSample(sample);
@@ -721,6 +753,16 @@ async function runModelCheck() {
 }
 
 const STOP_SEQUENCES = ["\nUser:", "\nHuman:", "\nAssistant:"];
+
+// Qwen3 and Qwen3.5 reason step by step ("<think>…") before answering
+// unless told not to. That is slower and uses up the reply length, so it is
+// off unless the user turns on "Let reasoning models think first" in
+// Settings. (DeepSeek-R1 always reasons; WebLLM can't switch it off.)
+function thinkingOptions(forceOff = false) {
+  if (!/^Qwen3/i.test(MODEL || "")) return {};
+  if (!forceOff && USER_CONFIG && USER_CONFIG.thinking) return {};
+  return { extra_body: { enable_thinking: false } };
+}
 
 // Context window the engine was loaded with (WebLLM's default is 4096),
 // and the reply length: Max Tokens, but never more than half the window.
@@ -763,6 +805,7 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
     repetition_penalty: MODEL_CONFIG.repetition_penalty ?? 1.0,
     stop: STOP_SEQUENCES,
     stream: true,
+    ...thinkingOptions(),
   });
 
   resetStallTimer();

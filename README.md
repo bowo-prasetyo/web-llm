@@ -48,15 +48,8 @@ https://bowo-prasetyo.github.io/web-llm/
 * Replies that collapse into repeated words are stopped, explained, and kept out of the conversation history
 * "This device" panel in Settings: WebLLM version, GPU, 16-bit support and model check results
 * Web Worker isolation for a fully responsive UI during inference
-* Local document ingestion and semantic retrieval (RAG)
-* PDF, TXT, and Markdown file support
-* Sentence-aware chunking with overlap for coherent retrieval
-* Relevance threshold — only semantically related chunks injected as context
-* RAG context indicator showing which files informed each answer
-* Document manager panel — list, remove, or clear indexed files
-* Per-chunk embedding progress during document indexing
-* Local vector database using Transformers.js embeddings
-* Persistent vector storage using OPFS
+* Attach documents (PDF, TXT, Markdown) to a chat: small ones are given to the model whole, large ones are searched for the parts that match each question
+* Attachments belong to one chat, are saved with it (IndexedDB), and are exported, imported and deleted with it
 * Automatic recovery from GPU crashes, engine errors, and WASM Tokenizer failures
 * Automatic model unload after inactivity to free GPU memory
 * Conversation history memory with configurable context window
@@ -291,7 +284,7 @@ After one visit while online, the app works without an internet connection:
 * A service worker (`sw.js`) saves the app's own files and the pinned libraries (Vue, Vue Router, marked, DOMPurify, highlight.js, PDF.js, WebLLM, Transformers.js) in the browser
 * Model weights are kept by WebLLM itself, so **any model you have downloaded keeps working offline**
 * Offline, the status bar shows an **Offline** badge; picking a model that isn't downloaded yet explains that it needs a connection instead of failing
-* Downloading a new model, and the first document upload (which fetches a small search model), need a connection
+* Downloading a new model, and the first large document attached (which fetches a small search model), need a connection
 * App updates still arrive: when online, the app's own files are always fetched fresh first (falling back to the saved copy after 4 seconds or when offline)
 * **Settings → This device** shows whether the app is saved for offline use, and has an **Install app** button where the browser supports it (Chrome, Edge, Android). On iPhone/iPad use Safari's **Share → Add to Home Screen**
 
@@ -350,8 +343,8 @@ npm run test:unit     # pure modules only, no browser
 npm run test:e2e      # the app in Chromium
 ```
 
-* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js` and `picker.js`
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, chat storage (IndexedDB, migration, export/import, fallback), personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
+* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` and `attachments.js`
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update `index.html`, `sw.js`, `package.json` and `tests/support/fixtures.js` together
@@ -359,7 +352,7 @@ npm run test:e2e      # the app in Chromium
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `style.css`) and the `icons/` folder
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `style.css`) and the `icons/` folder
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -371,53 +364,40 @@ Your live URL will be:
 https://YOUR_USERNAME.github.io/YOUR_REPOSITORY/
 ```
 
-## File Support
+## Attaching Documents
 
-Supported document formats for RAG ingestion:
+Tap **Attach** in the toolbar to add a PDF, TXT or Markdown file to the chat on screen. It shows as a chip above the message box (name, size, and status while it's being read or prepared); **×** removes it from the chat.
 
-* PDF
-* TXT
-* Markdown
+* **Attachments belong to one chat.** Other chats don't see them. They're saved with the chat (IndexedDB), and deleted, exported and imported with it. A chat that so far only has a document is kept (titled 📎 with the file name)
+* **Small documents go in whole.** If everything attached fits in the model's context budget (about three quarters of what's left after the reply and the question), the full text is given to the model with each question. No extra download, works offline
+* **Large documents are searched.** Documents over 2,000 characters are split into overlapping, sentence-aware chunks (~800 characters) and embedded in the background when attached (Transformers.js `all-MiniLM-L6-v2`, ~23 MB, downloaded once). Each question then gets the chunks that match it (similarity at least 0.2 and at least half the best match), best first, up to the budget
+* **General requests** such as "summarize this", which match no part in particular, get the beginning of each document instead
+* Document text goes into the current request only; it's never stored in the conversation history or replayed on later turns
+* Limits: the file size set in Settings (default 50 MB, up to 200 MB) and 500,000 characters of text (~200 pages). Scanned PDFs without a text layer can't be read
 
-Maximum file size is configurable in Settings (default **50 MB**, up to 200 MB). Files exceeding the limit are rejected before parsing. Extracted text over 500,000 characters (~200 pages) is rejected before indexing.
+No attached file ever leaves the browser.
 
-Uploaded files are processed entirely locally:
-
-1. Parsed in the browser (PDF.js for PDFs, plain text otherwise)
-2. Chunked into sentence-aware segments (~800 chars target, 120-char overlap between chunks)
-3. Embedded using Transformers.js (`all-MiniLM-L6-v2`, ~23 MB, downloaded on first use)
-4. Stored in a local vector database persisted to OPFS
-5. Semantically retrieved at query time — only chunks scoring above 0.25 cosine similarity are used
-6. Injected as context for the current turn only — not stored in conversation history
-
-No uploaded file ever leaves the browser.
-
-### Document Manager
-
-* Tap the **📄 Docs button** in the toolbar to open the document panel (badge shows count of indexed files)
-* Each indexed file is listed with its filename and chunk count
-* Individual files can be removed without affecting others
-* **Clear All** removes all indexed documents at once
-* A **RAG context banner** appears above the input when the last answer used document context, showing which file(s) contributed — dismissable with ×
+**Earlier versions** kept one document index shared by all chats. It is no longer used: the app shows a note listing those files, with a button to remove the old index. Attach the files you need to a chat instead.
 
 ## Storage
 
 | Storage | Used For |
 |---|---|
-| IndexedDB (`webllm-chats`) | Chats: the chat list and each chat's messages |
+| IndexedDB (`webllm-chats`) | Chats: the chat list, each chat's messages, and documents attached to chats (text, and chunks with embeddings for large ones) |
 | `localStorage` | Settings, cached-model list, model check results (and chats, only if IndexedDB is unavailable) |
-| OPFS | Vector database (document embeddings), GPU stability flags |
+| OPFS | GPU stability flag (and the unused shared document index of earlier versions, until removed) |
 | Browser cache / IndexedDB | WebLLM model weights |
 | Cache Storage (`webllm-shell-v1`, `webllm-libs-v1`) | The app's files and pinned libraries, for offline use |
 
-Cached data may include AI model weights (potentially several GB), vector databases, user settings, and session history.
+Cached data may include AI model weights (potentially several GB), attached documents, user settings, and chat history.
 
 ## Architecture
 
 | File | Purpose |
 |---|---|
 | `app.js` | Vue 3 UI — routing, session management, settings, worker bridge |
-| `worker.js` | AI inference worker — WebLLM engine, RAG pipeline, streaming |
+| `worker.js` | AI inference worker — WebLLM engine, attached documents, streaming |
+| `attachments.js` | Splitting attached documents into chunks and choosing what goes in front of the model |
 | `index.html` | HTML entry point, CDN imports |
 | `chatstore.js` | Chat storage in IndexedDB, migration from localStorage, and the localStorage fallback |
 | `picker.js` | Model picker catalog and device-based recommendation |
@@ -438,12 +418,12 @@ app.js
 └── Shared state        — reactive refs shared between both pages
 
 worker.js
-├── initialize()        — device profile detection, model loading, vector DB restore
-├── generate()          — RAG retrieval, context fitting, streamed reply
+├── initialize()        — device profile detection, model loading, model check
+├── generate()          — attached documents, context fitting, streamed reply
 ├── continueReply()     — finishes a cut-off reply when the user presses Continue
 ├── streamReply()       — streaming with Stop, time limit, junk and repeat guards
-├── ingestDocument()    — sentence-aware chunking, embedding, OPFS persistence
-└── onmessage handler   — message routing (init, set-config, generate, ingest, …)
+├── setAttachments()    — the chat's documents; large ones chunked and embedded in the background
+└── onmessage handler   — message routing (init, set-config, generate, set-attachments, …)
 ```
 
 ## AI Pipeline
@@ -451,7 +431,7 @@ worker.js
 ```
 User Prompt
     ↓
-Semantic Retrieval (OPFS vector DB · relevance threshold 0.25 · top-4 chunks)
+Attached Documents (whole if they fit · otherwise matching chunks, similarity ≥ 0.2)
     ↓
 Context Injection (current turn only — not stored in conversation history)
     ↓
@@ -485,9 +465,9 @@ Streaming Response → UI
 | Auto-unload | Releases GPU memory after 30 minutes of inactivity |
 | Conservative GPU defaults | Low-end device profile applies smaller token budgets |
 | System prompt pinning | System message is always preserved when history is trimmed |
-| RAG history isolation | Document context injected per-turn only; never stored in SESSION_HISTORY |
+| Document isolation | Attached documents go into the current request only (never stored in SESSION_HISTORY), and only in their own chat |
 | File size guard | Files over the configured limit are rejected before parsing |
-| Ingest guard | Document embedding is deferred until any active generation finishes |
+| Indexing before answering | A question waits for a just-attached large document to finish indexing, so it's searched rather than cut |
 | Worker error detection | `worker.onerror` surfaces parse/import failures in the status bar |
 
 ## Session and Persistence Features
@@ -521,7 +501,7 @@ Streaming Response → UI
 * WebGPU support is still evolving — Chrome and Edge are most reliable
 * Switching models mid-conversation is supported; the new model keeps the conversation and its recommended generation defaults are applied
 * Safari WebGPU support is available from macOS 14 / iOS 17 but may be less stable
-* The embedding model for RAG (~23 MB) is downloaded separately on first document upload
+* The search model for large attached documents (~23 MB) is downloaded on first use
 * Imported sessions are merged non-destructively — existing sessions are never overwritten
 
 ## License

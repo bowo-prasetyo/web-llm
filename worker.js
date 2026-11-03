@@ -15,7 +15,13 @@ import {
 import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
 import { looksDegenerate, checkSample, findRepeatLoop } from "./quality.js";
-import { fitToContext } from "./context.js";
+import { fitToContext, estimateTokens } from "./context.js";
+import {
+  INDEX_MIN_CHARS,
+  chunkText,
+  buildAttachmentContext,
+  withAttachments,
+} from "./attachments.js";
 
 // Keep in sync with the import URL above; shown in Settings → This device.
 const WEBLLM_VERSION = "0.2.84";
@@ -222,7 +228,10 @@ let engine = null;
 let initializingPromise = null;
 let embedder = null;
 let embedderPromise = null;
-let vectorDB = [];
+// Documents attached to the chat on screen (sent by the app with
+// "set-attachments"): { chatId, docs: [{ id, name, text, chunks }] }
+let chatDocs = { chatId: null, docs: [] };
+let indexingQueue = Promise.resolve();
 
 let MODEL = null;
 let USER_CONFIG = null;
@@ -676,26 +685,10 @@ async function initialize() {
       await runModelCheck();
     }
 
-    await loadVectorDB();
-
-    // If we have indexed documents, pre-load the embedder now so
-    // searchRelevantChunks() doesn't stall on the first generate() call.
-    if (vectorDB.length > 0) {
-      initializeEmbedder().catch(() => {}); // non-blocking, best-effort
-    }
-
     postMessage({
       type: "status",
       text: "Model loaded successfully",
     });
-
-    // Tell the UI which documents are currently indexed
-    if (vectorDB.length > 0) {
-      postMessage({
-        type: "documents-updated",
-        documents: getIndexedDocuments(),
-      });
-    }
   })();
 
   return initializingPromise;
@@ -928,22 +921,12 @@ async function generate(prompt) {
     let result;
 
     try {
-      const relevantChunks = await searchRelevantChunks(prompt);
-
-      // Document context goes into this request only, never into
-      // SESSION_HISTORY (it would be replayed on every later turn).
-      const context = relevantChunks
-        .map(item => `[${item.filename}]\n${item.text}`)
-        .join("\n\n---\n\n");
-
-      let augmentedPrompt = context
-        ? `Relevant context from uploaded documents:\n\n${context}\n\n---\nUser question: ${prompt}`
-        : prompt;
+      // Documents attached to this chat go into this request only, never
+      // into SESSION_HISTORY (they would be replayed on every later turn).
+      const docContext = await attachmentContext(prompt, contextWindow, maxTokens);
+      let augmentedPrompt = withAttachments(prompt, docContext);
 
       history.push({ role: "user", content: prompt });
-
-      // Which files contributed context, so the UI can show it
-      let contextSources = [...new Set(relevantChunks.map(c => c.filename))];
 
       // Keep the system message; trim only the turns after it
       {
@@ -958,7 +941,6 @@ async function generate(prompt) {
         const fitted = fitToContext({ history, prompt, augmentedPrompt, contextWindow, maxTokens });
         history = fitted.history;
         augmentedPrompt = fitted.augmentedPrompt;
-        if (fitted.droppedContext) contextSources = [];
       }
 
       // The request uses the document-augmented question in place of the
@@ -977,10 +959,6 @@ async function generate(prompt) {
         await initialize();
       }
       ensureEngine();
-
-      if (contextSources.length > 0) {
-        postMessage({ type: "rag-context", sources: contextSources });
-      }
 
       result = await streamReply(apiHistory, maxTokens, { generationStart });
     } catch (err) {
@@ -1112,6 +1090,7 @@ self.onmessage = async (event) => {
       case "init":
         postMessage(modelsMessage());
         postDiagnostics();
+        postLegacyDocuments();
         break;
               
       case "set-config": {
@@ -1195,45 +1174,14 @@ self.onmessage = async (event) => {
         await continueReply(data.previous);
         break;
 
-      case "ingest":
-        // Don't start embedding while LLM is generating — they share the
-        // worker thread and will compete for compute / memory.
-        if (ACTIVE_GENERATION) {
-          postMessage({
-            type: "ingest-queued",
-            filename: data.filename,
-          });
-          // Wait for generation to finish, then ingest
-          await new Promise(resolve => {
-            const poll = setInterval(() => {
-              if (!ACTIVE_GENERATION) {
-                clearInterval(poll);
-                resolve();
-              }
-            }, 300);
-          });
-        }
-        await ingestDocument(data.filename, data.text);
+      case "set-attachments":
+        // The documents attached to the chat on screen
+        setAttachments(data.chatId, data.docs || []);
         break;
 
-      case "delete-document":
-        vectorDB = vectorDB.filter(
-          item => item.filename !== data.filename
-        );
-        await saveVectorDB();
-        postMessage({
-          type: "documents-updated",
-          documents: getIndexedDocuments(),
-        });
-        break;
-
-      case "clear-documents":
-        vectorDB = [];
-        await saveVectorDB();
-        postMessage({
-          type: "documents-updated",
-          documents: [],
-        });
+      case "delete-legacy-documents":
+        await deleteLegacyDocuments();
+        postMessage({ type: "legacy-documents", files: [] });
         break;
 
       case "models":
@@ -1316,22 +1264,6 @@ function resetUnloadTimer() {
   
 };
 
-async function loadVectorDB() {
-  const stored =
-    await readFromOPFS("vector-db.json");
-
-  if (stored) {
-    vectorDB = JSON.parse(stored);
-  }
-}
-
-async function saveVectorDB() {
-  await saveToOPFS(
-    "vector-db.json",
-    JSON.stringify(vectorDB)
-  );
-}
-
 async function initializeEmbedder() {
 
   // Already loaded
@@ -1381,68 +1313,6 @@ async function initializeEmbedder() {
   return embedderPromise;
 }
 
-function chunkText(
-  text,
-  chunkSize = 800,  // ~130 words — enough for a full paragraph
-  overlap  = 120   // overlap so boundary sentences aren't split in half
-) {
-
-  // Normalize whitespace: collapse multiple blank lines, trim
-  const normalized = text
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  if (normalized.length <= chunkSize) {
-    return normalized ? [normalized] : [];
-  }
-
-  const chunks = [];
-  let start = 0;
-
-  while (start < normalized.length) {
-    const end = start + chunkSize;
-
-    if (end >= normalized.length) {
-      // Last chunk — take the rest
-      chunks.push(normalized.slice(start).trim());
-      break;
-    }
-
-    // Try to break at a sentence boundary (. ! ?) within the last 200 chars
-    let breakAt = -1;
-    const window = normalized.slice(end - 200, end + 100);
-    const sentenceEnd = window.search(/[.!?][\s\n]/);
-    if (sentenceEnd !== -1) {
-      breakAt = end - 200 + sentenceEnd + 1;
-    }
-
-    // Fall back to paragraph break
-    if (breakAt === -1) {
-      const paraBreak = normalized.lastIndexOf("\n\n", end);
-      if (paraBreak > start + chunkSize / 2) {
-        breakAt = paraBreak;
-      }
-    }
-
-    // Fall back to word boundary
-    if (breakAt === -1) {
-      const spaceBreak = normalized.lastIndexOf(" ", end);
-      if (spaceBreak > start) {
-        breakAt = spaceBreak;
-      } else {
-        breakAt = end; // hard cut only as last resort
-      }
-    }
-
-    chunks.push(normalized.slice(start, breakAt).trim());
-    // Overlap: next chunk starts overlap chars before the break
-    start = Math.max(start + 1, breakAt - overlap);
-  }
-
-  return chunks.filter(c => c.length > 20); // discard tiny fragments
-}
-
 async function createEmbedding(text) {
 
   await initializeEmbedder();
@@ -1455,145 +1325,90 @@ async function createEmbedding(text) {
   return Array.from(output.data);
 }
 
-function cosineSimilarity(a, b) {
+// ── Attached documents ────────────────────────────────────────────────────
 
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
+// Use the documents attached to the chat on screen. Large ones without
+// chunks are split and embedded in the background (one at a time).
+function setAttachments(chatId, docs) {
+  const previous = chatDocs.chatId === chatId
+    ? new Map(chatDocs.docs.map(d => [d.id, d]))
+    : new Map();
+  chatDocs = {
+    chatId,
+    docs: docs.map(d => {
+      const old = previous.get(d.id);
+      return {
+        id: d.id,
+        name: d.name,
+        text: d.text || "",
+        chunks: d.chunks || old?.chunks || null,
+        indexing: old?.indexing || false,
+      };
+    }),
+  };
+  for (const doc of chatDocs.docs) {
+    if (!doc.chunks && !doc.indexing && doc.text.length > INDEX_MIN_CHARS) {
+      doc.indexing = true;
+      indexingQueue = indexingQueue.then(() => indexDocument(chatId, doc));
+    }
   }
-
-  magA = Math.sqrt(magA);
-  magB = Math.sqrt(magB);
-
-  const denom = magA * magB;
-  
-  if (denom === 0) {
-    return 0;
-  }
-  
-  return dot / denom;
 }
 
-function getIndexedDocuments() {
-  // Return unique filename list with chunk counts
-  const map = new Map();
-  for (const item of vectorDB) {
-    map.set(item.filename, (map.get(item.filename) || 0) + 1);
-  }
-  return Array.from(map.entries()).map(([filename, chunks]) => ({
-    filename,
-    chunks,
-  }));
-}
-
-async function ingestDocument(filename, text) {
-
-  // FIX 12: Reject excessively large files before any processing
-  const MAX_TEXT_CHARS = 500000; // ~83,000 words (~200 pages)
-  if (text.length > MAX_TEXT_CHARS) {
-    postMessage({
-      type: "ingest-error",
-      filename,
-      error: `File too large (${Math.round(text.length / 1000)}k chars). Maximum is ${MAX_TEXT_CHARS / 1000}k chars (~200 pages).`,
-    });
-    return;
-  }
-
+async function indexDocument(chatId, doc) {
   try {
-
     await initializeEmbedder();
-
-    const chunks = chunkText(text);
-
-    // Remove previous version of this file
-    vectorDB = vectorDB.filter(item => item.filename !== filename);
-
-    for (let i = 0; i < chunks.length; i++) {
-
-      // FIX 15: Per-chunk progress
-      postMessage({
-        type: "ingest-progress",
-        filename,
-        current: i + 1,
-        total: chunks.length,
-      });
-
-      const embedding = await createEmbedding(chunks[i]);
-      vectorDB.push({ filename, text: chunks[i], embedding });
+    const pieces = chunkText(doc.text);
+    const chunks = [];
+    for (let i = 0; i < pieces.length; i++) {
+      // Stop if the document was removed or another chat is on screen
+      if (chatDocs.chatId !== chatId || !chatDocs.docs.includes(doc)) return;
+      postMessage({ type: "attachment-progress", chatId, id: doc.id, current: i + 1, total: pieces.length });
+      chunks.push({ text: pieces[i], embedding: await createEmbedding(pieces[i]) });
     }
-
-    await saveVectorDB();
-
-    postMessage({
-      type: "documents-updated",
-      documents: getIndexedDocuments(),
-    });
-
-    postMessage({
-      type: "ingest-done",
-      filename,
-      chunks: chunks.length,
-    });
-
+    doc.chunks = chunks;
+    postMessage({ type: "attachment-indexed", chatId, id: doc.id, chunks });
   } catch (err) {
-    // FIX 14: Surface ingest errors to UI as a dedicated message type,
-    // not as a chat message
-    postMessage({
-      type: "ingest-error",
-      filename,
-      error: err?.message || "Unknown error during indexing",
-    });
+    postMessage({ type: "attachment-error", chatId, id: doc.id, error: err?.message || "Could not index the document" });
+  } finally {
+    doc.indexing = false;
   }
 }
 
-async function searchRelevantChunks(
-  query,
-  topK = 4,
-  minScore = 0.25  // below this the chunk is probably unrelated
-) {
+// What to put in front of the model from the attached documents: all of
+// them if they fit, otherwise the parts that best match the question.
+async function attachmentContext(prompt, contextWindow, maxTokens) {
+  if (!chatDocs.docs.length) return null;
+  await indexingQueue; // a document attached a moment ago is ready first
 
-  if (!vectorDB.length || !embedder) {
-    return [];
+  const available = contextWindow - maxTokens - 64 -
+    estimateTokens([{ content: getSystemPrompt() }, { content: prompt }]);
+  const budgetTokens = Math.floor(available * 0.75); // the rest for recent turns
+
+  let queryEmbedding = null;
+  const tooBig = estimateTokens(chatDocs.docs.map(d => ({ content: d.text }))) > budgetTokens;
+  if (tooBig && chatDocs.docs.some(d => d.chunks)) {
+    try { queryEmbedding = await createEmbedding(prompt); } catch {}
   }
+  return buildAttachmentContext({ docs: chatDocs.docs, queryEmbedding, budgetTokens });
+}
 
-  const queryEmbedding =
-    await createEmbedding(query);
-
-  const scored = vectorDB.map(item => ({
-    ...item,
-    score: cosineSimilarity(
-      queryEmbedding,
-      item.embedding
-    ),
-  }));
-
-  scored.sort((a, b) => b.score - a.score);
-
-  // Only return chunks above the relevance threshold
-  const relevant = scored.filter(c => c.score >= minScore);
-
-  if (relevant.length === 0) return [];
-
-  // Deduplicate by filename+approximate position to avoid near-identical
-  // overlapping chunks (artifact of the overlap in chunkText)
-  const seen = new Set();
-  const deduped = [];
-  for (const item of relevant) {
-    const key = item.filename + "|" + item.text.slice(0, 40);
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduped.push(item);
-    }
-    if (deduped.length >= topK) break;
+// Earlier versions kept one document index shared by all chats in OPFS
+// (vector-db.json). It is no longer used; tell the app so it can offer to
+// remove it.
+async function postLegacyDocuments() {
+  const stored = await readFromOPFS("vector-db.json");
+  let files = [];
+  if (stored) {
+    try { files = [...new Set(JSON.parse(stored).map(item => item.filename))].filter(Boolean); } catch {}
   }
+  postMessage({ type: "legacy-documents", files });
+}
 
-  return deduped;
+async function deleteLegacyDocuments() {
+  try {
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry("vector-db.json");
+  } catch {}
 }
 
 function resetStallTimer() {

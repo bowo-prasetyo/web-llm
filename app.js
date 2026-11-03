@@ -63,18 +63,18 @@ function modelDefaults(model) {
     presence_penalty: 0.0,
     repetition_penalty: 1.0,
   };
-  const m = model || "";
+  const m = (model || "").toLowerCase(); // "9B" and "9b", "gemma3-1b", …
   const d = (temperature, max_tokens, contextWindowSize) =>
     ({ ...penalties, temperature, max_tokens, contextWindowSize });
 
-  if (m.includes("135M") || m.includes("360M")) return d(0.3, 256, 2048);
-  if (m.includes("0.5B") || m.includes("0.6B")) return d(0.4, 512, 2048);
-  if (m.includes("1.1B") || m.includes("1.7B") || (m.includes("1B") && !m.includes("1.5B"))) return d(0.4, 512, 4096);
-  if (m.includes("1.5B") || m.includes("1.6b") || m.includes("1_6b")) return d(0.4, 768, 4096);
-  if (m.includes("2b") || m.includes("2B")) return d(0.6, 768, 4096);
-  if (m.includes("3B") || m.includes("4B") || m.includes("4b")) return d(0.7, 1024, 8192);
+  if (m.includes("135m") || m.includes("360m")) return d(0.3, 256, 2048);
+  if (m.includes("0.5b") || m.includes("0.6b") || m.includes("0.8b")) return d(0.4, 512, 2048);
+  if (m.includes("1.1b") || m.includes("1.7b") || (m.includes("1b") && !m.includes("1.5b"))) return d(0.4, 512, 4096);
+  if (m.includes("1.5b") || m.includes("1.6b") || m.includes("1_6b")) return d(0.4, 768, 4096);
+  if (m.includes("2b")) return d(0.6, 768, 4096);
+  if (m.includes("3b") || m.includes("4b")) return d(0.7, 1024, 8192);
   if (m.includes("mini")) return d(0.7, 1024, 8192);
-  if (m.includes("7B") || m.includes("8B") || m.includes("9b")) return d(0.7, 1024, 8192);
+  if (m.includes("7b") || m.includes("8b") || m.includes("9b")) return d(0.7, 1024, 8192);
   return d(0.7, 1024, 8192);
 }
 
@@ -137,6 +137,8 @@ const sharedSettings  = vRef({
   repetition_penalty: 1.0,
   maxFileSizeMB: 50,
   settingsVersion: SETTINGS_VERSION,
+  // Let Qwen3 / Qwen3.5 reason step by step before answering (slower)
+  thinking: false,
   // Persona used for new chats; each chat remembers its own persona.
   defaultPersona: DEFAULT_PERSONA_ID,
   // Prompt for the "Custom" persona. Starts as a copy of the default.
@@ -848,14 +850,15 @@ const Home = {
 
     // Group the flat models list into labelled tiers for the <optgroup> select.
     // Order and labels match the AVAILABLE_MODELS tiers in worker.js.
+    // Tests run on the lower-cased ID, in order; the first match wins.
     const MODEL_GROUPS_DEF = [
-      { label: "Ultra-micro (100–400M)", test: m => m.includes("135M") || m.includes("360M") },
-      { label: "Micro (0.5–0.6B)",       test: m => m.includes("0.5B") || m.includes("0.6B") },
-      { label: "Lightweight (1–1.7B)",   test: m => m.includes("1.1B") || (m.includes("1B") && !m.includes("1.5B")) || m.includes("1.7B") || m.includes("1_6b") || m.includes("1.6b") },
-      { label: "Small (1.5B)",           test: m => m.includes("1.5B") },
-      { label: "Mid (2–4B)",             test: m => m.includes("2b") || m.includes("2B") || m.includes("3B") || m.includes("4B") || m.includes("4b") },
+      { label: "Ultra-micro (100–400M)", test: m => m.includes("135m") || m.includes("360m") },
+      { label: "Micro (0.5–0.8B)",       test: m => m.includes("0.5b") || m.includes("0.6b") || m.includes("0.8b") },
+      { label: "Lightweight (1–1.7B)",   test: m => m.includes("1.1b") || (m.includes("1b") && !m.includes("1.5b")) || m.includes("1.7b") || m.includes("1_6b") || m.includes("1.6b") },
+      { label: "Small (1.5B)",           test: m => m.includes("1.5b") },
+      { label: "Mid (2–4B)",             test: m => m.includes("2b") || m.includes("3b") || m.includes("4b") },
       { label: "Upper-mid (3.8B)",       test: m => m.includes("mini") },
-      { label: "Large (7–9B)",           test: m => m.includes("7B") || m.includes("8B") || m.includes("9b") },
+      { label: "Large (7–9B)",           test: m => m.includes("7b") || m.includes("8b") || m.includes("9b") },
     ];
 
     const { computed } = Vue;
@@ -873,7 +876,7 @@ const Home = {
     const modelGroups = computed(() => {
       const assigned = new Set();
       const groups = MODEL_GROUPS_DEF.map(g => {
-        const matched = visibleModels.value.filter(m => g.test(m) && !assigned.has(m));
+        const matched = visibleModels.value.filter(m => g.test(m.toLowerCase()) && !assigned.has(m));
         matched.forEach(m => assigned.add(m));
         return { label: g.label, models: matched };
       });
@@ -2696,6 +2699,19 @@ const Settings = {
             <div class="setting-control">
               <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" />
               <span class="setting-value">{{ settings.contextWindowSize }}</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Let reasoning models think first</span>
+              <span class="setting-desc">Qwen3 and Qwen3.5 can reason step by step before answering. It can help with hard questions, but it is slower and uses up the reply length. (DeepSeek-R1 always does it.)</span>
+            </div>
+            <div class="setting-control">
+              <label class="toggle">
+                <input type="checkbox" v-model="settings.thinking" class="thinking-toggle" />
+                <span>{{ settings.thinking ? "On" : "Off" }}</span>
+              </label>
             </div>
           </div>
 

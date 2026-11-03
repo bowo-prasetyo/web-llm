@@ -31,25 +31,27 @@ export const USES = [
 export const TIERS = [
   { id: "fast",     title: "Fast",     desc: "Quick replies, smallest download. Fine on phones." },
   { id: "balanced", title: "Balanced", desc: "Noticeably better answers. Best for most laptops." },
-  { id: "smart",    title: "Smart",    desc: "Best answers, large download. Needs a strong GPU (6 GB+)." },
+  { id: "smart",    title: "Smart",    desc: "Best answers, large download. Needs a strong GPU (4–8 GB)." },
 ];
 
-// Coding starts at 1.5B: smaller models mix up even simple code.
+// Qwen3.5, the newest generation WebLLM 0.2.84 supports (also what Kovrune
+// recommends for the browser). Coding and writing start at 2B: smaller
+// models mix up even simple code and lose the thread of longer texts.
 export const MODEL_PICKS = {
   chat: {
-    fast:     { f16: "Llama-3.2-1B-Instruct-q4f16_1-MLC",       f32: "Llama-3.2-1B-Instruct-q4f32_1-MLC" },
-    balanced: { f16: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",       f32: "Qwen2.5-1.5B-Instruct-q4f32_1-MLC" },
-    smart:    { f16: "Qwen2.5-3B-Instruct-q4f16_1-MLC",         f32: "Qwen2.5-3B-Instruct-q4f32_1-MLC" },
+    fast:     { f16: "Qwen3.5-0.8B-q4f16_1-MLC", f32: "Qwen3.5-0.8B-q4f32_1-MLC" },
+    balanced: { f16: "Qwen3.5-2B-q4f16_1-MLC",   f32: "Qwen3.5-2B-q4f32_1-MLC" },
+    smart:    { f16: "Qwen3.5-4B-q4f16_1-MLC",   f32: "Qwen3.5-4B-q4f32_1-MLC" },
   },
   code: {
-    fast:     { f16: "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC", f32: "Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC" },
-    balanced: { f16: "Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC",   f32: "Qwen2.5-Coder-3B-Instruct-q4f32_1-MLC" },
-    smart:    { f16: "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",   f32: "Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC" },
+    fast:     { f16: "Qwen3.5-2B-q4f16_1-MLC",   f32: "Qwen3.5-2B-q4f32_1-MLC" },
+    balanced: { f16: "Qwen3.5-4B-q4f16_1-MLC",   f32: "Qwen3.5-4B-q4f32_1-MLC" },
+    smart:    { f16: "Qwen3.5-9B-q4f16_1-MLC",   f32: "Qwen3.5-9B-q4f32_1-MLC" },
   },
   write: {
-    fast:     { f16: "Llama-3.2-1B-Instruct-q4f16_1-MLC",       f32: "Llama-3.2-1B-Instruct-q4f32_1-MLC" },
-    balanced: { f16: "Llama-3.2-3B-Instruct-q4f16_1-MLC",       f32: "Llama-3.2-3B-Instruct-q4f32_1-MLC" },
-    smart:    { f16: "Llama-3.1-8B-Instruct-q4f16_1-MLC",       f32: "Llama-3.1-8B-Instruct-q4f32_1-MLC" },
+    fast:     { f16: "Qwen3.5-2B-q4f16_1-MLC",   f32: "Qwen3.5-2B-q4f32_1-MLC" },
+    balanced: { f16: "Qwen3.5-4B-q4f16_1-MLC",   f32: "Qwen3.5-4B-q4f32_1-MLC" },
+    smart:    { f16: "Qwen3.5-9B-q4f16_1-MLC",   f32: "Qwen3.5-9B-q4f32_1-MLC" },
   },
 };
 

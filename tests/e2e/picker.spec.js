@@ -22,16 +22,16 @@ test.describe("on an 8 GB laptop", () => {
 
     await page.click('.picker-option:has-text("Coding")');
     const tiers = await page.locator(".picker-option.tier").allInnerTexts();
-    check(tiers.length === 3 && tiers[0].includes("Qwen2.5 Coder 1.5B") && tiers[1].includes("Qwen2.5 Coder 3B") && tiers[2].includes("Qwen2.5 Coder 7B"), "coding picks: 1.5B / 3B / 7B");
+    check(tiers.length === 3 && tiers[0].includes("Qwen3.5 2B") && tiers[1].includes("Qwen3.5 4B") && tiers[2].includes("Qwen3.5 9B"), "coding picks: Qwen3.5 2B / 4B / 9B");
     check(tiers[1].includes("Recommended"), "Balanced recommended");
     await expect(page.locator(".picker-option.tier.active")).toContainText("Balanced");
-    check(tiers[0].includes("1.6 GB"), "download sizes shown");
+    check(tiers[0].includes("2.2 GB"), "download sizes shown");
     await expect(page.locator(".picker-device")).toContainText("16-bit GPU math supported");
 
     await page.click('button:has-text("Download & start")');
     await sleep(600);
     const [load] = await loads(page);
-    check(load.model === "Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC", "the chosen model loads");
+    check(load.model === "Qwen3.5-4B-q4f16_1-MLC", "the chosen model loads");
     await expect(page.locator(".modal-overlay")).toBeHidden(); // no second download dialog
     check(load.max_tokens === 1024 && load.defaultPersona === "coder", "its defaults and the Coder persona are applied");
     check((await page.inputValue(".persona-select")) === "coder", "this chat uses Coder");
@@ -53,7 +53,7 @@ test.describe("on an 8 GB laptop", () => {
     await page.click('button:has-text("Download & start")');
     await sleep(600);
     const [load] = await loads(page);
-    check(load.model === "Llama-3.2-1B-Instruct-q4f16_1-MLC" && load.defaultPersona === "friendly", "switches to the Fast chat model");
+    check(load.model === "Qwen3.5-0.8B-q4f16_1-MLC" && load.defaultPersona === "friendly", "switches to the Fast chat model");
 
     await page.locator(".welcome .link-btn").click();
     await page.click('.picker-option:has-text("Everyday chat")');
@@ -76,7 +76,7 @@ test.describe("on an 8 GB laptop", () => {
     await page.click('.picker-option.tier:has-text("Fast")');
     await page.click('button:has-text("Download & start")');
     await sleep(500);
-    expect((await loads(page))[0].model).toBe("Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC");
+    expect((await loads(page))[0].model).toBe("Qwen3.5-2B-q4f32_1-MLC");
   });
 
   test("a recorded q4f16 failure also switches picks to q4f32", async ({ page }) => {
@@ -85,7 +85,7 @@ test.describe("on an 8 GB laptop", () => {
     await page.click('.picker-option:has-text("Everyday chat")');
     await page.click('button:has-text("Download & start")');
     await sleep(500);
-    expect((await loads(page))[0].model).toBe("Qwen2.5-1.5B-Instruct-q4f32_1-MLC");
+    expect((await loads(page))[0].model).toBe("Qwen3.5-2B-q4f32_1-MLC");
   });
 });
 

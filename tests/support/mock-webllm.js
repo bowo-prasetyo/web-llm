@@ -28,7 +28,7 @@ export async function CreateMLCEngine(model, engineConfig, chatOpts) {
     async resetChat() {},
     chat: { completions: { async create(req) {
       const lastUser = [...req.messages].reverse().find(m => m.role === "user")?.content || "";
-      bc.postMessage({ kind: "request", stream: !!req.stream, max_tokens: req.max_tokens, messages: req.messages });
+      bc.postMessage({ kind: "request", stream: !!req.stream, max_tokens: req.max_tokens, messages: req.messages, extra_body: req.extra_body || null });
       if (!req.stream) return { choices: [{ message: { content: "Hello there, nice to meet you!" } }] };
       const s = script(lastUser);
       const pieces = s.text.match(/\S+\s*|\s+/g) || [];

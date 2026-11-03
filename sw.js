@@ -24,6 +24,7 @@ const SHELL_FILES = [
   "./quality.js",
   "./context.js",
   "./picker.js",
+  "./chatstore.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

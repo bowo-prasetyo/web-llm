@@ -255,8 +255,9 @@ All settings are automatically persisted in `localStorage` and survive page relo
 * Previously saved chats are listed with auto-generated title, preview, model, and timestamp
 * Tap any session to restore it — messages and model context are both recovered
 * Tap the **🗑 trash icon** on any session to delete it
-* Up to 50 sessions are retained; the oldest are deleted automatically, including their stored messages
-* Each session keeps its most recent 40 messages
+* Chats are saved in the browser's database (IndexedDB), with no limit on the number of chats or messages beyond the browser's storage quota; nothing is deleted automatically
+* Chats saved by earlier versions in `localStorage` are moved to IndexedDB on first start (the old copies are removed only after the move succeeds)
+* If IndexedDB can't be used (for example in some private-browsing modes), chats fall back to `localStorage`, limited to 50 chats of 40 messages; **Settings → This device** shows where chats are saved
 * Sessions survive page reloads, tab closures, and mobile screen-off events
 * Unanswered questions (tab closed mid-generation) are automatically re-sent on next open
 
@@ -350,7 +351,7 @@ npm run test:e2e      # the app in Chromium
 ```
 
 * **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js` and `picker.js`
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, chat storage (IndexedDB, migration, export/import, fallback), personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update `index.html`, `sw.js`, `package.json` and `tests/support/fixtures.js` together
@@ -358,7 +359,7 @@ npm run test:e2e      # the app in Chromium
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `style.css`) and the `icons/` folder
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `style.css`) and the `icons/` folder
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -403,7 +404,8 @@ No uploaded file ever leaves the browser.
 
 | Storage | Used For |
 |---|---|
-| `localStorage` | Settings, session index, cached-model list, conversation messages per session |
+| IndexedDB (`webllm-chats`) | Chats: the chat list and each chat's messages |
+| `localStorage` | Settings, cached-model list, model check results (and chats, only if IndexedDB is unavailable) |
 | OPFS | Vector database (document embeddings), GPU stability flags |
 | Browser cache / IndexedDB | WebLLM model weights |
 | Cache Storage (`webllm-shell-v1`, `webllm-libs-v1`) | The app's files and pinned libraries, for offline use |
@@ -417,6 +419,7 @@ Cached data may include AI model weights (potentially several GB), vector databa
 | `app.js` | Vue 3 UI — routing, session management, settings, worker bridge |
 | `worker.js` | AI inference worker — WebLLM engine, RAG pipeline, streaming |
 | `index.html` | HTML entry point, CDN imports |
+| `chatstore.js` | Chat storage in IndexedDB, migration from localStorage, and the localStorage fallback |
 | `picker.js` | Model picker catalog and device-based recommendation |
 | `quality.js` | Junk-output detection for the model check and the collapsed-reply guard |
 | `context.js` | Fits the conversation into the model's context window |
@@ -491,7 +494,7 @@ Streaming Response → UI
 
 | Feature | Description |
 |---|---|
-| Multi-session | Up to 50 saved conversations with auto-generated title, preview, model, persona, and timestamp |
+| Multi-session | Saved conversations (IndexedDB, no fixed limit) with auto-generated title, preview, model, persona, and timestamp |
 | Auto-save | Every user message and assistant response is persisted immediately |
 | Tab-resume restore | On page reload or mobile resume, the last session is restored automatically |
 | Unanswered question resume | If the tab closed mid-generation, the question is automatically re-sent on next open |

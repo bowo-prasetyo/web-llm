@@ -1,12 +1,12 @@
 // Personas: welcome screen, per-chat persona, Settings, and migration of
 // settings saved before personas existed.
 import fs from "node:fs";
-import { test, expect, check, sleep, sent, seedStorage, readStorage, send } from "../support/fixtures.js";
+import { test, expect, check, sleep, sent, seedStorage, readStorage, send, readChats } from "../support/fixtures.js";
 
 test.use({ fakeWorker: true, downloaded: "SmolLM2-135M-Instruct-q0f32-MLC" });
 
 const lastGenerate = async page => (await sent(page, "generate")).pop();
-const chatIndex = page => readStorage(page, "webllm-sessions-index");
+const chatIndex = page => readChats(page);
 const LEGACY_PROMPT = Function(`return ${fs.readFileSync(new URL("../../app.js", import.meta.url), "utf8")
   .match(/LEGACY_DEFAULT_SYSTEM_PROMPT = (".*");/)[1]}`)();
 

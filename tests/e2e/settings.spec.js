@@ -89,16 +89,3 @@ test("a GPU crash falls back to the lightest model once, then stops", async ({ p
   await expect(page.locator(".webgpu-error-overlay")).toBeHidden();
   await expect(page.locator(".status-bar")).toContainText("loaded");
 });
-
-test("pruning old chats also deletes their stored messages", async ({ page }) => {
-  const index = Array.from({ length: 50 }, (_, i) => ({ id: "old" + i, title: "t", preview: "", model: "m", ts: 1000 + i }));
-  const items = { "webllm-settings": BASE_SETTINGS, "webllm-cached-models": [BASE_SETTINGS.model], "webllm-sessions-index": index };
-  for (const s of index) items["webllm-session:" + s.id] = [];
-  await seedStorage(page, items);
-  await page.goto("/");
-  await expect(page.locator(".status-bar")).toContainText("Model loaded successfully");
-  await page.click("button[title='New chat']");
-  await send(page, "prune");
-  const n = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith("webllm-session:")).length);
-  expect(n).toBe(50);
-});

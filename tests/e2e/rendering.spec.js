@@ -1,6 +1,6 @@
 // Replies: Markdown rendering, sanitising, code blocks, copy, thinking
 // sections, Regenerate / Retry, and the plain-text fallback.
-import { test, expect, check, sleep, sent, clearSent, send } from "../support/fixtures.js";
+import { test, expect, check, sleep, sent, clearSent, send, readChats } from "../support/fixtures.js";
 
 test.use({ fakeWorker: true, downloaded: "SmolLM2-135M-Instruct-q0f32-MLC" });
 
@@ -59,7 +59,7 @@ test("thinking is shown live, then folded and kept out of copies and history", a
   await reply.locator('.msg-action:has-text("Copy")').click();
   await sleep(200);
   check((await clipboard(page)) === "The answer is **42**.", "Copy leaves out the thinking");
-  const index = await page.evaluate(() => JSON.parse(localStorage.getItem("webllm-sessions-index")));
+  const index = await readChats(page);
   check(index[0].preview.startsWith("The answer is"), "chat preview leaves out the thinking");
 
   // Regenerate rewinds the model's memory and asks again

@@ -5,6 +5,7 @@ import {
   getPersona,
 } from "./personas.js";
 import { renderMarkdown, splitThinking, stripThinking } from "./markdown.js";
+import { openChatStore, FALLBACK_MAX_MESSAGES, FALLBACK_MAX_CHATS } from "./chatstore.js";
 import {
   USES,
   TIERS,
@@ -208,6 +209,10 @@ const sharedOnline = vRef(navigator.onLine);
 const sharedOfflineReady = vRef(null);   // null = unknown, true / false
 const sharedInstallPrompt = vRef(null);  // deferred "Install app" prompt
 const sharedSwSupported = "serviceWorker" in navigator;
+
+// Where chats are saved: "indexeddb", or "localstorage" when IndexedDB
+// can't be used (see chatstore.js).
+const sharedChatStorage = vRef({ kind: null });
 
 window.addEventListener("online",  () => { sharedOnline.value = true; });
 window.addEventListener("offline", () => { sharedOnline.value = false; });
@@ -1376,7 +1381,7 @@ const Home = {
                 settings.value.model = cachedInList;
               } else {
                 settings.value.model = "";
-                sessions.value = loadIndex();
+                refreshSessions();
                 if (!currentSessionId.value) currentSessionId.value = genId();
                 status.value = "Choose a model to start";
                 openPicker({ firstRun: true });
@@ -1875,31 +1880,26 @@ const Home = {
 
     // ── Session history export / import ──────────────────────────────────
 
-    function exportSessions() {
-      const index = loadIndex();
-      const allSessions = index.map(entry => {
-        try {
-          const raw = localStorage.getItem(sessionKey(entry.id));
-          const messages = raw ? JSON.parse(raw) : [];
-          return { ...entry, messages };
-        } catch {
-          return { ...entry, messages: [] };
-        }
-      });
-      // Also include current unsaved session if it has messages
-      if (messages.value.length > 0) {
-        const existsInIndex = index.some(s => s.id === currentSessionId.value);
-        if (!existsInIndex) {
-          allSessions.unshift({
-            id: currentSessionId.value,
-            title: titleFromMessages(messages.value) || "Current chat",
-            preview: previewFromMessages(messages.value) || "",
-            model: settings.value.model || "",
-            persona: currentPersonaId.value,
-            ts: Date.now(),
-            messages: messages.value.filter(m => m.role !== "assistant-stream"),
-          });
-        }
+    async function exportSessions() {
+      const store = await chatStoreReady;
+      await writeQueue; // include the latest saves
+      const allSessions = [];
+      for (const entry of sessions.value) {
+        let msgs = [];
+        try { msgs = await store.getMessages(entry.id); } catch {}
+        allSessions.push({ ...entry, messages: msgs });
+      }
+      // Also include the chat on screen if it hasn't been saved yet
+      if (messages.value.length > 0 && !sessions.value.some(s => s.id === currentSessionId.value)) {
+        allSessions.unshift({
+          id: currentSessionId.value,
+          title: titleFromMessages(messages.value) || "Current chat",
+          preview: previewFromMessages(messages.value) || "",
+          model: settings.value.model || "",
+          persona: currentPersonaId.value,
+          ts: Date.now(),
+          messages: plainMessages(messages.value),
+        });
       }
       const ts = new Date().toISOString().slice(0, 10);
       downloadJSON(
@@ -1918,74 +1918,60 @@ const Home = {
         if (data.type !== "webllm-sessions" || !Array.isArray(data.sessions)) {
           throw new Error("Not a valid WebLLM sessions file");
         }
+        const store = await chatStoreReady;
+        await writeQueue;
 
-        const index = loadIndex();
-
-        // Primary dedup: session ID. The export always preserves original IDs,
-        // so re-importing the same file will always be caught here.
-        const existingIds = new Set(index.map(s => s.id));
-
-        // Also include the current in-memory session (may not be in index yet)
+        // Primary dedup: chat ID. Exports keep the original IDs, so
+        // re-importing the same file is always caught here.
+        const existingIds = new Set(sessions.value.map(s => s.id));
         existingIds.add(currentSessionId.value);
 
-        // Secondary dedup: normalised message content hash for sessions that
-        // may have been imported previously with a different ID.
-        // We hash the first+last user message text for a lightweight fingerprint.
+        // Secondary dedup: first + last question, for chats imported
+        // before under a different ID.
         function msgFingerprint(msgs) {
           const userMsgs = (msgs || []).filter(m => m.role === "user");
           if (!userMsgs.length) return null;
-          const first = userMsgs[0].content.trim().slice(0, 80);
-          const last  = userMsgs[userMsgs.length - 1].content.trim().slice(0, 80);
+          const first = String(userMsgs[0].content).trim().slice(0, 80);
+          const last  = String(userMsgs[userMsgs.length - 1].content).trim().slice(0, 80);
           return `${first}|||${last}`;
         }
 
-        // Build fingerprints for all existing sessions
         const existingFingerprints = new Set();
-        for (const entry of index) {
+        for (const entry of sessions.value) {
           try {
-            const raw = localStorage.getItem(sessionKey(entry.id));
-            const fp = raw ? msgFingerprint(JSON.parse(raw)) : null;
+            const fp = msgFingerprint(await store.getMessages(entry.id));
             if (fp) existingFingerprints.add(fp);
           } catch {}
         }
-        // Also fingerprint the current in-memory session
         const currentFp = msgFingerprint(messages.value);
         if (currentFp) existingFingerprints.add(currentFp);
 
-        let added = 0;
+        const toAdd = [];
         let skipped = 0;
-
         for (const session of data.sessions) {
           if (!session.id || !Array.isArray(session.messages)) continue;
-
           const fp = msgFingerprint(session.messages);
-
           if (existingIds.has(session.id) || (fp && existingFingerprints.has(fp))) {
             skipped++;
             continue;
           }
-
-          // Genuinely new — preserve original ID for future dedup
-          localStorage.setItem(
-            sessionKey(session.id),
-            JSON.stringify(session.messages.slice(-MAX_PERSISTED_MESSAGES))
-          );
-          index.unshift({
-            id:      session.id,
-            title:   session.title   || "Imported chat",
-            preview: session.preview || "",
-            model:   session.model   || "",
-            persona: session.persona || DEFAULT_PERSONA_ID,
-            ts:      session.ts      || Date.now(),
+          toAdd.push({
+            id:       session.id,
+            title:    session.title   || "Imported chat",
+            preview:  session.preview || "",
+            model:    session.model   || "",
+            persona:  session.persona || DEFAULT_PERSONA_ID,
+            ts:       session.ts      || Date.now(),
+            messages: session.messages,
           });
           existingIds.add(session.id);
           if (fp) existingFingerprints.add(fp);
-          added++;
         }
 
-        index.sort((a, b) => b.ts - a.ts);
-        if (index.length > MAX_SESSIONS) index.splice(MAX_SESSIONS);
-        saveIndex(index);
+        writeQueue = writeQueue.then(() => store.putMany(toAdd));
+        await writeQueue;
+        await refreshSessions();
+        const added = toAdd.length;
 
         if (added === 0 && skipped > 0) {
           status.value = `✓ All ${skipped} session(s) already exist — nothing to import`;
@@ -1998,7 +1984,6 @@ const Home = {
         status.value = `⚠ Import failed: ${err.message}`;
       }
     }
-    
     function loadSettings() {
 
       const saved = localStorage.getItem("webllm-settings");
@@ -2033,13 +2018,31 @@ const Home = {
       saveSettings();
     }
 
-    // ── Multi-session storage ─────────────────────────────────────────────
+    // ── Chat storage (IndexedDB; see chatstore.js) ───────────────────────
+    // `sessions` holds the sidebar list in memory; chat messages are read
+    // from the store when a chat is opened, searched or exported. Writes are
+    // queued so they reach the store in order.
 
-    const SESSIONS_INDEX_KEY = "webllm-sessions-index";
-    const MAX_PERSISTED_MESSAGES = 40;
-    const MAX_SESSIONS = 50;
+    const chatStoreReady = openChatStore().then(store => {
+      sharedChatStorage.value = { kind: store.kind };
+      return store;
+    });
+    let writeQueue = Promise.resolve();
 
-    function sessionKey(id) { return "webllm-session:" + id; }
+    async function refreshSessions() {
+      const store = await chatStoreReady;
+      try {
+        sessions.value = await store.list();
+      } catch (err) {
+        console.warn("Failed reading chats", err);
+      }
+    }
+
+    // Plain copies of the finished messages (no streaming bubble, no Vue
+    // proxies), as stored.
+    function plainMessages(msgs) {
+      return JSON.parse(JSON.stringify(msgs.filter(m => m.role !== "assistant-stream")));
+    }
 
     function genId() {
       return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -2058,20 +2061,6 @@ const Home = {
       return text.slice(0, 60) + (text.length > 60 ? "…" : "");
     }
 
-    function loadIndex() {
-      try {
-        const raw = localStorage.getItem(SESSIONS_INDEX_KEY);
-        return raw ? JSON.parse(raw) : [];
-      } catch { return []; }
-    }
-
-    function saveIndex(index) {
-      try {
-        localStorage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(index));
-        sessions.value = index;
-      } catch (err) { console.warn("Failed saving session index", err); }
-    }
-
     function formatDate(ts) {
       const d = new Date(ts);
       const now = new Date();
@@ -2082,81 +2071,71 @@ const Home = {
       return d.toLocaleDateString([], { month: "short", day: "numeric" });
     }
 
-    // Persist current session messages to localStorage
+    // Save the chat on screen. The sidebar updates at once; the returned
+    // promise settles when the chat is stored. Empty chats aren't saved.
     function saveConversation() {
-      if (!currentSessionId.value) return;
-      try {
-        const toSave = messages.value
-          .filter(m => m.role !== "assistant-stream")
-          .slice(-MAX_PERSISTED_MESSAGES);
-        localStorage.setItem(sessionKey(currentSessionId.value), JSON.stringify(toSave));
+      if (!currentSessionId.value) return writeQueue;
+      const toSave = plainMessages(messages.value);
+      if (!toSave.length) return writeQueue;
 
-        // Update index entry
-        const index = loadIndex();
-        const idx = index.findIndex(s => s.id === currentSessionId.value);
-        const entry = {
-          id: currentSessionId.value,
-          title: titleFromMessages(toSave),
-          preview: previewFromMessages(toSave),
-          model: settings.value.model || "",
-          persona: currentPersonaId.value,
-          ts: Date.now(),
-        };
-        if (idx >= 0) index[idx] = entry;
-        else index.unshift(entry);
-        // Keep newest first, cap at MAX_SESSIONS
-        index.sort((a, b) => b.ts - a.ts);
-        if (index.length > MAX_SESSIONS) {
-          // Delete the pruned sessions' messages too, or they stay in
-          // localStorage forever and eat into its ~5 MB quota.
-          const pruned = index.splice(MAX_SESSIONS);
-          for (const old of pruned) localStorage.removeItem(sessionKey(old.id));
-        }
-        saveIndex(index);
-      } catch (err) { console.warn("Failed saving session", err); }
+      const meta = {
+        id: currentSessionId.value,
+        title: titleFromMessages(toSave),
+        preview: previewFromMessages(toSave),
+        model: settings.value.model || "",
+        persona: currentPersonaId.value,
+        ts: Date.now(),
+      };
+      sessions.value = [meta, ...sessions.value.filter(s => s.id !== meta.id)];
+
+      writeQueue = writeQueue
+        .then(async () => (await chatStoreReady).save(meta, toSave))
+        .catch(err => {
+          console.warn("Failed saving chat", err);
+          status.value = `⚠ Couldn't save this chat: ${err.message}`;
+        });
+      return writeQueue;
     }
 
-    // Load a session by id into the UI and worker
-    function loadSession(id) {
+    // Show a chat's messages and give the model its history. A question
+    // left without an answer (tab closed mid-reply) is asked again.
+    function showChat(parsed) {
+      const last = parsed[parsed.length - 1];
+      const unanswered = last && last.role === "user" ? last.content : null;
+      const toRestore = unanswered ? parsed.slice(0, -1) : parsed;
+
+      messages.value = toRestore;
+      scrollBottom();
+      getWorker().postMessage({ type: "restore-history", history: historyForWorker(toRestore) });
+
+      if (unanswered) {
+        addMessage("user", unanswered);
+        saveConversation();
+        loading.value = true;
+        getWorker().postMessage({ type: "generate", prompt: unanswered, config: liveConfig() });
+      }
+    }
+
+    // Open a chat from the sidebar
+    async function loadSession(id) {
       if (id === currentSessionId.value) { sidebarOpen.value = false; return; }
       if (loading.value || modelLoading.value) return;
 
-      // Save current session before switching
-      saveConversation();
-
+      saveConversation(); // the chat being left
       try {
-        const raw = localStorage.getItem(sessionKey(id));
-        const parsed = raw ? JSON.parse(raw) : [];
-
+        const parsed = await (await chatStoreReady).getMessages(id);
         currentSessionId.value = id;
         currentPersonaId.value = personaForSession(id);
         sidebarOpen.value = false;
-
-        const last = parsed[parsed.length - 1];
-        const unanswered = last && last.role === "user" ? last.content : null;
-        const toRestore = unanswered ? parsed.slice(0, -1) : parsed;
-
-        messages.value = toRestore;
-        scrollBottom();
-        getWorker().postMessage({
-          type: "clear-history",
-        });
-        const history = historyForWorker(toRestore);
-        getWorker().postMessage({ type: "restore-history", history });
-
-        if (unanswered) {
-          addMessage("user", unanswered);
-          saveConversation();
-          loading.value = true;
-          getWorker().postMessage({ type: "generate", prompt: unanswered, config: liveConfig() });
-        }
-      } catch (err) { console.warn("Failed loading session", err); }
+        getWorker().postMessage({ type: "clear-history" });
+        showChat(parsed);
+      } catch (err) { console.warn("Failed loading chat", err); }
     }
 
     // Persona saved with a chat. Chats from before personas existed use
     // the default persona.
     function personaForSession(id) {
-      const entry = loadIndex().find(s => s.id === id);
+      const entry = sessions.value.find(s => s.id === id);
       return getPersona(entry?.persona || settings.value.defaultPersona).id;
     }
 
@@ -2172,85 +2151,52 @@ const Home = {
       sidebarOpen.value = false;
     }
 
-    // Delete a session from storage and index
+    function removeChat(id) {
+      sessions.value = sessions.value.filter(s => s.id !== id);
+      writeQueue = writeQueue
+        .then(async () => (await chatStoreReady).delete(id))
+        .catch(err => console.warn("Failed deleting chat", err));
+      return writeQueue;
+    }
+
+    // Delete a chat from the sidebar
     function deleteSession(id) {
-      try {
-        localStorage.removeItem(sessionKey(id));
-        const index = loadIndex().filter(s => s.id !== id);
-        saveIndex(index);
-        // If deleting the current session, start a new one
-        if (id === currentSessionId.value) newChat();
-      } catch (err) { console.warn("Failed deleting session", err); }
+      if (id === currentSessionId.value) {
+        if (loading.value || modelLoading.value) return;
+        // Empty the screen first, or starting a new chat would save the
+        // deleted one again
+        messages.value = [];
+        removeChat(id);
+        newChat();
+        return;
+      }
+      removeChat(id);
     }
 
-    // Legacy single-session key migration (one-time)
-    function migrateLegacySession() {
-      const legacy = localStorage.getItem("webllm-conversation");
-      if (!legacy) return;
-      try {
-        const parsed = JSON.parse(legacy);
-        if (!Array.isArray(parsed) || parsed.length === 0) return;
-        const id = genId();
-        localStorage.setItem(sessionKey(id), legacy);
-        const index = loadIndex();
-        index.unshift({
-          id, ts: Date.now(),
-          title: titleFromMessages(parsed),
-          preview: previewFromMessages(parsed),
-          model: settings.value.model || "",
-        });
-        saveIndex(index);
-        localStorage.removeItem("webllm-conversation");
-      } catch {}
-    }
-
-    function loadConversation() {
-      migrateLegacySession();
-      const index = loadIndex();
-      sessions.value = index;
+    // Open the most recent chat (once per page load, after the model loads)
+    async function loadConversation() {
+      await refreshSessions();
+      const index = sessions.value;
 
       if (index.length === 0) {
-        // First ever launch — create initial session
         currentSessionId.value = genId();
         currentPersonaId.value = settings.value.defaultPersona || DEFAULT_PERSONA_ID;
         return;
       }
 
-      // Load the most recent session
       const latest = index[0];
       currentSessionId.value = latest.id;
       currentPersonaId.value = personaForSession(latest.id);
-
       try {
-        const raw = localStorage.getItem(sessionKey(latest.id));
-        const parsed = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(parsed) || parsed.length === 0) return;
-
-        const last = parsed[parsed.length - 1];
-        const unanswered = last && last.role === "user" ? last.content : null;
-        const toRestore = unanswered ? parsed.slice(0, -1) : parsed;
-
-        messages.value = toRestore;
-        scrollBottom();
-
-        const history = historyForWorker(toRestore);
-        getWorker().postMessage({ type: "restore-history", history });
-
-        if (unanswered) {
-          addMessage("user", unanswered);
-          saveConversation();
-          loading.value = true;
-          getWorker().postMessage({ type: "generate", prompt: unanswered, config: liveConfig() });
-        }
-      } catch (err) { console.warn("Failed loading latest session", err); }
+        const parsed = await (await chatStoreReady).getMessages(latest.id);
+        if (parsed.length) showChat(parsed);
+      } catch (err) { console.warn("Failed loading latest chat", err); }
     }
 
     function clearConversation() {
       if (!currentSessionId.value) return;
       messages.value = [];
-      localStorage.removeItem(sessionKey(currentSessionId.value));
-      const index = loadIndex().filter(s => s.id !== currentSessionId.value);
-      saveIndex(index);
+      removeChat(currentSessionId.value);
       currentSessionId.value = genId();
       currentPersonaId.value = settings.value.defaultPersona || DEFAULT_PERSONA_ID;
       getWorker().postMessage({ type: "clear-history" });
@@ -2310,6 +2256,8 @@ const Home = {
     
       loadSettings();
       currentPersonaId.value = settings.value.defaultPersona || DEFAULT_PERSONA_ID;
+      // Fill the chat list right away (the latest chat opens once a model loads)
+      refreshSessions();
       getWorker().postMessage({
         type: "init",
       });
@@ -2410,15 +2358,14 @@ const Home = {
         });
       }
 
-      // Search all saved sessions (load from localStorage on demand)
-      const index = loadIndex();
+      // Search all saved chats (messages read from the store on demand)
+      const store = await chatStoreReady;
+      const index = [...sessions.value];
       for (const entry of index) {
         if (entry.id === currentSessionId.value) continue; // already searched above
         try {
-          const raw = localStorage.getItem(sessionKey(entry.id));
-          if (!raw) continue;
-          const msgs = JSON.parse(raw);
-          if (!Array.isArray(msgs)) continue;
+          const msgs = await store.getMessages(entry.id);
+          if (!msgs.length) continue;
 
           // Quick title/preview check first (avoids JSON.parse for non-matches)
           const inTitleOrPreview =
@@ -2446,11 +2393,8 @@ const Home = {
             });
           }
         } catch {}
-
-        // Yield to the event loop every 5 sessions to stay responsive
-        if (index.indexOf(entry) % 5 === 4) {
-          await new Promise(r => setTimeout(r, 0));
-        }
+        // A newer search started meanwhile: let it finish instead
+        if (query !== searchQuery.value) return;
       }
 
       // Sort: active session first, then by total match count desc
@@ -2736,6 +2680,10 @@ const Settings = {
               <span class="device-val">{{ diagnostics == null || diagnostics.shaderF16 == null ? "Unknown" : (diagnostics.shaderF16 ? "Yes" : "No") }}</span>
             </div>
             <div class="device-row">
+              <span class="device-key">Chats saved in</span>
+              <span class="device-val" :class="{ warn: chatStorage.kind === 'localstorage' }">{{ chatStorageText }}</span>
+            </div>
+            <div class="device-row">
               <span class="device-key">Works offline</span>
               <span class="device-val" :class="{ warn: offlineReady === false }">{{ offlineText }}</span>
             </div>
@@ -2876,6 +2824,16 @@ const Settings = {
       installPrompt: sharedInstallPrompt,
       installedApp: isInstalledApp(),
       installApp,
+      chatStorage: sharedChatStorage,
+      chatStorageText: Vue.computed(() => {
+        const n = sharedSessions.value.length;
+        const count = `${n} chat${n === 1 ? "" : "s"}`;
+        if (sharedChatStorage.value.kind === "indexeddb") return `This browser's database (IndexedDB) · ${count}`;
+        if (sharedChatStorage.value.kind === "localstorage") {
+          return `Local storage, limited to ${FALLBACK_MAX_CHATS} chats of ${FALLBACK_MAX_MESSAGES} messages · ${count}`;
+        }
+        return "…";
+      }),
       exportSettings:  sharedExportSettings,
       importSettings:  sharedImportSettings,
       exportSessions:  sharedExportSessions,

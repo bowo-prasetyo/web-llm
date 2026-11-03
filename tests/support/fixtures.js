@@ -141,3 +141,36 @@ export async function send(page, text, wait = 600) {
   await page.keyboard.press("Enter");
   await sleep(wait);
 }
+
+// Chats as the app stores them in IndexedDB (newest first), each with its
+// messages. Waits briefly so queued writes land first.
+export async function readChats(page) {
+  await sleep(150);
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open("webllm-chats");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains("chats")) { db.close(); resolve([]); return; }
+      const tx = db.transaction(["chats", "messages"], "readonly");
+      const chats = tx.objectStore("chats").getAll();
+      const msgs = tx.objectStore("messages").getAll();
+      tx.oncomplete = () => {
+        const byId = Object.fromEntries(msgs.result.map(m => [m.id, m.messages]));
+        db.close();
+        resolve(chats.result
+          .map(c => ({ ...c, messages: byId[c.id] || [] }))
+          .sort((a, b) => b.ts - a.ts));
+      };
+      tx.onerror = () => reject(tx.error);
+    };
+  }));
+}
+
+// Chats in the localStorage format used before IndexedDB (and by the
+// fallback): the index and one key per chat.
+export function legacyChatItems(chats) {
+  const items = { "webllm-sessions-index": chats.map(({ messages, ...meta }) => meta) };
+  for (const c of chats) items["webllm-session:" + c.id] = c.messages || [];
+  return items;
+}

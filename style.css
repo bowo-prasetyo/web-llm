@@ -1622,3 +1622,13 @@ html, body, #app {
 .device-failed li { margin: 3px 0; overflow-wrap: anywhere; }
 .device-failed code { font-family: var(--font-mono); font-size: 12px; color: var(--amber-text); }
 .device-sample { margin-left: 6px; color: var(--text-3); font-size: 12px; }
+
+/* Notes under a reply (cut off, stopped repeating) and the Continue button */
+.msg-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+  font-style: italic;
+}
+.msg-action-primary { color: var(--amber-text); border-color: var(--border); }
+.msg-action-primary:hover:not(:disabled) { color: var(--amber); }

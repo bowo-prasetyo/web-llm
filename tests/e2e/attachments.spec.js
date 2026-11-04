@@ -1,6 +1,6 @@
 // Documents attached to a chat (the real worker.js, a scripted WebLLM and a
 // word-based stand-in for the embedding model).
-import { test, expect, check, sleep, seedStorage, send, engineRequests, clearSent, readChats, readAttachments, attachText } from "../support/fixtures.js";
+import { test, expect, check, sleep, seedStorage, send, engineRequests, clearSent, readChats, readAttachments, attachText, confirmDelete } from "../support/fixtures.js";
 
 const M = "Qwen2.5-0.5B-Instruct-q4f32_1-MLC";
 const NOTE = "The team meeting is on Tuesday at 10am in room 4B.";
@@ -115,6 +115,7 @@ test("deleting a chat deletes its documents", async ({ page }) => {
   await expect.poll(async () => (await readAttachments(page)).length).toBe(1);
   await page.click('button[title="Chat history"]');
   await page.locator(".session-item.active .session-delete").click();
+  await confirmDelete(page);
   await expect.poll(async () => (await readAttachments(page)).length).toBe(0);
 });
 
@@ -132,6 +133,7 @@ test("exported chats carry their documents", async ({ page }, testInfo) => {
   await page.click("text=Back");
   await page.click('button[title="Chat history"]');
   await page.locator(".session-item.active .session-delete").click();
+  await confirmDelete(page);
   await expect.poll(async () => (await readAttachments(page)).length).toBe(0);
   await expect.poll(async () => (await readChats(page)).length).toBe(0); // not saved back as a document-only chat
 

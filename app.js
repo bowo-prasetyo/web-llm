@@ -47,6 +47,169 @@ function replaceWorker(onmessage) {
   return worker;
 }
 
+// ── Focus management for dialogs and the sidebar ──────────────────────────
+// While a dialog (or the open sidebar) is on screen, keyboard focus moves
+// into it, Tab and Shift+Tab stay inside it, and Escape closes it. When it
+// closes, focus goes back to where it was. Scopes stack: only the topmost
+// one (e.g. a confirmation opened from the sidebar) handles the keys.
+const FOCUSABLE = [
+  "a[href]", "button:not([disabled])", "input:not([disabled]):not([type=hidden])",
+  "select:not([disabled])", "textarea:not([disabled])", "summary",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+const focusScopes = [];
+
+function focusablesIn(el) {
+  return [...el.querySelectorAll(FOCUSABLE)]
+    .filter(n => !n.closest("[inert]") && n.getClientRects().length > 0);
+}
+
+function focusFirstIn(el) {
+  const target = el.querySelector("[data-autofocus]:not([disabled])") || focusablesIn(el)[0];
+  if (target) { target.focus(); return; }
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+  el.focus();
+}
+
+// Trap focus in `el` until the returned release function is called.
+// `onEscape` (optional) is called when Escape is pressed. `returnTo`
+// overrides where focus goes on release (default: what had focus before).
+function openFocusScope(el, { onEscape = null, returnTo = null } = {}) {
+  const scope = { el, onEscape, returnTo: returnTo || document.activeElement };
+  focusScopes.push(scope);
+  focusFirstIn(el);
+  return function release() {
+    const i = focusScopes.indexOf(scope);
+    if (i === -1) return;
+    focusScopes.splice(i, 1);
+    if (i !== focusScopes.length) return; // not the topmost: leave focus alone
+    const back = typeof scope.returnTo === "function" ? scope.returnTo() : scope.returnTo;
+    const top = focusScopes[focusScopes.length - 1];
+    if (back && back.isConnected && !back.closest("[inert]") && back.getClientRects().length > 0) {
+      back.focus();
+    } else if (top) {
+      focusFirstIn(top.el);
+    }
+  };
+}
+
+document.addEventListener("keydown", e => {
+  const scope = focusScopes[focusScopes.length - 1];
+  if (!scope) return;
+  if (e.key === "Escape") {
+    if (scope.onEscape) {
+      e.preventDefault();
+      e.stopPropagation();
+      scope.onEscape();
+    }
+    return;
+  }
+  if (e.key !== "Tab") return;
+  const items = focusablesIn(scope.el);
+  if (!items.length) { e.preventDefault(); return; }
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (!scope.el.contains(active)) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+  } else if (e.shiftKey && active === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}, true);
+
+// v-dialog="onEscape" on a dialog element shown with v-if. Pass null for a
+// dialog that Escape must not close (e.g. the WebGPU error screen).
+const dialogDirective = {
+  mounted(el, binding) {
+    el._releaseFocus = openFocusScope(el, { onEscape: () => binding.value && binding.value() });
+    el._dialogBinding = binding;
+  },
+  updated(el, binding) {
+    el._dialogBinding = binding;
+    const scope = focusScopes.find(s => s.el === el);
+    if (scope) scope.onEscape = binding.value ? () => binding.value() : null;
+    // Content changed (e.g. the picker's next step) and took focus with it
+    if (scope === focusScopes[focusScopes.length - 1] && !el.contains(document.activeElement)) {
+      focusFirstIn(el);
+    }
+  },
+  unmounted(el) {
+    if (el._releaseFocus) el._releaseFocus();
+  },
+};
+
+// ── Confirmation dialog (shared by the chat page and Settings) ────────────
+// askConfirm({...}) shows it and resolves to true (confirmed) or false.
+const sharedConfirm = Vue.reactive({
+  show: false,
+  icon: "",
+  title: "",
+  subject: "",   // shown in bold above the message (e.g. a model or chat name)
+  message: "",
+  confirmText: "OK",
+  cancelText: "Cancel",
+  danger: false,
+  resolve: null,
+});
+
+function askConfirm(opts) {
+  // A new question replaces one still open; the old one counts as cancelled.
+  if (sharedConfirm.resolve) sharedConfirm.resolve(false);
+  return new Promise(resolve => {
+    Object.assign(sharedConfirm, {
+      icon: "", subject: "", message: "", confirmText: "OK", cancelText: "Cancel", danger: false,
+      ...opts,
+      show: true,
+      resolve,
+    });
+  });
+}
+
+function answerConfirm(ok) {
+  const resolve = sharedConfirm.resolve;
+  sharedConfirm.show = false;
+  sharedConfirm.resolve = null;
+  if (resolve) resolve(ok);
+}
+
+function formatMb(mb) {
+  return mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB";
+}
+
+const ConfirmDialog = {
+  template: `
+    <div v-if="c.show" class="modal-overlay" @click.self="answer(false)">
+      <div
+        class="modal confirm-dialog"
+        :class="{ danger: c.danger }"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-body"
+        v-dialog="() => answer(false)"
+      >
+        <div v-if="c.icon" class="modal-icon" aria-hidden="true">{{ c.icon }}</div>
+        <h2 class="modal-title" id="confirm-title">{{ c.title }}</h2>
+        <p class="modal-body" id="confirm-body">
+          <template v-if="c.subject"><strong class="confirm-subject">{{ c.subject }}</strong><br><br></template>{{ c.message }}
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="action-btn secondary" data-autofocus @click="answer(false)">{{ c.cancelText }}</button>
+          <button type="button" class="action-btn" :class="c.danger ? 'danger' : 'primary'" @click="answer(true)">{{ c.confirmText }}</button>
+        </div>
+      </div>
+    </div>
+  `,
+  setup() {
+    return { c: sharedConfirm, answer: answerConfirm };
+  },
+};
+
 // The strict prompt used as the default before personas existed. Kept only
 // to recognise settings that still hold it unedited (see migrateSettings).
 const LEGACY_DEFAULT_SYSTEM_PROMPT = "You are a concise, factually accurate AI assistant.\n\nRules you must never break:\n- Never contradict established science, physics, or basic facts (e.g. humans have mass).\n- NEVER guess or invent an answer. If you are not certain, respond only with \"I\'m not sure.\" Do not elaborate.\n- Do not add philosophical or metaphysical tangents to simple factual questions.\n- Do not contradict yourself within the same conversation.\n- Keep answers short and direct unless the user asks for detail.\n- Never redefine ordinary words in unusual ways to rescue a wrong answer.\n- If the user states a correct fact, accept it. Do not contradict correct information the user provides.\n- Only correct the user if you are certain they are factually wrong.";
@@ -324,30 +487,10 @@ const Home = {
   template: `
     <div class="container">
 
-      <!-- Download confirmation modal -->
-      <div class="modal-overlay" v-if="confirmModal.show" @click.self="confirmModal.show = false">
-        <div class="modal">
-          <div class="modal-icon">⬇</div>
-          <h2 class="modal-title">Download Model?</h2>
-          <p class="modal-body">
-            <strong>{{ confirmModal.model }}</strong><br><br>
-            This model will be downloaded and cached in your browser
-            (<strong>~{{ confirmModal.sizeMb >= 1024
-              ? (confirmModal.sizeMb / 1024).toFixed(1) + " GB"
-              : confirmModal.sizeMb + " MB" }}</strong>).
-            After the first download it loads instantly from cache.
-          </p>
-          <div class="modal-actions">
-            <button class="action-btn secondary" @click="confirmModal.show = false; settings.model = confirmModal.previousModel">Cancel</button>
-            <button class="action-btn primary" @click="confirmDownload">Download & Load</button>
-          </div>
-        </div>
-      </div>
-
       <!-- Model doesn't work on this GPU (failed check or collapsed reply) -->
       <div class="modal-overlay" v-if="healthModal.show" @click.self="keepModelAnyway">
-        <div class="modal" role="alertdialog" aria-labelledby="health-title">
-          <div class="modal-icon">⚠</div>
+        <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="health-title" v-dialog="keepModelAnyway">
+          <div class="modal-icon" aria-hidden="true">⚠</div>
           <h2 class="modal-title" id="health-title">
             {{ healthModal.reason === "degenerate" ? "This model may not work on your GPU" : "This model doesn't work on your GPU" }}
           </h2>
@@ -376,7 +519,7 @@ const Home = {
 
       <!-- Model picker: first launch, or "Help me choose a model" -->
       <div v-if="picker.show" class="modal-overlay" @click.self="closePicker">
-        <div class="modal picker" role="dialog" aria-labelledby="picker-title">
+        <div class="modal picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" v-dialog="closePicker">
           <template v-if="picker.step === 1">
             <h2 class="modal-title" id="picker-title">
               {{ picker.firstRun ? "Welcome! Let's pick a model" : "Choose a model" }}
@@ -392,6 +535,8 @@ const Home = {
                 type="button"
                 class="picker-option"
                 :class="{ active: picker.use === u.id }"
+                :aria-pressed="picker.use === u.id ? 'true' : 'false'"
+                :data-autofocus="picker.use === u.id ? '' : null"
                 @click="chooseUse(u.id)"
               >
                 <span class="picker-icon" aria-hidden="true">{{ u.icon }}</span>
@@ -418,6 +563,8 @@ const Home = {
                 type="button"
                 class="picker-option tier"
                 :class="{ active: picker.tier === o.id }"
+                :aria-pressed="picker.tier === o.id ? 'true' : 'false'"
+                :data-autofocus="picker.tier === o.id ? '' : null"
                 @click="picker.tier = o.id"
               >
                 <span class="picker-text">
@@ -444,9 +591,9 @@ const Home = {
 
       <!-- WebGPU error screen — full overlay, shown when GPU is incompatible -->
       <div v-if="webgpuError" class="webgpu-error-overlay">
-        <div class="webgpu-error-card">
-          <div class="webgpu-error-icon">⚠</div>
-          <h2 class="webgpu-error-title">WebGPU Not Available</h2>
+        <div class="webgpu-error-card" role="alertdialog" aria-modal="true" aria-labelledby="webgpu-error-title" v-dialog="null">
+          <div class="webgpu-error-icon" aria-hidden="true">⚠</div>
+          <h2 class="webgpu-error-title" id="webgpu-error-title">WebGPU Not Available</h2>
           <p class="webgpu-error-body">
             Your browser or device doesn't support WebGPU, which is required to run AI models locally.
           </p>
@@ -468,66 +615,87 @@ const Home = {
               <span>Check your GPU compatibility at <a href="https://webgpureport.org" target="_blank" rel="noopener">webgpureport.org</a></span>
             </div>
           </div>
-          <button class="action-btn primary" style="margin-top:20px;width:100%" @click="webgpuError = false; applySettings()">
+          <button class="action-btn primary" style="margin-top:20px;width:100%" data-autofocus @click="webgpuError = false; applySettings()">
             Try Again
           </button>
         </div>
       </div>
 
       <!-- Sidebar overlay -->
-      <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false"></div>
+      <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false" aria-hidden="true"></div>
 
       <!-- Sessions sidebar -->
-      <div class="sidebar" :class="{ open: sidebarOpen }">
+      <div
+        ref="sidebarEl"
+        id="chat-sidebar"
+        class="sidebar"
+        :class="{ open: sidebarOpen }"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sidebar-title"
+        :inert="!sidebarOpen"
+      >
         <div class="sidebar-header">
-          <span class="sidebar-title">Chats</span>
-          <button class="new-chat-btn" @click="newChat" :disabled="loading || modelLoading">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New Chat
-          </button>
+          <h2 class="sidebar-title" id="sidebar-title">Chats</h2>
+          <div class="sidebar-header-actions">
+            <button class="new-chat-btn" @click="newChat" :disabled="loading || modelLoading">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Chat
+            </button>
+            <button type="button" class="sidebar-close" @click="sidebarOpen = false" aria-label="Close chat list" title="Close">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
         </div>
 
         <!-- Search box -->
         <div class="sidebar-search">
-          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <svg class="search-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input
             class="search-input"
-            type="text"
+            type="search"
             placeholder="Search chats…"
+            aria-label="Search chats"
             v-model="searchQuery"
             @input="onSearchInput"
           />
-          <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''; searchResults = []" title="Clear">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <button v-if="searchQuery" type="button" class="search-clear" @click="searchQuery = ''; searchResults = []" title="Clear search" aria-label="Clear search">
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 
         <!-- Search results -->
         <div v-if="searchQuery" class="sidebar-list">
-          <div v-if="searchResults.length === 0 && !searchPending" class="sidebar-empty">
+          <div v-if="searchResults.length === 0 && !searchPending" class="sidebar-empty" role="status">
             No results for "{{ searchQuery }}"
           </div>
-          <div v-if="searchPending" class="sidebar-empty">Searching…</div>
+          <div v-if="searchPending" class="sidebar-empty" role="status">Searching…</div>
           <template v-for="r in searchResults" :key="r.session.id">
             <div
               class="session-item search-result-item"
               :class="{ active: r.session.id === currentSessionId }"
-              @click="loadSession(r.session.id)"
             >
-              <div class="session-meta">
-                <span class="session-title">{{ r.session.id === currentSessionId ? "Current chat" : r.session.title }}</span>
-                <span class="session-date">{{ formatDate(r.session.ts) }}</span>
-              </div>
-              <!-- Show up to 3 matching excerpts per session -->
-              <div
-                v-for="(match, mi) in r.matches.slice(0, 3)"
-                :key="mi"
-                class="search-match"
+              <button
+                type="button"
+                class="session-open"
+                @click="loadSession(r.session.id)"
+                :aria-current="r.session.id === currentSessionId ? 'true' : null"
               >
-                <span class="match-role">{{ match.role === "user" ? "You" : "AI" }}</span>
-                <span class="match-snippet" v-html="match.highlighted"></span>
-              </div>
-              <div v-if="r.matches.length > 3" class="search-more">+{{ r.matches.length - 3 }} more matches</div>
+                <span class="session-meta">
+                  <span class="session-title">{{ r.session.id === currentSessionId ? "Current chat" : r.session.title }}</span>
+                  <span class="session-date">{{ formatDate(r.session.ts) }}</span>
+                </span>
+                <!-- Show up to 3 matching excerpts per session -->
+                <span
+                  v-for="(match, mi) in r.matches.slice(0, 3)"
+                  :key="mi"
+                  class="search-match"
+                >
+                  <span class="match-role">{{ match.role === "user" ? "You" : "AI" }}</span>
+                  <span class="match-snippet" v-html="match.highlighted"></span>
+                </span>
+                <span v-if="r.matches.length > 3" class="search-more">+{{ r.matches.length - 3 }} more matches</span>
+              </button>
             </div>
           </template>
         </div>
@@ -540,16 +708,22 @@ const Home = {
             :key="s.id"
             class="session-item"
             :class="{ active: s.id === currentSessionId }"
-            @click="loadSession(s.id)"
           >
-            <div class="session-meta">
-              <span class="session-title"><span v-if="s.persona" class="session-persona" :title="personaName(s.persona)">{{ personaIcon(s.persona) }}</span>{{ s.title }}</span>
-              <span class="session-date">{{ formatDate(s.ts) }}</span>
-            </div>
-            <div class="session-preview">{{ s.preview }}</div>
-            <div class="session-model">{{ s.model.split('-').slice(0,2).join('-') }}</div>
-            <button class="session-delete" @click.stop="deleteSession(s.id)" title="Delete">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            <button
+              type="button"
+              class="session-open"
+              @click="loadSession(s.id)"
+              :aria-current="s.id === currentSessionId ? 'true' : null"
+            >
+              <span class="session-meta">
+                <span class="session-title"><span v-if="s.persona" class="session-persona" :title="personaName(s.persona)">{{ personaIcon(s.persona) }}</span>{{ s.title }}</span>
+                <span class="session-date">{{ formatDate(s.ts) }}</span>
+              </span>
+              <span class="session-preview">{{ s.preview }}</span>
+              <span class="session-model">{{ s.model.split('-').slice(0,2).join('-') }}</span>
+            </button>
+            <button type="button" class="session-delete" @click="deleteSession(s.id)" title="Delete chat" :aria-label="'Delete chat: ' + s.title">
+              <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
             </button>
           </div>
         </div>
@@ -557,17 +731,25 @@ const Home = {
 
       <div class="header">
         <div class="header-left">
-          <button class="icon-btn" @click="sidebarOpen = !sidebarOpen" title="Chat history">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          <button
+            ref="menuBtn"
+            class="icon-btn"
+            @click="sidebarOpen = !sidebarOpen"
+            title="Chat history"
+            aria-label="Chat history"
+            aria-controls="chat-sidebar"
+            :aria-expanded="sidebarOpen ? 'true' : 'false'"
+          >
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <span class="header-title">WebLLM Chat</span>
+          <h1 class="header-title">WebLLM Chat</h1>
         </div>
         <div class="header-actions">
-          <button class="icon-btn" @click="newChat" :disabled="loading || modelLoading" title="New chat">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <button class="icon-btn" @click="newChat" :disabled="loading || modelLoading" title="New chat" aria-label="New chat">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
-          <button class="icon-btn" @click="$router.push('/settings')" title="Settings">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button class="icon-btn" @click="$router.push('/settings')" title="Settings" aria-label="Settings">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
           </button>
@@ -575,8 +757,11 @@ const Home = {
       </div>
 
       <div class="status-bar">
-        <span class="status-dot" :class="{ active: !modelLoading && !loading }"></span>
-        <span class="status-text">{{ status }}</span>
+        <span class="status-dot" :class="{ active: !modelLoading && !loading }" aria-hidden="true"></span>
+        <span class="status-text" :title="status">{{ status }}</span>
+        <!-- Announced to screen readers. Download progress updates many times
+             a second, so only its start is announced, not every step. -->
+        <span class="sr-only" role="status" aria-live="polite">{{ announcedStatus }}</span>
         <span v-if="!online" class="offline-badge" title="No internet connection. Downloaded models still work.">Offline</span>
       </div>
 
@@ -589,7 +774,7 @@ const Home = {
         <button type="button" class="update-dismiss" @click="updateDismissed = true" title="Later" aria-label="Dismiss">×</button>
       </div>
 
-      <div class="messages" ref="messagesContainer" @click="onMessagesClick">
+      <div class="messages" ref="messagesContainer" @click="onMessagesClick" role="log" aria-label="Conversation" :aria-busy="loading ? 'true' : 'false'">
         <!-- Welcome screen for an empty chat: pick a persona, try a starter -->
         <div v-if="messages.length === 0" class="welcome">
           <h2 class="welcome-title">What would you like to chat about?</h2>
@@ -741,9 +926,11 @@ const Home = {
           </select>
           <select
             v-model="settings.model"
-            @change="applySettings"
+            @change="applySettings()"
             :disabled="modelLoading || loading"
             class="model-select"
+            title="Model"
+            aria-label="Model"
           >
             <option disabled value="">Select Model</option>
             <template v-for="group in modelGroups" :key="group.label">
@@ -759,20 +946,20 @@ const Home = {
             class="clear-btn"
             @click="clearConversation"
             :disabled="messages.length === 0"
-            title="Clear chat"
+            title="Delete this chat"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
             </svg>
             Clear
           </button>
 
           <label class="upload-btn" title="Attach a document to this chat (PDF, TXT, Markdown)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
             <span>Attach</span>
-            <input type="file" accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" style="display:none" />
+            <input type="file" class="sr-only" accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" />
           </label>
 
           <!-- Cancel download button — shown only while model is downloading -->
@@ -782,7 +969,7 @@ const Home = {
             @click="cancelDownload"
             title="Cancel download"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             Cancel Download
           </button>
         </div>
@@ -791,6 +978,7 @@ const Home = {
           <textarea
             ref="promptInput"
             v-model="prompt"
+            aria-label="Message"
             placeholder="Ask something… (Enter to send, Shift+Enter for newline)"
             @keydown.enter.exact.prevent="send"
           ></textarea>
@@ -800,8 +988,9 @@ const Home = {
             class="send-btn stop-gen-btn"
             @click="stopGeneration"
             title="Stop generation"
+            aria-label="Stop generation"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="4" y="4" width="16" height="16" rx="2"/>
             </svg>
           </button>
@@ -812,8 +1001,10 @@ const Home = {
             class="send-btn"
             @click="send"
             :disabled="modelLoading || !prompt.trim()"
+            title="Send"
+            aria-label="Send message"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
           </button>
@@ -892,6 +1083,32 @@ const Home = {
     const modelSizes = sharedModelSizes;
     const isDownloading = sharedIsDownloading;
     const webgpuError = sharedWebgpuError;
+
+    // The chat list is a drawer over the chat: while it's open, focus moves
+    // into it and stays there, and Escape (or the × button) closes it and
+    // returns focus to the menu button. While closed it is inert, so Tab
+    // doesn't wander into a panel that's off screen.
+    const sidebarEl = ref(null);
+    const menuBtn = ref(null);
+    let releaseSidebarFocus = null;
+    Vue.watch(sidebarOpen, open => {
+      if (open && sidebarEl.value && !releaseSidebarFocus) {
+        releaseSidebarFocus = openFocusScope(sidebarEl.value, {
+          onEscape: () => { sidebarOpen.value = false; },
+          returnTo: () => menuBtn.value,
+        });
+      } else if (!open && releaseSidebarFocus) {
+        const release = releaseSidebarFocus;
+        releaseSidebarFocus = null;
+        release();
+      }
+    }, { flush: "post" });
+
+    // What screen readers hear from the status bar. Download progress
+    // changes many times a second, so it is announced once when it starts.
+    const announcedStatus = Vue.computed(() =>
+      isDownloading.value ? "Downloading the model…" : status.value);
+
     // Documents attached to the chat on screen: attachments for the chips,
     // attachmentRecords with the full text (and chunks) for the worker.
     const attachments = ref([]);  // [{ id, name, chars, status, current, total, error }]
@@ -900,12 +1117,6 @@ const Home = {
     const CACHED_KEY = "webllm-cached-models";
     // Tracks the model that was cancelled so applySettings won't re-trigger it
     const postCancelModel = ref("");
-    const confirmModal = ref({
-      show: false,
-      model: "",
-      previousModel: "",
-      sizeMb: 0,
-    });
 
     function getCachedModels() {
       try {
@@ -1804,16 +2015,31 @@ const Home = {
       // On initial page load (lastAppliedModel is ""), skip confirmation so the
       // app always loads a model automatically and doesn't start with an empty UI.
       const isUserChange = lastAppliedModel.value !== "";
-      if (isNewModel && isUserChange && !skipConfirm && !isModelCached(settings.value.model)) {
+      // skipConfirm must be exactly true: an event handler written as
+      // @change="applySettings" would pass the event here and skip the
+      // question for every model.
+      if (isNewModel && isUserChange && skipConfirm !== true && !isModelCached(settings.value.model)) {
         const sizeMb = modelSizes.value[settings.value.model] || 0;
         if (sizeMb > 50) {
-          confirmModal.value = {
-            show: true,
-            model: settings.value.model,
-            previousModel: lastAppliedModel.value,
-            sizeMb,
-          };
-          return; // wait for user to confirm
+          const model = settings.value.model;
+          const previousModel = lastAppliedModel.value;
+          const ok = await askConfirm({
+            icon: "⬇",
+            title: "Download Model?",
+            subject: model,
+            message: `This model will be downloaded and cached in your browser (~${formatMb(sizeMb)}). After the first download it loads instantly from cache.`,
+            confirmText: "Download & Load",
+          });
+          // The choice changed meanwhile (another model was picked): leave it.
+          if (settings.value.model !== model) return;
+          if (!ok) {
+            settings.value.model = previousModel;
+            return;
+          }
+          // Do NOT mark as cached here — only once the model has actually
+          // loaded ("Model loaded successfully"), or a cancelled download
+          // would look cached forever.
+          return applySettings(true);
         }
       }
 
@@ -1856,14 +2082,6 @@ const Home = {
       });
     }
             
-    function confirmDownload() {
-      confirmModal.value.show = false;
-      // Do NOT mark as cached here — only mark it after the model
-      // actually finishes loading (in the "Model loaded successfully" handler).
-      // Marking here caused cancelled downloads to appear cached forever.
-      applySettings(true); // bypass confirmation this time
-    }
-
     function stopGeneration() {
       if (!loading.value) return;
       getWorker().postMessage({ type: "stop-generation" });
@@ -2270,8 +2488,27 @@ const Home = {
       return writeQueue;
     }
 
+    // Ask before deleting a chat: it can't be undone.
+    function confirmDeleteChat(title) {
+      return askConfirm({
+        icon: "🗑",
+        title: "Delete this chat?",
+        subject: title || "",
+        message: "Its messages and any attached documents will be removed from this browser. This can't be undone. (Settings → Export Chats keeps a copy.)",
+        confirmText: "Delete chat",
+        danger: true,
+      });
+    }
+
+    function chatTitle(id) {
+      const entry = sessions.value.find(s => s.id === id);
+      return entry ? entry.title : "";
+    }
+
     // Delete a chat from the sidebar
-    function deleteSession(id) {
+    async function deleteSession(id) {
+      if (id === currentSessionId.value && (loading.value || modelLoading.value)) return;
+      if (!(await confirmDeleteChat(chatTitle(id)))) return;
       if (id === currentSessionId.value) {
         if (loading.value || modelLoading.value) return;
         // Empty the screen first, or starting a new chat would save the
@@ -2306,8 +2543,13 @@ const Home = {
       } catch (err) { console.warn("Failed loading latest chat", err); }
     }
 
-    function clearConversation() {
-      if (!currentSessionId.value) return;
+    // "Clear" (toolbar, Settings) deletes the chat on screen, after asking.
+    async function clearConversation() {
+      if (!currentSessionId.value || messages.value.length === 0) return;
+      const id = currentSessionId.value;
+      const title = chatTitle(id) || (messages.value.find(m => m.role === "user")?.content || "").slice(0, 60);
+      if (!(await confirmDeleteChat(title))) return;
+      if (currentSessionId.value !== id) return; // another chat was opened meanwhile
       messages.value = [];
       removeChat(currentSessionId.value);
       currentSessionId.value = genId();
@@ -2601,12 +2843,13 @@ const Home = {
       sessions,
       currentSessionId,
       sidebarOpen,
+      sidebarEl,
+      menuBtn,
+      announcedStatus,
       newChat,
       loadSession,
       deleteSession,
       formatDate,
-      confirmModal,
-      confirmDownload,
       modelSizes,
       isDownloading,
       stopGeneration,
@@ -2629,7 +2872,7 @@ const Settings = {
     <div class="settings-page">
       <div class="settings-header">
         <button class="back-btn" @click="$router.push('/')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
           Back
@@ -2641,7 +2884,7 @@ const Settings = {
 
         <section class="settings-section">
           <h2 class="section-label">Model</h2>
-          <select v-model="settings.model" @change="applySettings" :disabled="modelLoading || loading" class="settings-select">
+          <select v-model="settings.model" @change="applySettings()" :disabled="modelLoading || loading" class="settings-select" aria-label="Model">
             <option disabled value="">Select Model</option>
             <template v-for="group in modelGroups" :key="group.label">
               <optgroup :label="group.label">
@@ -2664,7 +2907,7 @@ const Settings = {
               <span class="setting-desc">Randomness of output. Low = focused, High = creative.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="0" max="2" step="0.05" v-model.number="settings.temperature" class="slider" />
+              <input type="range" min="0" max="2" step="0.05" v-model.number="settings.temperature" class="slider" aria-label="Temperature" />
               <span class="setting-value">{{ settings.temperature.toFixed(2) }}</span>
             </div>
           </div>
@@ -2675,7 +2918,7 @@ const Settings = {
               <span class="setting-desc">Nucleus sampling. Only consider tokens in the top P probability mass. 1.0 = off.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="0.01" max="1" step="0.01" v-model.number="settings.top_p" class="slider" />
+              <input type="range" min="0.01" max="1" step="0.01" v-model.number="settings.top_p" class="slider" aria-label="Top P" />
               <span class="setting-value">{{ settings.top_p.toFixed(2) }}</span>
             </div>
           </div>
@@ -2686,7 +2929,7 @@ const Settings = {
               <span class="setting-desc">Maximum number of tokens to generate per response.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" />
+              <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" aria-label="Max Tokens" />
               <span class="setting-value">{{ settings.max_tokens }}</span>
             </div>
           </div>
@@ -2697,7 +2940,7 @@ const Settings = {
               <span class="setting-desc">Tokens of conversation history visible to the model. Requires model reload.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" />
+              <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" aria-label="Context Window" />
               <span class="setting-value">{{ settings.contextWindowSize }}</span>
             </div>
           </div>
@@ -2721,7 +2964,7 @@ const Settings = {
               <span class="setting-desc">Maximum file size for document uploads.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="1" max="200" step="1" v-model.number="settings.maxFileSizeMB" class="slider" />
+              <input type="range" min="1" max="200" step="1" v-model.number="settings.maxFileSizeMB" class="slider" aria-label="Max Upload Size" />
               <span class="setting-value">{{ settings.maxFileSizeMB }} MB</span>
             </div>
           </div>
@@ -2736,7 +2979,7 @@ const Settings = {
               <span class="setting-desc">Penalises tokens by how often they have appeared. Reduces word repetition. Range −2 to 2.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.frequency_penalty" class="slider" />
+              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.frequency_penalty" class="slider" aria-label="Frequency Penalty" />
               <span class="setting-value">{{ settings.frequency_penalty.toFixed(1) }}</span>
             </div>
           </div>
@@ -2747,7 +2990,7 @@ const Settings = {
               <span class="setting-desc">Penalises tokens that have already appeared at all. Encourages new topics. Range −2 to 2.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.presence_penalty" class="slider" />
+              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.presence_penalty" class="slider" aria-label="Presence Penalty" />
               <span class="setting-value">{{ settings.presence_penalty.toFixed(1) }}</span>
             </div>
           </div>
@@ -2758,7 +3001,7 @@ const Settings = {
               <span class="setting-desc">MLC-specific multiplicative penalty applied to repeated tokens. 1.0 = off, &gt;1 reduces repetition.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="1" max="2" step="0.05" v-model.number="settings.repetition_penalty" class="slider" />
+              <input type="range" min="1" max="2" step="0.05" v-model.number="settings.repetition_penalty" class="slider" aria-label="Repetition Penalty" />
               <span class="setting-value">{{ settings.repetition_penalty.toFixed(2) }}</span>
             </div>
           </div>
@@ -2774,7 +3017,7 @@ const Settings = {
               <span class="setting-desc">{{ defaultPersona.tagline }}</span>
             </div>
             <div class="setting-control">
-              <select v-model="settings.defaultPersona" class="settings-select persona-default-select">
+              <select v-model="settings.defaultPersona" class="settings-select persona-default-select" aria-label="Default persona for new chats">
                 <option v-for="p in personas" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
               </select>
             </div>
@@ -2865,7 +3108,7 @@ const Settings = {
                 </button>
                 <label class="action-btn secondary" style="cursor:pointer;text-align:center">
                   Import Settings
-                  <input type="file" accept=".json" @change="importSettings" style="display:none" />
+                  <input type="file" class="sr-only" accept=".json" @change="importSettings" />
                 </label>
               </div>
             </div>
@@ -2879,7 +3122,7 @@ const Settings = {
                 </button>
                 <label class="action-btn secondary" style="cursor:pointer;text-align:center">
                   Import Chats
-                  <input type="file" accept=".json" @change="importSessions" style="display:none" />
+                  <input type="file" class="sr-only" accept=".json" @change="importSessions" />
                 </label>
               </div>
             </div>
@@ -2889,7 +3132,7 @@ const Settings = {
         <section class="settings-section">
           <h2 class="section-label">Actions</h2>
           <div class="settings-actions">
-            <button class="action-btn primary" @click="applySettings" :disabled="modelLoading || loading">
+            <button class="action-btn primary" @click="applySettings()" :disabled="modelLoading || loading">
               Apply Settings
             </button>
             <button class="action-btn secondary" @click="resetSettings">
@@ -2997,7 +3240,10 @@ createApp({
           <component :is="Component" />
         </keep-alive>
       </router-view>
+      <confirm-dialog />
     `
   })
+  .component("confirm-dialog", ConfirmDialog)
+  .directive("dialog", dialogDirective)
   .use(router)
   .mount("#app");

@@ -17,28 +17,40 @@ function script(lastUser) {
   if (lastUser === "loop") return { text: LOOPING_REPLY, finish: "stop" };
   if (lastUser === "junk") return { text: " outer".repeat(60), finish: "stop" };
   if (lastUser === "slow") return { text: "word ".repeat(200), finish: "stop", delay: 60 };
+  // A few words, then nothing until interrupted (a stuck GPU)
+  if (lastUser === "stall") return { text: "Here are a few words before it", finish: "stop", stallAfter: true };
+  // Steady but slow, about 4 words per second
+  if (lastUser === "steady") return { text: Array.from({ length: 24 }, (_, i) => `steady${i + 1} `).join(""), finish: "stop", delay: 250 };
   if (lastUser === "boom") return { text: "Partial text before the crash.", finish: "stop", throwAfter: true };
   return { text: "Echo: " + lastUser, finish: "stop" };
 }
 
 export async function CreateMLCEngine(model, engineConfig, chatOpts) {
   bc.postMessage({ kind: "create", model, chatOpts: chatOpts || null });
+  let interrupted = false;
   return {
     async unload() {},
     async resetChat() {},
+    interruptGenerate() {
+      interrupted = true;
+      bc.postMessage({ kind: "interrupt" });
+    },
     chat: { completions: { async create(req) {
       const lastUser = [...req.messages].reverse().find(m => m.role === "user")?.content || "";
       bc.postMessage({ kind: "request", stream: !!req.stream, max_tokens: req.max_tokens, messages: req.messages, extra_body: req.extra_body || null });
       if (!req.stream) return { choices: [{ message: { content: "Hello there, nice to meet you!" } }] };
       const s = script(lastUser);
+      interrupted = false;
       const pieces = s.text.match(/\S+\s*|\s+/g) || [];
       return (async function* () {
         for (let i = 0; i < pieces.length; i++) {
           if (s.delay) await sleep(s.delay);
+          if (interrupted) break;
           yield { choices: [{ delta: { content: pieces[i] }, finish_reason: null }] };
           if (s.throwAfter && i === pieces.length - 1) throw new Error("Something broke in the engine");
         }
-        yield { choices: [{ delta: { content: "" }, finish_reason: s.finish }] };
+        if (s.stallAfter) while (!interrupted) await sleep(20);
+        yield { choices: [{ delta: { content: "" }, finish_reason: interrupted ? "abort" : s.finish }] };
       })();
     } } },
   };

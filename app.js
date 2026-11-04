@@ -18,6 +18,7 @@ import {
   describeLoadProgress,
   estimateRemaining,
 } from "./picker.js";
+import { blendSpeed, formatSpeed, isSlow, fasterModel } from "./pace.js";
 
 const {
   createApp,
@@ -336,6 +337,30 @@ function saveModelHealth() {
   try { localStorage.setItem(HEALTH_KEY, JSON.stringify(sharedModelHealth.value)); } catch {}
 }
 
+// ── Writing speed ─────────────────────────────────────────────────────────
+// How fast each model writes on this device (words per second), measured
+// by the worker after the model check and after each reply.
+const SPEED_KEY = "webllm-model-speed";
+const sharedModelSpeed = vRef(loadModelSpeed()); // {modelId: {wps, source}}
+
+function loadModelSpeed() {
+  try { return JSON.parse(localStorage.getItem(SPEED_KEY) || "{}") || {}; }
+  catch { return {}; }
+}
+function recordModelSpeed({ model, wps, source }) {
+  if (!model) return;
+  const next = blendSpeed(sharedModelSpeed.value[model], wps, source);
+  if (!next) return;
+  sharedModelSpeed.value = { ...sharedModelSpeed.value, [model]: next };
+  try { localStorage.setItem(SPEED_KEY, JSON.stringify(sharedModelSpeed.value)); } catch {}
+}
+
+// Shorter time limits for the tests (see pace.js); unset in normal use.
+function timeLimitOverrides() {
+  try { return JSON.parse(localStorage.getItem("webllm-time-limits") || "null"); }
+  catch { return null; }
+}
+
 function isF16Model(id) { return /q4f16|q0f16/.test(id || ""); }
 
 // True when 16-bit models are known not to work here: no shader-f16
@@ -476,7 +501,7 @@ const sharedUpdateAvailable = vRef(false);
 const APP_FILES = [
   "./index.html", "./app.js", "./worker.js", "./sw.js", "./style.css",
   "./personas.js", "./markdown.js", "./quality.js", "./context.js",
-  "./picker.js", "./chatstore.js", "./attachments.js",
+  "./picker.js", "./chatstore.js", "./attachments.js", "./pace.js",
 ];
 const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
 const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
@@ -919,9 +944,7 @@ const Home = {
               Couldn't continue: the model didn't add anything new.
             </p>
             <p v-if="!item.streaming && item.message.cutOff" class="msg-note">
-              {{ item.message.cutOff === "time"
-                ? "Cut off at the time limit."
-                : "Cut off at the Max Tokens limit (" + settings.max_tokens + ")." }}
+              {{ cutOffNote(item.message.cutOff) }}
               <span v-if="item.isLast">Press Continue for the rest.</span>
             </p>
             <div v-if="!item.streaming" class="msg-actions">
@@ -996,6 +1019,13 @@ const Home = {
             <button type="button" class="attachment-remove" @click="removeAttachment(a.id)" :aria-label="'Remove ' + a.name" title="Remove from this chat">×</button>
           </div>
         </div>
+        <p v-if="speedNote" class="speed-note" :class="{ slow: speedNote.slow }">
+          <span>{{ speedNote.text }}</span>
+          <template v-if="speedNote.faster">
+            For quicker replies, try
+            <button type="button" class="link-btn speed-switch" @click="switchToFaster" :disabled="modelLoading || loading">{{ speedNote.fasterName }}</button>.
+          </template>
+        </p>
         <div class="toolbar">
           <select
             :value="currentPersonaId"
@@ -1370,7 +1400,7 @@ const Home = {
 
     // Settings the worker can apply without reloading the model.
     function liveConfig() {
-      return { ...settings.value, system_prompt: effectiveSystemPrompt() };
+      return { ...settings.value, system_prompt: effectiveSystemPrompt(), timeLimits: timeLimitOverrides() };
     }
 
     // System prompt for the current chat's persona. Custom uses the prompt
@@ -1906,7 +1936,7 @@ const Home = {
           }
           {
             const reply = messages.value[messages.value.length - 1];
-            reply.cutOff = data.cutOff || null;   // "length" | "time" | null
+            reply.cutOff = data.cutOff || null;   // "length" | "stall" | "time" | null
             reply.notice = data.notice || null;   // "loop" | "continue-failed" | null
           }
         
@@ -1972,6 +2002,10 @@ const Home = {
 
         case "model-check":
           handleModelCheck(data);
+          break;
+
+        case "speed":
+          recordModelSpeed(data);
           break;
                     
         case "webgpu-error":
@@ -2082,6 +2116,36 @@ const Home = {
         }
         offerReplacement(data.model, data.reason, data.sample);
       }
+    }
+
+    // Why a reply was cut short, under the reply (Continue gets the rest)
+    function cutOffNote(reason) {
+      if (reason === "stall") return "Stopped: the model stopped writing for a minute.";
+      if (reason === "time") return "Cut off at the 20-minute limit for one reply.";
+      return "Cut off at the Max Tokens limit (" + settings.value.max_tokens + ").";
+    }
+
+    // How fast the current model writes here, once known, with a smaller
+    // model to try when it is slow.
+    const speedNote = Vue.computed(() => {
+      const model = settings.value.model;
+      const speed = model && sharedModelSpeed.value[model];
+      if (!speed || modelLoading.value) return null;
+      const slow = isSlow(speed.wps);
+      const faster = slow ? fasterModel(model, [...models.value, ...sharedAltModels.value]) : "";
+      return {
+        slow,
+        text: `${friendlyModelName(model)} writes ${formatSpeed(speed.wps)} on this device.`,
+        faster,
+        fasterName: faster ? modelShortName(faster) : "",
+      };
+    });
+
+    function switchToFaster() {
+      const target = speedNote.value && speedNote.value.faster;
+      if (!target || modelLoading.value || loading.value) return;
+      settings.value.model = target;
+      applySettings();
     }
 
     function keepModelAnyway() {
@@ -3073,6 +3137,9 @@ const Home = {
       modelOptionLabel,
       healthModal,
       switchToSuggestion,
+      cutOffNote,
+      speedNote,
+      switchToFaster,
       keepModelAnyway,
       viewMessages,
       copiedIndex,

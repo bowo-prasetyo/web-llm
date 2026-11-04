@@ -22,3 +22,8 @@ test("lookup falls back to the default persona", () => {
   expect(getPersona("nope").id).toBe(DEFAULT_PERSONA_ID);
   expect(getPersona("custom").prompt).toBeNull();
 });
+
+test("Friendly answers without ending every reply on a question; Brainstorm still asks one", () => {
+  expect(getPersona("friendly").prompt).toContain("Don't end every reply with a question");
+  expect(getPersona("brainstorm").prompt).toContain("End with one short question");
+});

@@ -16,6 +16,7 @@ import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
 import { looksDegenerate, checkSample, findRepeatLoop } from "./quality.js";
 import { fitToContext, estimateTokens } from "./context.js";
+import { timeLimitReason, withTimeLimits, wordCount, measureSpeed } from "./pace.js";
 import {
   INDEX_MIN_CHARS,
   chunkText,
@@ -238,7 +239,11 @@ const AVAILABLE_MODELS = [
   "gemma-2-9b-it-q4f16_1-MLC",
 ];
 
-const HARD_TIMEOUT_MS = 180000;
+// Replies are cut off only when they stop making progress (see pace.js).
+// Settings can override the limits (the tests use short ones).
+function timeLimits() {
+  return withTimeLimits(USER_CONFIG && USER_CONFIG.timeLimits);
+}
 
 // Maximum conversation turns kept in history.
 // Recomputed per-generation based on device profile (see generate()),
@@ -730,6 +735,7 @@ async function initialize() {
 async function runModelCheck() {
   postMessage({ type: "status", text: "Checking that the model works on this GPU..." });
   try {
+    const checkStart = Date.now();
     const reply = await engine.chat.completions.create({
       messages: [{ role: "user", content: "Say hello in one short sentence." }],
       max_tokens: 12,
@@ -745,6 +751,12 @@ async function runModelCheck() {
       reason: verdict.reason,
       sample: sample.slice(0, 120),
     });
+    // A first, rough speed (it includes reading the prompt); replies
+    // measure it properly later.
+    if (verdict.ok) {
+      const wps = measureSpeed(wordCount(sample), Date.now() - checkStart, 3);
+      if (wps) postMessage({ type: "speed", model: MODEL, wps, source: "check" });
+    }
   } catch (err) {
     // A check that can't run says nothing about the model; skip it.
     console.warn("Model check skipped", err);
@@ -789,7 +801,7 @@ function joinSeparator(prefix, next) {
 async function streamReply(messages, maxTokens, { prefix = "", generationStart }) {
   const result = {
     full: prefix, finishReason: null, stopped: false, timedOut: false,
-    degenerate: false, loopCut: false, superseded: false,
+    timeReason: null, degenerate: false, loopCut: false, superseded: false,
   };
 
   IS_GENERATING = true;
@@ -814,6 +826,33 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
   let text = "";
   let words = 0;
   let chunks = 0;
+  let firstTextAt = 0;
+  let lastTextAt = 0;
+  const limits = timeLimits();
+
+  // Cut the reply off when it stops making progress. Checked on a timer as
+  // well as per chunk, because a stuck GPU sends no chunks at all; WebLLM's
+  // interruptGenerate() then ends the stream.
+  const timeUp = () => {
+    if (result.timedOut) return true;
+    const reason = timeLimitReason({ now: Date.now(), start: generationStart, lastTextAt }, limits);
+    if (!reason) return false;
+    result.timedOut = true;
+    result.timeReason = reason;
+    postMessage({
+      type: "status",
+      text: reason === "max"
+        ? "Response cut off: reply time limit reached"
+        : "Response cut off: the model stopped producing text",
+    });
+    return true;
+  };
+  const watchdog = setInterval(() => {
+    if (timeUp()) {
+      clearInterval(watchdog);
+      try { engine && engine.interruptGenerate && engine.interruptGenerate(); } catch {}
+    }
+  }, Math.min(1000, limits.stallMs / 4));
 
   // Check the reply so far; true when streaming must stop.
   const guard = () => {
@@ -838,11 +877,7 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
         postMessage({ type: "status", text: "Generation stopped" });
         break;
       }
-      if (Date.now() - generationStart > HARD_TIMEOUT_MS) {
-        result.timedOut = true;
-        postMessage({ type: "status", text: "Response cut off: generation time limit reached" });
-        break;
-      }
+      if (timeUp()) break;
       if (requestId !== REQUEST_COUNTER) {
         result.superseded = true;
         break;
@@ -854,6 +889,8 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
       if (!delta) continue;
 
       LAST_STREAM_TIME = Date.now();
+      lastTextAt = LAST_STREAM_TIME;
+      if (!firstTextAt) firstTextAt = lastTextAt;
       resetStallTimer();
 
       if (!text) head = prefix + joinSeparator(prefix, delta);
@@ -872,11 +909,19 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
       guard();
     }
   } finally {
+    clearInterval(watchdog);
     clearTimeout(STALL_TIMEOUT);
     IS_GENERATING = false;
   }
 
   if (!result.loopCut) result.full = text ? head + text : prefix;
+
+  // Writing speed, from the first word to the last (so the time spent
+  // reading the prompt doesn't count). A stall would skew it, so skip those.
+  if (!result.superseded && result.timeReason !== "stall") {
+    const wps = measureSpeed(Math.max(0, wordCount(text) - 1), lastTextAt - firstTextAt, 10);
+    if (wps) postMessage({ type: "speed", model: MODEL, wps, source: "reply" });
+  }
   return result;
 }
 
@@ -941,7 +986,7 @@ function rememberConversation(history) {
 // Why a reply was cut short, for the "Continue" note in the UI.
 function cutOffReason(result) {
   if (result.finishReason === "length") return "length";
-  if (result.timedOut) return "time";
+  if (result.timedOut) return result.timeReason === "max" ? "time" : "stall";
   return null;
 }
 

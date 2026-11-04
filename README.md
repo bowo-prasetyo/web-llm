@@ -73,7 +73,8 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 * Automatic model unload after inactivity to free GPU memory
 * Conversation history memory with configurable context window
 * Settings page with the everyday reply settings up front and the advanced sampling settings folded away; changes save automatically
-* Shows how fast the model writes on this device (for example "about 1 word/sec"), and suggests a smaller model when it is slow
+* Shows how fast the model writes on this device (for example "about 1 word/sec"), and suggests a smaller model when it is slow, noting that smaller models make more mistakes
+* Honest about small models: Friendly and Precise chats on models of about 1B parameters or fewer show a hint that they often get facts wrong (hidden per model with ×), and the picker's Fast size says so too
 * Six chat personas (Friendly, Precise, Writer, Coder, Brainstorm, Custom), chosen per chat and switchable mid-conversation
 * Welcome screen for new chats with persona cards and starter prompts
 * Responsive UI: on wide screens (1100px and up) the chat list sits beside the chat and can be hidden; narrower screens get a slide-in drawer; on phones Enter starts a new line and the Send button sends, and the message box grows as you type
@@ -200,7 +201,7 @@ On first launch the app asks two questions instead of downloading anything:
 
 * Qwen3.5 is the newest model generation WebLLM 0.2.84 supports; coding and writing start at 2B, since smaller models mix up code and lose the thread of longer texts
 
-* Fast is recommended on phones and devices reporting 4 GB of memory or less, Balanced otherwise; Smart needs a strong GPU
+* Fast is recommended on phones and devices reporting 4 GB of memory or less, Balanced otherwise; Smart needs a strong GPU. Fast is quickest but more likely to get facts wrong: small models write fluently even when they are wrong
 * Devices where 16-bit GPU math is unsupported or broken get the q4f32 version of each pick automatically
 * Downloaded models are marked, and the model in use is labelled
 * **Skip** leaves the choice to you (the model menu); nothing downloads until a model is chosen, and sending a message first opens the picker

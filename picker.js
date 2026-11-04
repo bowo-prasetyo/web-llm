@@ -29,7 +29,7 @@ export const USES = [
 ];
 
 export const TIERS = [
-  { id: "fast",     title: "Fast",     desc: "Quick replies, smallest download. Fine on phones." },
+  { id: "fast",     title: "Fast",     desc: "Quickest replies, smallest download, fine on phones. More likely to get facts wrong." },
   { id: "balanced", title: "Balanced", desc: "Noticeably better answers. Best for most laptops." },
   { id: "smart",    title: "Smart",    desc: "Best answers, large download. Needs a strong GPU (4–8 GB)." },
 ];

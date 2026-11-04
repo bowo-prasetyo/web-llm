@@ -331,6 +331,32 @@ html, body, #app {
 .speed-note .speed-switch { padding: 0; font-size: inherit; color: inherit; }
 .speed-note .speed-switch:disabled { cursor: not-allowed; opacity: .6; }
 
+/* Small models: check facts */
+.accuracy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 6px 4px 6px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber-text);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.accuracy-note span { flex: 1; }
+.accuracy-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 6px;
+  cursor: pointer;
+}
+.accuracy-dismiss:hover { color: var(--text); }
+
 .model-select {
   flex: 1;
   min-width: 0;

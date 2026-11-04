@@ -1,7 +1,7 @@
 // picker.js: model picker catalog and recommendations.
 import { test, expect } from "@playwright/test";
 import {
-  MODEL_PICKS, pickModelId, recommendTier, friendlyModelName,
+  MODEL_PICKS, TIERS, pickModelId, recommendTier, friendlyModelName,
   modelPrecision, formatSize, describeLoadProgress, estimateRemaining,
 } from "../../picker.js";
 import { workerModels } from "../support/models.js";
@@ -93,4 +93,8 @@ test("time left is estimated only once there is enough to go on", () => {
   expect(estimateRemaining({ ...start, pct: 10, now: 30_000 })).toBe("about 5 min left");
   expect(estimateRemaining({ ...start, pct: 2, now: 120_000 })).toBe("about 1 h 38 min left");
   expect(estimateRemaining({ ...start, pct: 100, now: 60_000 })).toBe(null);
+});
+
+test("the Fast size says honestly that it gets more facts wrong", () => {
+  expect(TIERS.find(t => t.id === "fast").desc).toMatch(/more likely to get facts wrong/i);
 });

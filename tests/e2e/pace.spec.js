@@ -87,3 +87,36 @@ test("the smallest models aren't sent to an even smaller one", async ({ page }) 
   await expect(page.locator(".speed-note")).toContainText("less than 1 word/sec");
   await expect(page.locator(".speed-switch")).toHaveCount(0);
 });
+
+test("the faster suggestion says it makes more mistakes", async ({ page }) => {
+  await start(page, {
+    model: Q2,
+    items: { "webllm-model-speed": { [Q2]: { wps: 1.1, source: "reply" } } },
+  });
+  await expect(page.locator(".speed-note")).toContainText("(faster, but makes more mistakes)");
+});
+
+test("small models get a check-the-facts hint in Friendly and Precise chats, until hidden", async ({ page }) => {
+  await start(page, { model: Q08 });
+  const hint = page.locator(".accuracy-note");
+  await expect(hint).toContainText("Small models like Qwen3.5 0.8B often get facts wrong");
+
+  await page.selectOption(".persona-select", "precise");
+  await expect(hint).toBeVisible();
+  await page.selectOption(".persona-select", "coder");
+  await expect(hint).toHaveCount(0); // not a fact-seeking persona
+  await page.selectOption(".persona-select", "friendly");
+  await expect(hint).toBeVisible();
+
+  await page.click(".accuracy-dismiss");
+  await expect(hint).toHaveCount(0);
+  expect(await readStorage(page, "webllm-accuracy-hint-hidden")).toEqual([Q08]);
+  await page.reload();
+  await expect(page.locator(".status-bar")).toContainText("Model loaded successfully");
+  await expect(hint).toHaveCount(0); // stays hidden for this model
+});
+
+test("larger models get no hint", async ({ page }) => {
+  await start(page, { model: Q2 });
+  await expect(page.locator(".accuracy-note")).toHaveCount(0);
+});

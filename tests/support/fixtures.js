@@ -196,3 +196,11 @@ export function attachText(page, name, text) {
     name, mimeType: "text/plain", buffer: Buffer.from(text),
   });
 }
+
+// Answer "Delete chat" in the confirmation that deleting or clearing a chat
+// shows, and wait for it to close.
+export async function confirmDelete(page) {
+  const dialog = page.locator(".confirm-dialog");
+  await dialog.locator('button:has-text("Delete chat")').click();
+  await expect(dialog).toHaveCount(0);
+}

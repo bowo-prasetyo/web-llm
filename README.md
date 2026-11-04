@@ -30,7 +30,9 @@ https://bowo-prasetyo.github.io/web-llm/
 * 55 selectable LLM models across 15 model families (including Qwen3.5, Phi-4-mini, Gemma 3, Ministral 3 and OLMo 2), grouped by size tier
 * Switch models mid-conversation without clearing chat history
 * First-run model picker: choose what it's for (chat, coding, writing) and a size (Fast / Balanced / Smart); picks suit the device and avoid 16-bit models where they don't work
-* Download confirmation with size estimate on first model use
+* Download confirmation with size estimate on first model use (from the chat toolbar and from Settings)
+* Deleting or clearing a chat asks first; nothing is deleted by a single tap
+* Keyboard and screen-reader friendly: dialogs and the chat list keep focus and close with Escape, every control has a name, and status changes are announced
 * Cancel download at any time during model fetch
 * Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
@@ -269,7 +271,8 @@ All settings are automatically persisted in `localStorage` and survive page relo
 * Tap **+ New Chat** to start a fresh conversation — the current session auto-saves first
 * Previously saved chats are listed with auto-generated title, preview, model, and timestamp
 * Tap any session to restore it — messages and model context are both recovered
-* Tap the **🗑 trash icon** on any session to delete it
+* Tap the **🗑 trash icon** on any session to delete it; the app asks first (on touch screens the icon is always shown)
+* Close the list with **×**, Escape, or by tapping beside it
 * Chats are saved in the browser's database (IndexedDB), with no limit on the number of chats or messages beyond the browser's storage quota; nothing is deleted automatically
 * Chats saved by earlier versions in `localStorage` are moved to IndexedDB on first start (the old copies are removed only after the move succeeds)
 * If IndexedDB can't be used (for example in some private-browsing modes), chats fall back to `localStorage`, limited to 50 chats of 40 messages; **Settings → This device** shows where chats are saved
@@ -285,6 +288,15 @@ All settings are automatically persisted in `localStorage` and survive page relo
 * Safety: raw HTML written by the model is shown as text, output is sanitized with DOMPurify, and links open in a new tab
 * Your own messages are shown exactly as typed
 * The Markdown libraries (marked, DOMPurify, highlight.js) load at pinned versions with integrity hashes; if they can't load, replies fall back to plain text
+
+## Accessibility
+
+* **Dialogs** (model picker, download and delete confirmations, GPU warnings) take keyboard focus, keep Tab inside them, close with **Escape** (the WebGPU error screen excepted) and give focus back to where it was. In a confirmation the safe choice (**Cancel**) has focus
+* **Chat list**: while closed it is skipped by Tab; when opened, focus moves into it and stays there until it closes (Escape, **×**, or opening a chat), then returns to the menu button. Each chat is a button, and the open one is marked as current
+* **Names**: icon-only buttons, the message box, the model and persona menus and the Settings sliders all have accessible names
+* **Announcements**: status messages (loading, ready, errors) are read out by screen readers; download progress is announced once when it starts, not on every step
+* **Focus ring**: every control shows a visible amber outline when reached with the keyboard, including **Attach** and the Import buttons (their file inputs are visually hidden, not removed)
+* **Confirmations** before anything is deleted: **Clear** (toolbar), **Clear Conversation** (Settings) and the sidebar's trash icon
 
 ## Session Search
 
@@ -367,7 +379,7 @@ npm run test:e2e      # the app in Chromium
 ```
 
 * **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` and `attachments.js`
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update `index.html`, `sw.js`, `package.json` and `tests/support/fixtures.js` together

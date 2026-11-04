@@ -1,7 +1,7 @@
 // Chat storage in IndexedDB (chatstore.js): migration from localStorage,
 // no size limits, delete / clear, search, export / import, and the
 // localStorage fallback when IndexedDB is unavailable.
-import { test, expect, check, sleep, seedStorage, readStorage, send, readChats, legacyChatItems } from "../support/fixtures.js";
+import { test, expect, check, sleep, seedStorage, readStorage, send, readChats, legacyChatItems, confirmDelete } from "../support/fixtures.js";
 
 test.use({ fakeWorker: true });
 
@@ -87,16 +87,19 @@ test("deleting and clearing remove chats from storage", async ({ page }) => {
   await ready(page); // chat c (the newest) is open
   await page.click('button[title="Chat history"]');
   await page.locator('.session-item:has-text("Chat a") .session-delete').click();
+  await confirmDelete(page);
   await expect.poll(async () => (await readChats(page)).map(c => c.id)).toEqual(["c", "b"]);
 
   // Deleting the open chat must not save it back when the new chat starts
   await page.locator('.session-item.active .session-delete').click();
+  await confirmDelete(page);
   await expect.poll(async () => (await readChats(page)).map(c => c.id)).toEqual(["b"]);
   await expect(page.locator(".message")).toHaveCount(0);
   await page.click('button[title="Chat history"]'); // starting the new chat closed the list
   await page.click('.session-item:has-text("Chat b")');
 
   await page.click(".clear-btn:has-text('Clear')");
+  await confirmDelete(page);
   await expect.poll(async () => (await readChats(page)).length).toBe(0);
   await expect(page.locator(".message")).toHaveCount(0);
 });
@@ -128,7 +131,9 @@ test("export and import keep every message", async ({ page }, testInfo) => {
   await page.click("text=Back");
   await page.click('button[title="Chat history"]');
   await page.locator('.session-item:has-text("Chat short") .session-delete').click();
+  await confirmDelete(page);
   await page.locator(".session-item.active .session-delete").click(); // the open chat; the list closes
+  await confirmDelete(page);
   await expect.poll(async () => (await readChats(page)).length).toBe(0);
 
   await page.click("button[title=Settings]");

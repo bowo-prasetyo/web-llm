@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    WebLLM Browser Chat — Design System
-   Aesthetic: Refined dark terminal with warm amber accents
+   Aesthetic: Refined terminal with warm amber accents, dark or light
+   (all colours are tokens below; the light values follow them)
    Font: DM Mono (monospace identity) + DM Sans (UI)
 ═══════════════════════════════════════════════════════════════ */
 
@@ -22,7 +23,7 @@
    
   --text:        #e8e4dc;
   --text-2:      #9a9488;
-  --text-3:      #8a847a;
+  --text-3:      #968f84; /* 4.5:1 or more on every surface, incl. the active chat */
 
   --user-bg:     #26231e;
   --user-border: #4a422d;
@@ -41,6 +42,124 @@
 
   --shadow: 0 2px 12px rgba(0,0,0,.5);
   --glow:   0 0 20px rgba(245,166,35,.08);
+
+  /* Everything below has a light value in :root[data-theme="light"] */
+  color-scheme: dark;              /* native controls, scrollbars */
+  --amber-hover:  #ffcc66;         /* filled amber buttons on hover */
+  --amber-shine:  rgba(245,166,35,.35);
+  --on-amber:     #111;            /* text on amber fills */
+  --hover-bg:     #1e1e1e;
+  --active-border:#3a3020;
+  --inset-bg:     #111;
+  --sidebar-bg:   #141414;
+  --sidebar-border:#2a2a2a;
+  --modal-bg:     #1a1a1a;
+  --modal-border: #333;
+  --code-bg:      #121212;
+  --thinking-bg:  rgba(255,255,255,.015);
+  --scrim:        rgba(0,0,0,.55);
+  --scrim-strong: rgba(0,0,0,.7);
+  --scrim-heavy:  rgba(0,0,0,.85);
+  --shadow-drawer:4px 0 24px rgba(0,0,0,.5);
+  --shadow-modal: 0 24px 60px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04);
+  --disabled-bg:  #222;
+  --disabled-fg:  #444;
+  --disabled-border:#2a2a2a;
+
+  --danger:              #e05c5c;
+  --danger-text:         #f0b4b4;
+  --danger-bg:           rgba(224,92,92,.08);
+  --danger-border:       #3a1c1c;
+  --danger-border-soft:  #5a2a2a;
+  --danger-border-strong:#7a2c2c;
+  --danger-solid:        #b83c3c;
+  --danger-solid-hover:  #c94848;
+  --on-danger:           #fff;
+
+  /* Syntax colours (highlight.js) */
+  --hl-comment:  #8a847a;
+  --hl-keyword:  #ffab1a;
+  --hl-string:   #b5cc7a;
+  --hl-number:   #e8956b;
+  --hl-title:    #ffcc66;
+  --hl-type:     #8fc2d4;
+  --hl-attr:     #d9b38c;
+  --hl-meta:     #a69a86;
+  --hl-deletion: #e07a7a;
+}
+
+/* ── Light theme ──────────────────────────────────────────────────
+   Applied by the script in index.html (which follows the system
+   setting unless Settings → Appearance says otherwise). Warm paper
+   tones to match the dark theme; amber gets darker shades so that
+   text and outlines stay readable on light backgrounds (the bright
+   amber stays as a fill, with dark text on it). */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:          #f6f4ef;
+  --surface:     #ffffff;
+  --surface-2:   #f1eee8;
+  --surface-3:   #e7e3db;
+  --border:      #d9d3c8;
+  --border-soft: #e6e1d8;
+
+  --amber:       #e89a12;   /* fills (buttons, badges, the status dot) */
+  --amber-dim:   #8a5f14;   /* borders, outlines, small headings */
+  --amber-glow:  rgba(232,154,18,.14);
+  --amber-text:  #8a5200;   /* amber text on light backgrounds */
+  --amber-hover: #f5ad2e;
+  --amber-shine: rgba(232,154,18,.30);
+  --on-amber:    #1a1206;
+
+  --text:        #1f1c17;
+  --text-2:      #57524a;
+  --text-3:      #615b51;
+
+  --user-bg:     #fbf0d9;
+  --user-border: #e8cf9a;
+  --asst-bg:     #ffffff;
+
+  --shadow: 0 2px 12px rgba(60,45,20,.08);
+  --glow:   0 0 20px rgba(232,154,18,.10);
+
+  --hover-bg:      #f1eee8;
+  --active-border: #e3c27f;
+  --inset-bg:      #f6f4ef;
+  --sidebar-bg:    #efece5;
+  --sidebar-border:#ddd7cc;
+  --modal-bg:      #ffffff;
+  --modal-border:  #ddd7cc;
+  --code-bg:       #f7f5f0;
+  --thinking-bg:   rgba(60,45,20,.025);
+  --scrim:         rgba(40,32,20,.32);
+  --scrim-strong:  rgba(40,32,20,.40);
+  --scrim-heavy:   rgba(40,32,20,.55);
+  --shadow-drawer: 4px 0 24px rgba(60,45,20,.12);
+  --shadow-modal:  0 24px 60px rgba(60,45,20,.18), 0 0 0 1px rgba(0,0,0,.04);
+  --disabled-bg:   #ece9e3;
+  --disabled-fg:   #8f897f;
+  --disabled-border:#ddd7cc;
+
+  --danger:              #b42318;
+  --danger-text:         #9b1c13;
+  --danger-bg:           rgba(180,35,24,.06);
+  --danger-border:       #efc3be;
+  --danger-border-soft:  #e8b4ae;
+  --danger-border-strong:#d27a70;
+  --danger-solid:        #b42318;
+  --danger-solid-hover:  #c22f22;
+  --on-danger:           #fff;
+
+  --hl-comment:  #6b655b;
+  --hl-keyword:  #9a4f00;
+  --hl-string:   #3f6b12;
+  --hl-number:   #a5400f;
+  --hl-title:    #7a4b00;
+  --hl-type:     #1d6480;
+  --hl-attr:     #7c5212;
+  --hl-meta:     #665e50;
+  --hl-deletion: #b42318;
 }
 
 /* ── Reset ────────────────────────────────────────────────────── */
@@ -295,11 +414,11 @@ html, body, #app {
   background: var(--amber);
   border: none;
   border-radius: var(--radius-sm);
-  color: #111;
+  color: var(--on-amber);
   cursor: pointer;
   transition: background .15s, transform .1s, box-shadow .15s;
 }
-.send-btn:hover   { background: var(--amber-text); box-shadow: 0 0 14px rgba(245,166,35,.35); }
+.send-btn:hover   { background: var(--amber-hover); box-shadow: 0 0 14px var(--amber-shine); }
 .send-btn:active  { transform: scale(.94); }
 .send-btn:disabled { background: var(--surface-3); color: var(--text-3); cursor: not-allowed; box-shadow: none; }
 
@@ -458,7 +577,7 @@ html, body, #app {
   border-radius: 50%;
   background: var(--amber);
   cursor: pointer;
-  box-shadow: 0 0 8px rgba(245,166,35,.4);
+  box-shadow: 0 0 8px var(--amber-shine);
   transition: transform .1s;
 }
 .slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
@@ -494,12 +613,12 @@ html, body, #app {
 
 .action-btn.primary {
   background: var(--amber);
-  color: #111;
+  color: var(--on-amber);
   border-color: var(--amber);
 }
 .action-btn.primary:hover:not(:disabled) {
-  background: var(--amber-text);
-  box-shadow: 0 0 16px rgba(245,166,35,.3);
+  background: var(--amber-hover);
+  box-shadow: 0 0 16px var(--amber-shine);
 }
 
 .action-btn.secondary {
@@ -514,21 +633,21 @@ html, body, #app {
 
 .action-btn.danger {
   background: transparent;
-  color: #e05c5c;
-  border-color: #3a1c1c;
+  color: var(--danger);
+  border-color: var(--danger-border);
 }
 .action-btn.danger:hover:not(:disabled) {
-  background: rgba(224,92,92,.08);
-  border-color: #7a2c2c;
+  background: var(--danger-bg);
+  border-color: var(--danger-border-strong);
 }
 
 .send-btn:disabled, 
 .action-btn:disabled, 
 .icon-btn:disabled {
-  background: #222 !important;
-  color: #444 !important;
+  background: var(--disabled-bg) !important;
+  color: var(--disabled-fg) !important;
   opacity: 1; /* Keep it solid so the shape is visible */
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--disabled-border);
 }
 
 /* ── Mobile tweaks ────────────────────────────────────────────── */
@@ -555,7 +674,7 @@ html, body, #app {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.55);
+  background: var(--scrim);
   z-index: 40;
   opacity: 0;
   transition: opacity .22s;
@@ -573,14 +692,14 @@ html, body, #app {
   bottom: 0;
   width: 280px;
   max-width: 85vw;
-  background: #141414;
-  border-right: 1px solid #2a2a2a;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
   z-index: 50;
   display: flex;
   flex-direction: column;
   transform: translateX(-100%);
   transition: transform .24s cubic-bezier(.4,0,.2,1);
-  box-shadow: 4px 0 24px rgba(0,0,0,.5);
+  box-shadow: var(--shadow-drawer);
 }
 .sidebar.open {
   transform: translateX(0);
@@ -591,7 +710,7 @@ html, body, #app {
   align-items: center;
   justify-content: space-between;
   padding: 14px 14px 12px;
-  border-bottom: 1px solid #242424;
+  border-bottom: 1px solid var(--border-soft);
   flex-shrink: 0;
 }
 
@@ -612,14 +731,14 @@ html, body, #app {
   background: var(--amber);
   border: none;
   border-radius: var(--radius-sm);
-  color: #111;
+  color: var(--on-amber);
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: background .15s;
 }
-.new-chat-btn:hover:not(:disabled) { background: var(--amber-text); }
+.new-chat-btn:hover:not(:disabled) { background: var(--amber-hover); }
 .new-chat-btn:disabled { opacity: .4; cursor: not-allowed; }
 
 .sidebar-list {
@@ -628,7 +747,7 @@ html, body, #app {
   padding: 8px 6px;
 }
 .sidebar-list::-webkit-scrollbar { width: 3px; }
-.sidebar-list::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 2px; }
+.sidebar-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .sidebar-empty {
   padding: 28px 12px;
@@ -645,10 +764,10 @@ html, body, #app {
   transition: background .12s;
   margin-bottom: 2px;
 }
-.session-item:hover { background: #1e1e1e; }
+.session-item:hover { background: var(--hover-bg); }
 .session-item.active {
   background: var(--amber-glow);
-  border: 1px solid #3a3020;
+  border: 1px solid var(--active-border);
 }
 
 /* The whole row opens the chat; it's a real button for keyboards and
@@ -737,8 +856,8 @@ html, body, #app {
   .session-open { padding-right: 40px; }
 }
 .session-delete:hover {
-  color: #e05c5c;
-  background: rgba(224,92,92,.1);
+  color: var(--danger);
+  background: var(--danger-bg);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -748,7 +867,7 @@ html, body, #app {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.7);
+  background: var(--scrim-strong);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -764,13 +883,13 @@ html, body, #app {
 }
 
 .modal {
-  background: #1a1a1a;
-  border: 1px solid #333;
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
   border-radius: 14px;
   padding: 28px 24px 24px;
   max-width: 360px;
   width: 100%;
-  box-shadow: 0 24px 60px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04);
+  box-shadow: var(--shadow-modal);
   animation: slideUp .2s cubic-bezier(.4,0,.2,1);
 }
 
@@ -868,8 +987,8 @@ html, body, #app {
   align-items: center;
   gap: 7px;
   padding: 8px 10px;
-  border-bottom: 1px solid #242424;
-  background: #141414;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--sidebar-bg);
   flex-shrink: 0;
 }
 
@@ -880,8 +999,8 @@ html, body, #app {
 
 .search-input {
   flex: 1;
-  background: #1c1c1c;
-  border: 1px solid #2a2a2a;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
   font-family: var(--font-ui);
@@ -925,7 +1044,7 @@ html, body, #app {
 .match-role {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  color: var(--amber-dim);
+  color: var(--amber-text);
   text-transform: uppercase;
   letter-spacing: .08em;
   flex-shrink: 0;
@@ -944,7 +1063,7 @@ html, body, #app {
 
 .search-highlight {
   background: var(--amber);
-  color: #000; /* Black text on amber background is extremely readable */
+  color: var(--on-amber);
   border-radius: 2px;
   padding: 0 2px;
   font-weight: 600;
@@ -965,7 +1084,7 @@ html, body, #app {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0,0,0,.85);
+  background: var(--scrim-heavy);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -975,13 +1094,13 @@ html, body, #app {
 }
 
 .webgpu-error-card {
-  background: #1a1a1a;
-  border: 1px solid #333;
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
   border-radius: 16px;
   padding: 32px 28px 28px;
   max-width: 420px;
   width: 100%;
-  box-shadow: 0 32px 80px rgba(0,0,0,.8);
+  box-shadow: var(--shadow-modal);
   animation: slideUp .22s cubic-bezier(.4,0,.2,1);
 }
 
@@ -1013,7 +1132,7 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: #111;
+  background: var(--inset-bg);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: 16px;
@@ -1049,7 +1168,7 @@ html, body, #app {
 .webgpu-step code {
   font-family: var(--font-mono);
   font-size: var(--fs-small);
-  background: #222;
+  background: var(--surface-2);
   padding: 1px 5px;
   border-radius: 3px;
   color: var(--amber-text);
@@ -1263,7 +1382,7 @@ html, body, #app {
 /* Replies are HTML now; whitespace comes from the markup.
    User messages keep pre-wrap so typed text shows exactly as written. */
 .message.assistant { white-space: normal; min-width: 0; }
-.message.assistant.error { border-color: #5a2a2a; color: #f0b4b4; }
+.message.assistant.error { border-color: var(--danger-border-soft); color: var(--danger-text); }
 
 .md { overflow-wrap: anywhere; }
 .md > :first-child { margin-top: 0; }
@@ -1320,7 +1439,7 @@ html, body, #app {
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: #121212;
+  background: var(--code-bg);
   overflow: hidden;
 }
 .code-head {
@@ -1365,15 +1484,15 @@ html, body, #app {
 }
 
 /* Syntax colors (highlight.js classes), tuned for the amber theme */
-.hljs-comment, .hljs-quote { color: #7d776c; font-style: italic; }
-.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: #ffab1a; }
-.hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-tag { color: #b5cc7a; }
-.hljs-number, .hljs-symbol, .hljs-bullet { color: #e8956b; }
-.hljs-title, .hljs-section, .hljs-title.function_ { color: #ffcc66; }
-.hljs-built_in, .hljs-type, .hljs-title.class_ { color: #8fc2d4; }
-.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property { color: #d9b38c; }
-.hljs-meta, .hljs-name, .hljs-tag { color: #a69a86; }
-.hljs-deletion { color: #e07a7a; }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: var(--hl-keyword); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-template-tag { color: var(--hl-string); }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: var(--hl-number); }
+.hljs-title, .hljs-section, .hljs-title.function_ { color: var(--hl-title); }
+.hljs-built_in, .hljs-type, .hljs-title.class_ { color: var(--hl-type); }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property { color: var(--hl-attr); }
+.hljs-meta, .hljs-name, .hljs-tag { color: var(--hl-meta); }
+.hljs-deletion { color: var(--hl-deletion); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 
@@ -1382,7 +1501,7 @@ html, body, #app {
   margin-bottom: 10px;
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
-  background: rgba(255,255,255,.015);
+  background: var(--thinking-bg);
 }
 .thinking summary {
   cursor: pointer;
@@ -1528,7 +1647,7 @@ html, body, #app {
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--amber);
-  color: #1a1206;
+  color: var(--on-amber);
   font-size: var(--fs-meta);
   font-weight: 600;
 }
@@ -1601,8 +1720,8 @@ html, body, #app {
 .attachment-meta { flex-shrink: 0; color: var(--text-3); font-size: var(--fs-small); }
 .attachment-chip.reading .attachment-meta,
 .attachment-chip.indexing .attachment-meta { color: var(--amber-text); }
-.attachment-chip.error { border-color: #5a2a2a; }
-.attachment-chip.error .attachment-meta { color: #f0b4b4; }
+.attachment-chip.error { border-color: var(--danger-border-soft); }
+.attachment-chip.error .attachment-meta { color: var(--danger-text); }
 .attachment-remove {
   flex-shrink: 0;
   width: 20px;
@@ -1732,13 +1851,13 @@ label.action-btn:focus-within {
 /* Confirmation dialog (delete a chat, download a model) */
 .confirm-subject { display: inline-block; max-width: 100%; }
 .confirm-dialog .action-btn.danger {
-  background: #b83c3c;
-  border-color: #b83c3c;
-  color: #fff;
+  background: var(--danger-solid);
+  border-color: var(--danger-solid);
+  color: var(--on-danger);
 }
 .confirm-dialog .action-btn.danger:hover:not(:disabled) {
-  background: #c94848;
-  border-color: #c94848;
+  background: var(--danger-solid-hover);
+  border-color: var(--danger-solid-hover);
 }
 .confirm-dialog .confirm-subject { word-break: break-word; }
 /* type="search" would add a second clear button next to ours */
@@ -1777,14 +1896,14 @@ label.action-btn:focus-within {
   padding: 6px 12px;
   min-height: 32px;
   background: transparent;
-  border: 1px solid #5a2a2a;
+  border: 1px solid var(--danger-border-soft);
   border-radius: var(--radius-sm);
-  color: #f08080;
+  color: var(--danger-text);
   font-family: var(--font-ui);
   font-size: 12.5px;
   cursor: pointer;
 }
-.load-cancel:hover { background: rgba(224,92,92,.1); border-color: #8a3a3a; }
+.load-cancel:hover { background: var(--danger-bg); border-color: var(--danger-border-strong); }
 .load-track {
   position: relative;
   height: 8px;
@@ -1975,3 +2094,39 @@ label.action-btn:focus-within {
     width: calc(100vw - var(--sidebar-w));
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   SETTINGS: APPEARANCE (System / Light / Dark)
+══════════════════════════════════════════════════════════════ */
+.theme-choice {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.theme-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  min-height: 64px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.theme-option:hover { border-color: var(--amber-dim); color: var(--text); }
+.theme-option.active {
+  border-color: var(--amber);
+  background: var(--amber-glow);
+  color: var(--text);
+}
+.theme-option:focus-within {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+.theme-icon { font-size: 18px; line-height: 1; }
+.theme-name { font-size: 13px; font-weight: 500; }

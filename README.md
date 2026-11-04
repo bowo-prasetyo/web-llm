@@ -33,14 +33,15 @@ https://bowo-prasetyo.github.io/web-llm/
 * Download confirmation with size estimate on first model use (from the chat toolbar and from Settings)
 * Deleting or clearing a chat asks first; nothing is deleted by a single tap
 * Keyboard and screen-reader friendly: dialogs and the chat list keep focus and close with Escape, every control has a name, and status changes are announced
-* Cancel download at any time during model fetch
+* Download progress panel: a progress bar with percentage, amount downloaded, estimated time left and a Cancel button (cancelling goes back to the model you had)
+* Models shown by readable name, precision and size ("Qwen3.5 2B · 16-bit · 2.2 GB ✓"), with ✓ for downloaded ones
 * Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
 * Persistent local settings (model, temperature, top-p, penalties, context window, personas), saved as you edit them
 * Configurable maximum file upload size (1–200 MB, default 50 MB)
 * Export settings to a JSON file and import on another browser
 * Export all chat sessions to a JSON file and import (merge) on another browser — no duplicates
-* Streaming AI responses with a live word count
+* Streaming AI responses with a live word count; scroll up to reread while a reply streams, and **Jump to latest** brings you back
 * Replies rendered as Markdown: headings, lists, tables, links and code blocks with syntax highlighting and a Copy button
 * Copy any reply, and regenerate (or retry) the last one
 * Reasoning from thinking models (Qwen3, DeepSeek-R1) shown live, then folded into a collapsible "Thought process"
@@ -55,10 +56,10 @@ https://bowo-prasetyo.github.io/web-llm/
 * Automatic recovery from GPU crashes, engine errors, and WASM Tokenizer failures
 * Automatic model unload after inactivity to free GPU memory
 * Conversation history memory with configurable context window
-* Dedicated Settings page with sliders for all generation parameters
+* Settings page with the everyday reply settings up front and the advanced sampling settings folded away; changes save automatically
 * Six chat personas (Friendly, Precise, Writer, Coder, Brainstorm, Custom), chosen per chat and switchable mid-conversation
 * Welcome screen for new chats with persona cards and starter prompts
-* Mobile-friendly responsive UI with slide-in session sidebar
+* Mobile-friendly responsive UI with slide-in session sidebar; on phones Enter starts a new line and the Send button sends, and the message box grows as you type
 
 ## Supported Models
 
@@ -210,22 +211,24 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 
 ### Model
 
-* **Model selection** — choose from 55 models grouped by size tier; switching models keeps the current conversation, and the new model continues it with the same history. Picking a different model applies that model's recommended generation defaults.
+* **Model selection** — choose from 55 models grouped by size tier. Each is shown by name, precision and download size, e.g. "Qwen3.5 2B · 16-bit · 2.2 GB ✓" (✓ = already downloaded); the full model ID is shown under the menu. Switching models keeps the current conversation, and the new model continues it with the same history. Picking a different model applies that model's recommended reply settings.
 
-### Generation
+### Replies
 
 * **Temperature** — randomness of output (0.0–2.0); low = focused, high = creative
-* **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
-* **Max Tokens** — maximum length of one reply (16–2048, capped at half the context window). Defaults are 256 for the tiniest models, 512 for 0.5–1B, 768 for 1.5–2B and 1024 for 3B and up. A reply that reaches it is marked "Cut off" with a **Continue** button
-* **Context Window** — how many tokens of conversation the model can see (512–8192); the only generation setting that reloads the model. When a chat grows past it, the oldest turns (then document context) are left out of what the model sees
+* **Max Tokens** — maximum length of one reply (16–2048, capped at half the context window), shown with a rough word count. Defaults are 256 for the tiniest models, 512 for 0.5–1B, 768 for 1.5–2B and 1024 for 3B and up. A reply that reaches it is marked "Cut off" with a **Continue** button
+* **Context Window** — how many tokens of conversation the model can see (512–8192). It's the only setting that needs the model to reload: after a change, Settings offers **Reload model now** (otherwise it applies the next time the app starts). When a chat grows past it, the oldest turns (then document context) are left out of what the model sees
 * **Let reasoning models think first** — off by default. Qwen3 and Qwen3.5 can reason step by step before answering; that sometimes helps with hard questions but is slower and uses up the reply length, so it's off unless you turn it on (the reasoning then shows as a collapsible "Thought process"). DeepSeek-R1 always reasons
+* **Advanced sampling** (folded by default):
+  * **Top P** — nucleus sampling threshold (0.01–1.0); filters token candidates by cumulative probability
+  * **Frequency Penalty** — reduces repetition of words that already appeared (−2 to 2)
+  * **Presence Penalty** — encourages the model to introduce new topics (−2 to 2)
+  * **Repetition Penalty** — MLC-native multiplicative penalty on repeated tokens (1.0–2.0)
+* **Reset to this model's recommended settings** — asks first; personas and custom instructions are kept
+
+### Documents
+
 * **Max Upload Size** — maximum file size for document uploads (1–200 MB, default 50 MB); the extracted text is also limited to 500,000 characters (~200 pages)
-
-### Repetition Control
-
-* **Frequency Penalty** — reduces repetition of words that already appeared (−2 to 2)
-* **Presence Penalty** — encourages the model to introduce new topics (−2 to 2)
-* **Repetition Penalty** — MLC-native multiplicative penalty on repeated tokens (1.0–2.0)
 
 ### Personas
 
@@ -263,7 +266,11 @@ conversation so far is kept).
 * **Export Chats** — download all saved sessions as a `webllm-sessions-YYYY-MM-DD.json` file including full message content
 * **Import Chats** — merge sessions from an exported file into the current browser; duplicate sessions are detected by ID and content fingerprint and skipped automatically
 
-All settings are automatically persisted in `localStorage` and survive page reloads. Generation settings (temperature, top-p, max tokens, penalties) and personas apply to the next message; **Apply Settings** reloads the model only when the model or context window changed.
+All settings are saved automatically in `localStorage` as you change them and survive page reloads; there is no Apply button. Reply settings and personas apply to the next message, a new model loads when you pick it, and a new context window asks to reload the model.
+
+### Current chat
+
+* **Clear Conversation** — deletes the chat that is open (asks first)
 
 ## Multi-session Chat
 
@@ -309,7 +316,15 @@ All settings are automatically persisted in `localStorage` and survive page relo
 ## Stop and Cancel Controls
 
 * **Stop generation** — while the model is streaming, the Send button becomes a pulsing red Stop button; tap it to halt and keep the partial response
-* **Cancel download** — while a model is being fetched, a pulsing "Cancel Download" button appears in the toolbar; tap it to abort; the model selection reverts and the download confirmation will re-appear on next selection
+* **Download progress** — while a model loads, a panel above the chat shows what's happening (downloading, loading from this device, or preparing the GPU), a progress bar, the percentage, how much has been downloaded and, once it can tell, the time left. Screen readers get it as a progress bar
+* **Cancel download** — the panel's **Cancel** button (shown while downloading over the network) stops the download and goes back to the model and settings you had before; the download confirmation re-appears next time you pick that model
+
+## Scrolling and the Message Box
+
+* While a reply streams, the chat follows it only while you're at the bottom. Scroll up to reread something and it stays put; **Jump to latest** (or **Follow the reply**) takes you back. Sending a message, opening a chat, Regenerate and Continue always go to the bottom
+* With a keyboard, **Enter** sends and **Shift+Enter** starts a new line. On touch screens Enter starts a new line and the **Send** button sends. **Ctrl/Cmd+Enter** sends everywhere
+* Enter that confirms an input-method composition (Chinese, Japanese, Korean…) never sends
+* The message box grows with its text, and uses 16px text on phones so iOS doesn't zoom in
 
 ## Offline and Installing
 
@@ -378,8 +393,8 @@ npm run test:unit     # pure modules only, no browser
 npm run test:e2e      # the app in Chromium
 ```
 
-* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` and `attachments.js`
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
+* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress) and `attachments.js`
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update `index.html`, `sw.js`, `package.json` and `tests/support/fixtures.js` together
@@ -435,7 +450,7 @@ Cached data may include AI model weights (potentially several GB), attached docu
 | `attachments.js` | Splitting attached documents into chunks and choosing what goes in front of the model |
 | `index.html` | HTML entry point, CDN imports |
 | `chatstore.js` | Chat storage in IndexedDB, migration from localStorage, and the localStorage fallback |
-| `picker.js` | Model picker catalog and device-based recommendation |
+| `picker.js` | Model picker catalog, device-based recommendation, readable model names and load-progress parsing |
 | `quality.js` | Junk-output detection for the model check and the collapsed-reply guard |
 | `context.js` | Fits the conversation into the model's context window |
 | `markdown.js` | Reply rendering (Markdown, code blocks, `<think>` handling), shared by the UI and the worker |
@@ -492,7 +507,7 @@ Streaming Response → UI
 | Context fitting | Before each reply, the oldest turns and then document context are dropped so the prompt fits the context window |
 | Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; the generation time limit ends the stream |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |
-| Cancel download | User can abort a model fetch; cached-model list cleaned up so confirmation re-appears |
+| Cancel download | User can abort a model fetch; the previous model and its settings come back, and the cached-model list is cleaned up so confirmation re-appears |
 | Cut-off replies | A reply that hits Max Tokens or the time limit ends cleanly with a note and a **Continue** button; nothing is stitched together automatically |
 | Repeated-sentence guard | A reply that starts repeating the same sentence is cut back to just before the repeats, with a note |
 | Continue seam cleanup | Text the model repeats from the end of the reply is removed, and a space is added where the two parts meet |

@@ -10,7 +10,8 @@ const CODER32 = "Qwen2.5-Coder-0.5B-Instruct-q4f32_1-MLC";
 const LLAMA16 = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
 
 const settings = model => ({ model, temperature: 0.4, max_tokens: 512, contextWindowSize: 2048, defaultPersona: "friendly", settingsVersion: 2 });
-const options = page => page.locator(".model-select option").allTextContents();
+// "<model id> <label>" for each option of the model menu
+const options = page => page.locator(".model-select option").evaluateAll(os => os.map(o => o.value + " " + o.textContent.trim()));
 const loads = async page => (await sent(page, "set-config")).map(m => ({ model: m.config.model, selfTest: m.config.selfTest }));
 
 test("a healthy device: one quiet check per model, nothing else changes", async ({ page }) => {

@@ -38,12 +38,8 @@ test("settings apply live, without reloading the model", async ({ page }) => {
   await page.click("button[title=Settings]");
   await page.fill(".system-prompt-editor", "edited prompt");
   await sleep(600);
-  const setsBefore = (await sent(page, "set-config")).length;
-  await page.click("text=Apply Settings");
-  await sleep(300);
-  check((await sent(page, "set-config")).length === setsBefore, "Apply with the same model doesn't reload it");
-  check((await sent(page, "update-config")).length > 0, "Apply sends update-config");
-  check((await readStorage(page, "webllm-settings")).system_prompt === "edited prompt", "system prompt edit is saved");
+  check((await readStorage(page, "webllm-settings")).system_prompt === "edited prompt", "system prompt edit is saved without pressing anything");
+  check(await page.locator("text=Apply Settings").count() === 0, "no Apply button: changes are saved as you make them");
 
   await page.click("text=Reset to Friendly instructions");
   check((await page.inputValue(".system-prompt-editor")).startsWith("You are a friendly"), "Reset restores the Friendly instructions");

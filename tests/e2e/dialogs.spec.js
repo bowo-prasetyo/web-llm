@@ -21,8 +21,8 @@ test.describe("download confirmation", () => {
     await page.selectOption(".model-select", BIG);
     await expect(dialog(page)).toBeVisible();
     await expect(dialog(page)).toContainText("Download Model?");
-    await expect(dialog(page)).toContainText(BIG);
-    await expect(dialog(page)).toContainText(/~\d+(\.\d)? GB/);
+    await expect(dialog(page)).toContainText("Qwen2.5 7B · 16-bit");
+    await expect(dialog(page)).toContainText(/About \d+(\.\d)? GB will be downloaded/);
     await sleep(300);
     check((await loads(page)).length === 0, "nothing loads before the answer");
 

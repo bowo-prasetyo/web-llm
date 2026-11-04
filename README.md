@@ -218,7 +218,7 @@ On first launch the app asks two questions instead of downloading anything:
 
 * Qwen3.5 is the newest model generation WebLLM 0.2.84 supports; coding and writing start at 2B, since smaller models mix up code and lose the thread of longer texts
 
-* Fast is recommended on phones and devices reporting 4 GB of memory or less, Balanced otherwise; Smart needs a strong GPU. Fast is quickest but more likely to get facts wrong: small models write fluently even when they are wrong
+* Fast is recommended on phones and devices reporting 4 GB of memory or less, Balanced otherwise; Smart needs a strong GPU. On phones and tablets, Fast is **Llama 3.2 1B** for every use (about 1 GB of GPU memory; Qwen3.5 0.8B needs 1.6–1.9 GB, which closes the page on many phones). Fast is quickest but more likely to get facts wrong: small models write fluently even when they are wrong
 * Devices where 16-bit GPU math is unsupported or broken get the q4f32 version of each pick automatically
 * Downloaded models are marked, and the model in use is labelled
 * **Skip** leaves the choice to you (the model menu); nothing downloads until a model is chosen, and sending a message first opens the picker
@@ -450,7 +450,7 @@ npm run test:unit     # pure modules only, no browser
 npm run test:e2e      # the app in Chromium
 ```
 
-* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js` and `personas.js`
+* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js`, `crash.js` and `personas.js`
 * **Browser tests** (`tests/e2e/`) run the real app in Chromium: light and dark themes and their contrast, the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, and the "new version available" banner
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
@@ -467,7 +467,7 @@ The tests check that the three version numbers match.
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `pace.js`, `version.js`, `style.css`) and the `icons/` and `fonts/` folders
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `pace.js`, `version.js`, `crash.js`, `style.css`) and the `icons/` and `fonts/` folders
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -517,6 +517,7 @@ Cached data may include AI model weights (potentially several GB), attached docu
 | `chatstore.js` | Chat storage in IndexedDB, migration from localStorage, and the localStorage fallback |
 | `picker.js` | Model picker catalog, device-based recommendation, readable model names and load-progress parsing |
 | `quality.js` | Junk-output detection for the model check and the collapsed-reply guard |
+| `crash.js` | Notices a page that was closed by running out of memory, and suggests a lighter model |
 | `pace.js` | Progress-based reply time limits, writing-speed measurement, and the smaller model suggested when one is slow |
 | `context.js` | Fits the conversation into the model's context window |
 | `markdown.js` | Reply rendering (Markdown, code blocks, `<think>` handling), shared by the UI and the worker |
@@ -571,6 +572,7 @@ Streaming Response → UI
 | Model check | After a model's first load on a device, a short reply is checked for junk; q4f16 models that fail (or need 16-bit support the GPU lacks) get a q4f32 replacement offer |
 | Collapsed-reply guard | A reply that turns into a few repeated words is stopped, replaced by an explanation with Retry, and left out of the model's memory |
 | Context fitting | Before each reply, the oldest turns and then document context are dropped so the prompt fits the context window |
+| Out-of-memory page crashes | A phone that runs out of memory kills the page, so nothing can be caught. The app notes in localStorage when it starts loading a model or answering, and removes the note when that ends or the page is hidden or closed. A note found when the page opens means it crashed: that model isn't loaded again automatically (no crash loop); a dialog explains and offers a model needing at most 60% of the memory, **Try again** or **Choose another model**; the menu and picker mark the model until it loads and answers successfully |
 | Lost GPU recovery | When the browser takes the GPU away (phones do this in the background or under memory pressure), WebLLM disposes the model; the next message reloads it from the device and retries once, and a second failure shows a clear error with Retry |
 | Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; a reply stuck for a minute is interrupted in the engine |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |

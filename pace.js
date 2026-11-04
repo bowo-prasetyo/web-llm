@@ -73,12 +73,22 @@ export function isSlow(wps) {
 // Smaller models to suggest when the current one is slow, smallest first.
 const FASTER_CANDIDATES = ["Qwen3.5-0.8B", "Qwen3.5-2B", "Qwen3.5-4B"];
 
-// Billions of parameters from a model ID ("Qwen3.5-2B-…" -> 2), or null.
-// Writing speed follows the parameter count; download sizes don't show it
-// well (small models carry a large vocabulary table).
+// Billions of parameters from a model ID ("Qwen3.5-2B-…" -> 2,
+// "SmolLM2-135M-…" -> 0.135), or null. Writing speed follows the parameter
+// count; download sizes don't show it well (small models carry a large
+// vocabulary table).
 export function modelParams(id) {
-  const m = /[-_](\d+(?:\.\d+)?)[bB](?=[-_])/.exec(id || "");
-  return m ? parseFloat(m[1]) : null;
+  const m = /[-_](\d+(?:\.\d+)?)([bBmM])(?=[-_])/.exec(id || "");
+  if (!m) return null;
+  return parseFloat(m[1]) / (/m/i.test(m[2]) ? 1000 : 1);
+}
+
+// Models of about 1B parameters or fewer. They write fluently but know few
+// facts, so they often make things up in a confident tone.
+export const SMALL_MODEL_MAX_B = 1;
+export function isSmallModel(id) {
+  const b = modelParams(id);
+  return b !== null && b <= SMALL_MODEL_MAX_B;
 }
 
 // A clearly smaller model (at most 60% of the parameters, same precision

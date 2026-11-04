@@ -18,7 +18,7 @@ import {
   describeLoadProgress,
   estimateRemaining,
 } from "./picker.js";
-import { blendSpeed, formatSpeed, isSlow, fasterModel } from "./pace.js";
+import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pace.js";
 
 const {
   createApp,
@@ -1023,8 +1023,13 @@ const Home = {
           <span>{{ speedNote.text }}</span>
           <template v-if="speedNote.faster">
             For quicker replies, try
-            <button type="button" class="link-btn speed-switch" @click="switchToFaster" :disabled="modelLoading || loading">{{ speedNote.fasterName }}</button>.
+            <button type="button" class="link-btn speed-switch" @click="switchToFaster" :disabled="modelLoading || loading">{{ speedNote.fasterName }}</button>
+            (faster, but makes more mistakes).
           </template>
+        </p>
+        <p v-if="accuracyHint" class="accuracy-note" role="note">
+          <span>⚠ Small models like {{ accuracyHint }} often get facts wrong, even when they sound sure. Check anything important.</span>
+          <button type="button" class="accuracy-dismiss" @click="dismissAccuracyHint" aria-label="Hide this hint for this model" title="Hide for this model">×</button>
         </p>
         <div class="toolbar">
           <select
@@ -2141,6 +2146,28 @@ const Home = {
       };
     });
 
+    // Friendly and Precise chats are where people ask factual questions, and
+    // the smallest models answer those confidently but often wrongly. Shown
+    // until hidden for that model.
+    const ACCURACY_HINT_KEY = "webllm-accuracy-hint-hidden";
+    const accuracyHintHidden = ref(loadAccuracyHintHidden());
+    function loadAccuracyHintHidden() {
+      try { return JSON.parse(localStorage.getItem(ACCURACY_HINT_KEY) || "[]") || []; }
+      catch { return []; }
+    }
+    const accuracyHint = Vue.computed(() => {
+      const model = settings.value.model;
+      if (!model || !isSmallModel(model) || accuracyHintHidden.value.includes(model)) return "";
+      if (!["friendly", "precise"].includes(currentPersonaId.value)) return "";
+      return friendlyModelName(model);
+    });
+    function dismissAccuracyHint() {
+      const model = settings.value.model;
+      if (!model) return;
+      accuracyHintHidden.value = [...new Set([...accuracyHintHidden.value, model])];
+      try { localStorage.setItem(ACCURACY_HINT_KEY, JSON.stringify(accuracyHintHidden.value)); } catch {}
+    }
+
     function switchToFaster() {
       const target = speedNote.value && speedNote.value.faster;
       if (!target || modelLoading.value || loading.value) return;
@@ -3140,6 +3167,8 @@ const Home = {
       cutOffNote,
       speedNote,
       switchToFaster,
+      accuracyHint,
+      dismissAccuracyHint,
       keepModelAnyway,
       viewMessages,
       copiedIndex,

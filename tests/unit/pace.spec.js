@@ -3,7 +3,7 @@
 import { test, expect } from "@playwright/test";
 import {
   TIME_LIMITS, timeLimitReason, withTimeLimits,
-  wordCount, measureSpeed, blendSpeed, formatSpeed, isSlow, fasterModel, modelParams,
+  wordCount, measureSpeed, blendSpeed, formatSpeed, isSlow, fasterModel, modelParams, isSmallModel,
 } from "../../pace.js";
 
 const L = { firstTextMs: 100, stallMs: 50, maxMs: 1000 };
@@ -86,4 +86,16 @@ test("no suggestion for the smallest models or unknown sizes", () => {
   expect(fasterModel("Qwen3.5-0.8B-q4f32_1-MLC", ALL)).toBe("");
   expect(fasterModel("Phi-4-mini-instruct-q4f32_1-MLC", ALL)).toBe("");
   expect(fasterModel("Qwen3.5-2B-q4f32_1-MLC", ["Qwen3.5-2B-q4f32_1-MLC"])).toBe("");
+});
+
+test("models of about 1B parameters or fewer count as small", () => {
+  expect(modelParams("SmolLM2-135M-Instruct-q0f32-MLC")).toBe(0.135);
+  for (const id of ["SmolLM2-360M-Instruct-q4f32_1-MLC", "Qwen3.5-0.8B-q4f32_1-MLC",
+    "Llama-3.2-1B-Instruct-q4f32_1-MLC", "gemma3-1b-it-q4f16_1-MLC"]) {
+    expect(isSmallModel(id), id).toBe(true);
+  }
+  for (const id of ["Qwen3.5-2B-q4f32_1-MLC", "Qwen2.5-1.5B-Instruct-q4f32_1-MLC",
+    "Phi-4-mini-instruct-q4f32_1-MLC", "Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC"]) {
+    expect(isSmallModel(id), id).toBe(false);
+  }
 });

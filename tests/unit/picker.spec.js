@@ -1,7 +1,7 @@
 // picker.js: model picker catalog and recommendations.
 import { test, expect } from "@playwright/test";
 import {
-  MODEL_PICKS, TIERS, pickModelId, recommendTier, friendlyModelName,
+  MODEL_PICKS, TIERS, PHONE_FAST_PICK, pickModelId, recommendTier, friendlyModelName,
   modelPrecision, formatSize, describeLoadProgress, estimateRemaining,
 } from "../../picker.js";
 import { workerModels } from "../support/models.js";
@@ -9,7 +9,7 @@ import { workerModels } from "../support/models.js";
 test("every pick exists in the worker's model lists", () => {
   const { models, altModels } = workerModels();
   const known = new Set([...models, ...altModels]);
-  const picks = Object.values(MODEL_PICKS).flatMap(u => Object.values(u)).flatMap(p => [p.f16, p.f32]);
+  const picks = [...Object.values(MODEL_PICKS).flatMap(u => Object.values(u)), PHONE_FAST_PICK].flatMap(p => [p.f16, p.f32]);
   expect(picks.filter(id => !known.has(id))).toEqual([]);
 });
 
@@ -97,4 +97,14 @@ test("time left is estimated only once there is enough to go on", () => {
 
 test("the Fast size says honestly that it gets more facts wrong", () => {
   expect(TIERS.find(t => t.id === "fast").desc).toMatch(/more likely to get facts wrong/i);
+});
+
+test("on phones, Fast is Llama 3.2 1B for every use (lighter on memory)", () => {
+  for (const use of ["chat", "code", "write"]) {
+    expect(pickModelId(use, "fast", false, { mobile: true })).toBe("Llama-3.2-1B-Instruct-q4f32_1-MLC");
+    expect(pickModelId(use, "fast", true, { mobile: true })).toBe("Llama-3.2-1B-Instruct-q4f16_1-MLC");
+    expect(pickModelId(use, "balanced", false, { mobile: true })).toBe(pickModelId(use, "balanced", false));
+  }
+  expect(pickModelId("chat", "fast", false)).toBe("Qwen3.5-0.8B-q4f32_1-MLC"); // computers unchanged
+  expect(pickModelId("nope", "fast", false, { mobile: true })).toBe("");
 });

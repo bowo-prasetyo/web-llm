@@ -2296,3 +2296,7 @@ label.action-btn:focus-within {
 }
 .report-problem .section-hint { flex: 1; min-width: 200px; margin: 0; }
 a.action-btn { text-decoration: none; display: inline-block; }
+
+/* After a page crash: three choices, wrapping on phones */
+.crash-actions { flex-wrap: wrap; }
+.picker-crashed { color: var(--amber-text); }

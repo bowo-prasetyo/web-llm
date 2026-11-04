@@ -55,10 +55,16 @@ export const MODEL_PICKS = {
   },
 };
 
+// Fast on phones and tablets, for every use: Qwen3.5 0.8B needs 1.6–1.9 GB
+// of GPU memory, which closes the page on many phones; Llama 3.2 1B needs
+// 0.9–1.1 GB and still holds a real conversation.
+export const PHONE_FAST_PICK = { f16: "Llama-3.2-1B-Instruct-q4f16_1-MLC", f32: "Llama-3.2-1B-Instruct-q4f32_1-MLC" };
+
 // The model to use for a pick: the q4f16 version when 16-bit GPU math
 // works here, otherwise the q4f32 version.
-export function pickModelId(use, tier, f16ok) {
-  const pick = MODEL_PICKS[use]?.[tier];
+export function pickModelId(use, tier, f16ok, { mobile = false } = {}) {
+  if (!MODEL_PICKS[use]?.[tier]) return "";
+  const pick = mobile && tier === "fast" ? PHONE_FAST_PICK : MODEL_PICKS[use][tier];
   if (!pick) return "";
   return f16ok ? pick.f16 : pick.f32;
 }

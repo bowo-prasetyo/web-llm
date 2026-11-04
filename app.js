@@ -20,6 +20,7 @@ import {
 } from "./picker.js";
 import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pace.js";
 import { APP_VERSION, problemReportUrl } from "./version.js";
+import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, lighterModel } from "./crash.js";
 
 const {
   createApp,
@@ -362,6 +363,35 @@ function timeLimitOverrides() {
   catch { return null; }
 }
 
+// ── Page crashes (out of memory) ──────────────────────────────────────────
+// See crash.js. Checked once, as the page opens and before any model loads.
+const startupCrash = detectCrash(localStorage);    // { model, phase } or null
+const sharedModelCrashes = vRef(loadCrashes(localStorage)); // {modelId: {phase, ts}}
+
+// What the page is doing that could run out of memory, or "" (idle). The
+// note in localStorage follows it, but only while the page is visible: a
+// hidden or closing page is never counted as a crash.
+let pendingWork = { model: "", phase: "" };
+function setPendingWork(model, phase) {
+  pendingWork = { model: phase ? model : "", phase };
+  syncPendingNote();
+}
+function syncPendingNote() {
+  if (pendingWork.phase && document.visibilityState === "visible") {
+    markPending(localStorage, pendingWork.model, pendingWork.phase);
+  } else {
+    clearPending(localStorage);
+  }
+}
+document.addEventListener("visibilitychange", syncPendingNote);
+// Chrome also reports "hidden" when a page closes or reloads; pagehide covers
+// browsers that don't (Safari).
+window.addEventListener("pagehide", () => clearPending(localStorage));
+
+function forgetModelCrash(model) {
+  if (sharedModelCrashes.value[model]) sharedModelCrashes.value = { ...forgetCrash(localStorage, model) };
+}
+
 function isF16Model(id) { return /q4f16|q0f16/.test(id || ""); }
 
 // True when 16-bit models are known not to work here: no shader-f16
@@ -413,6 +443,7 @@ function modelOptionLabel(id) {
   const size = formatSize(sharedModelSizes.value[id]);
   let label = modelShortName(id) + (size ? " · " + size : "");
   if (isModelCached(id)) label += " ✓";
+  if (sharedModelCrashes.value[id]) return `${label}  ⚠ closed the page on this device`;
   const h = sharedModelHealth.value[id];
   if (h && h.ok === false) {
     return `${label}  ⚠ ${h.reason === "no-f16" ? "needs 16-bit GPU support" : "garbled on this GPU"}`;
@@ -503,7 +534,7 @@ const APP_FILES = [
   "./index.html", "./app.js", "./worker.js", "./sw.js", "./style.css",
   "./personas.js", "./markdown.js", "./quality.js", "./context.js",
   "./picker.js", "./chatstore.js", "./attachments.js", "./pace.js",
-  "./version.js",
+  "./version.js", "./crash.js",
 ];
 const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
 const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
@@ -585,6 +616,26 @@ const Home = {
         </div>
       </div>
 
+      <!-- The page closed while using a model last time (out of memory) -->
+      <div class="modal-overlay" v-if="crashModal.show">
+        <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="crash-title" aria-describedby="crash-body" v-dialog="chooseAfterCrash">
+          <div class="modal-icon" aria-hidden="true">⚠</div>
+          <h2 class="modal-title" id="crash-title">The page closed unexpectedly</h2>
+          <p class="modal-body" id="crash-body">
+            Last time, the page closed while {{ crashModal.phase === "answering" ? "answering with" : "loading" }}
+            <strong>{{ modelShortName(crashModal.model) }}</strong>. This usually means this device ran out of memory for that model, so it wasn't loaded again.
+          </p>
+          <p v-if="crashModal.lighter" class="modal-body health-suggestion">
+            Suggested: <strong>{{ modelShortName(crashModal.lighter) }}</strong>, which needs about {{ formatSize(modelSizes[crashModal.lighter]) }} instead of {{ formatSize(modelSizes[crashModal.model]) }}.
+          </p>
+          <div class="modal-actions crash-actions">
+            <button class="action-btn secondary" @click="retryCrashedModel">Try again</button>
+            <button class="action-btn secondary" @click="chooseAfterCrash">Choose another model</button>
+            <button v-if="crashModal.lighter" class="action-btn primary" @click="useLighterModel">Use {{ friendlyModelName(crashModal.lighter) }}</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Model picker: first launch, or "Help me choose a model" -->
       <div v-if="picker.show" class="modal-overlay" @click.self="closePicker">
         <div class="modal picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" v-dialog="closePicker">
@@ -643,6 +694,7 @@ const Home = {
                   </span>
                   <span class="picker-model">{{ o.name }}</span>
                   <span class="picker-meta">{{ o.cached ? "Already downloaded" : (online ? "~" + (formatSize(o.sizeMb) || "?") + " download" : "Needs internet to download (~" + (formatSize(o.sizeMb) || "?") + ")") }}</span>
+                  <span v-if="o.crashed" class="picker-meta picker-crashed">⚠ Closed the page on this device (not enough memory?)</span>
                   <span class="picker-desc">{{ o.desc }}</span>
                 </span>
               </button>
@@ -1591,7 +1643,7 @@ const Home = {
       last.notice = null;
       loading.value = true;
       scrollBottom({ force: true });
-      getWorker().postMessage({
+      askModel({
         type: "continue",
         previous,
         config: liveConfig(),
@@ -1618,11 +1670,18 @@ const Home = {
       });
 
       loading.value = true;
-      getWorker().postMessage({
+      askModel({
         type: "generate",
         prompt: question.content,
         config: liveConfig(),
       });
+    }
+
+    // Send a question (or Continue) to the model, noting it in case the
+    // page runs out of memory while answering (see crash.js).
+    function askModel(message) {
+      setPendingWork(settings.value.model, "answering");
+      getWorker().postMessage(message);
     }
 
     function addMessage(role, content) {
@@ -1664,7 +1723,7 @@ const Home = {
       prompt.value = "";
       loading.value = true;
 
-      getWorker().postMessage({
+      askModel({
         type: "generate",
         prompt: text,
         config: liveConfig(),
@@ -1793,6 +1852,7 @@ const Home = {
       const data = event.data;
 
       if (data.type === "fatal") {
+        setPendingWork("", "");
 
         loading.value = false;
         modelLoading.value = false;
@@ -1856,6 +1916,7 @@ const Home = {
             data.text.startsWith("Ready")
           ) {
             modelLoading.value = false;
+            if (pendingWork.phase === "loading") setPendingWork("", "");
             // Mark this model as cached so future selects skip the confirmation
             markModelCached(settings.value.model);
             // Restore persisted conversation once per page load only.
@@ -1924,6 +1985,9 @@ const Home = {
           break;
                     
         case "response":
+          setPendingWork("", "");
+          // It answered: a crash recorded for this model no longer applies
+          if (!data.outcome) forgetModelCrash(settings.value.model);
 
           if (data.outcome) {
             handleFailedReply(data);
@@ -2001,7 +2065,14 @@ const Home = {
           }
 
           if (settings.value.model) {
-            await applySettings();
+            // The page closed while using this model last time (most likely
+            // out of memory): loading it again would close it again, so ask.
+            if (!crashPromptShown && startupCrash && startupCrash.model === settings.value.model && !lastAppliedModel.value) {
+              crashPromptShown = true;
+              showCrashPrompt(startupCrash);
+            } else {
+              await applySettings();
+            }
           }
           break;
         }
@@ -2024,6 +2095,7 @@ const Home = {
           break;
                     
         case "webgpu-error":
+          setPendingWork("", "");
           sharedLoadedKey.value = "";
           webgpuError.value = true;
           modelLoading.value = false;
@@ -2032,6 +2104,7 @@ const Home = {
           break;
 
         case "error": {
+          setPendingWork("", "");
           // Keep any text already streamed as a normal reply (or drop an
           // empty bubble) before adding the error.
           const tail = messages.value[messages.value.length - 1];
@@ -2148,7 +2221,7 @@ const Home = {
       const speed = model && sharedModelSpeed.value[model];
       if (!speed || modelLoading.value) return null;
       const slow = isSlow(speed.wps);
-      const faster = slow ? fasterModel(model, [...models.value, ...sharedAltModels.value]) : "";
+      const faster = slow ? fasterModel(model, [...models.value, ...sharedAltModels.value].filter(id => !sharedModelCrashes.value[id])) : "";
       return {
         slow,
         text: `${friendlyModelName(model)} writes ${formatSpeed(speed.wps)} on this device.`,
@@ -2241,6 +2314,42 @@ const Home = {
       }
     }
 
+    // ── After a page crash ───────────────────────────────────────────────
+    let crashPromptShown = false;
+    const crashModal = ref({ show: false, model: "", phase: "", lighter: "" });
+
+    function showCrashPrompt({ model, phase }) {
+      crashModal.value = {
+        show: true,
+        model,
+        phase,
+        lighter: lighterModel(model, modelSizes.value, allModels(), sharedModelCrashes.value),
+      };
+      status.value = `Not loaded: ${modelShortName(model)} closed the page last time`;
+      refreshSessions();
+      if (!currentSessionId.value) currentSessionId.value = genId();
+    }
+
+    // Load the lighter model, with its own recommended settings
+    function useLighterModel() {
+      const target = crashModal.value.lighter;
+      crashModal.value.show = false;
+      if (!target) return;
+      settings.value.model = target;
+      Object.assign(settings.value, getModelDefaults(target));
+      applySettings(true);
+    }
+
+    function retryCrashedModel() {
+      crashModal.value.show = false;
+      applySettings(true);
+    }
+
+    function chooseAfterCrash() {
+      crashModal.value.show = false;
+      openPicker();
+    }
+
     function forgetModelHealth() {
       sharedModelHealth.value = {};
       saveModelHealth();
@@ -2277,7 +2386,7 @@ const Home = {
       const recommended = recommendTier(deviceInfo());
       const known = allModels();
       return TIERS.map(t => {
-        const id = pickModelId(picker.value.use, t.id, f16Usable());
+        const id = pickModelId(picker.value.use, t.id, f16Usable(), deviceInfo());
         return {
           ...t,
           model: id,
@@ -2287,6 +2396,7 @@ const Home = {
           recommended: t.id === recommended,
           current: id === lastAppliedModel.value,
           available: known.length === 0 || known.includes(id),
+          crashed: !!sharedModelCrashes.value[id],
         };
       }).filter(o => o.available);
     });
@@ -2434,6 +2544,7 @@ const Home = {
       loadPhaseStart = null;
 
       status.value = `Loading ${modelShortName(settings.value.model)}…`;
+      setPendingWork(settings.value.model, "loading");
     
       getWorker().postMessage({
         type: "set-config",
@@ -2803,7 +2914,7 @@ const Home = {
         addMessage("user", unanswered);
         saveConversation();
         loading.value = true;
-        getWorker().postMessage({ type: "generate", prompt: unanswered, config: liveConfig() });
+        askModel({ type: "generate", prompt: unanswered, config: liveConfig() });
       }
     }
 
@@ -3175,6 +3286,10 @@ const Home = {
       modelOptionLabel,
       healthModal,
       switchToSuggestion,
+      crashModal,
+      useLighterModel,
+      retryCrashedModel,
+      chooseAfterCrash,
       cutOffNote,
       speedNote,
       switchToFaster,

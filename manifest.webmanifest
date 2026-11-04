@@ -1,6 +1,6 @@
 {
-  "name": "WebLLM Chat",
-  "short_name": "WebLLM Chat",
+  "name": "Private AI Chat",
+  "short_name": "AI Chat",
   "description": "A private AI chat that runs in your browser and works offline.",
   "start_url": "./",
   "scope": "./",

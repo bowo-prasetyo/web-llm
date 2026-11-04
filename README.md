@@ -1,6 +1,6 @@
 # WebLLM Browser Chat
 
-Pure client-side browser AI chat application built with:
+Pure client-side browser AI chat application (shown to users as **Private AI Chat**) built with:
 
 * Vue 3 CDN
 * Vue Router CDN
@@ -59,7 +59,7 @@ https://bowo-prasetyo.github.io/web-llm/
 * Settings page with the everyday reply settings up front and the advanced sampling settings folded away; changes save automatically
 * Six chat personas (Friendly, Precise, Writer, Coder, Brainstorm, Custom), chosen per chat and switchable mid-conversation
 * Welcome screen for new chats with persona cards and starter prompts
-* Mobile-friendly responsive UI with slide-in session sidebar; on phones Enter starts a new line and the Send button sends, and the message box grows as you type
+* Responsive UI: on wide screens (1100px and up) the chat list sits beside the chat and can be hidden; narrower screens get a slide-in drawer; on phones Enter starts a new line and the Send button sends, and the message box grows as you type
 
 ## Supported Models
 
@@ -274,7 +274,8 @@ All settings are saved automatically in `localStorage` as you change them and su
 
 ## Multi-session Chat
 
-* Tap the **☰ menu button** in the header to open the sessions sidebar
+* On wide screens (1100px and up) the chat list is shown beside the chat. The **☰ menu button** (or **×** in the list) hides and shows it, and the app remembers your choice
+* On narrower screens, tap the **☰ menu button** in the header to open the list as a drawer over the chat
 * Tap **+ New Chat** to start a fresh conversation — the current session auto-saves first
 * Previously saved chats are listed with auto-generated title, preview, model, and timestamp
 * Tap any session to restore it — messages and model context are both recovered
@@ -302,6 +303,7 @@ All settings are saved automatically in `localStorage` as you change them and su
 * **Chat list**: while closed it is skipped by Tab; when opened, focus moves into it and stays there until it closes (Escape, **×**, or opening a chat), then returns to the menu button. Each chat is a button, and the open one is marked as current
 * **Names**: icon-only buttons, the message box, the model and persona menus and the Settings sliders all have accessible names
 * **Announcements**: status messages (loading, ready, errors) are read out by screen readers; download progress is announced once when it starts, not on every step
+* **Text size**: nothing in the interface is smaller than 12px (the `--fs-meta` and `--fs-small` tokens in `style.css`); a browser test checks every visible text on the chat, Settings and model picker screens
 * **Focus ring**: every control shows a visible amber outline when reached with the keyboard, including **Attach** and the Import buttons (their file inputs are visually hidden, not removed)
 * **Confirmations** before anything is deleted: **Clear** (toolbar), **Clear Conversation** (Settings) and the sidebar's trash icon
 
@@ -394,7 +396,7 @@ npm run test:e2e      # the app in Chromium
 ```
 
 * **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress) and `attachments.js`
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update `index.html`, `sw.js`, `package.json` and `tests/support/fixtures.js` together

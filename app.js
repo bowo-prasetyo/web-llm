@@ -351,6 +351,15 @@ function f16Problem() {
 // download cancel); sharedCachedTick changes whenever the app edits it, so
 // labels that show "✓ downloaded" update.
 const CACHED_KEY = "webllm-cached-models";
+
+// Screens at least this wide show the chat list beside the chat (docked)
+// instead of as a drawer. Keep in sync with the same width in style.css.
+const WIDE_QUERY = "(min-width: 1100px)";
+// "docked" (default) or "hidden": whether the docked list is shown
+const SIDEBAR_KEY = "webllm-sidebar";
+function loadSidebarPinned() {
+  try { return localStorage.getItem(SIDEBAR_KEY) !== "hidden"; } catch { return true; }
+}
 const sharedCachedTick = vRef(0);
 function getCachedModels() {
   try { return JSON.parse(localStorage.getItem(CACHED_KEY) || "[]"); }
@@ -520,7 +529,7 @@ window.webllmCheckForUpdate = checkForUpdate;
 
 const Home = {
   template: `
-    <div class="container">
+    <div class="container" :class="{ 'sidebar-docked': sidebarDocked }">
 
       <!-- Model doesn't work on this GPU (failed check or collapsed reply) -->
       <div class="modal-overlay" v-if="healthModal.show" @click.self="keepModelAnyway">
@@ -654,18 +663,18 @@ const Home = {
       </div>
 
       <!-- Sidebar overlay -->
-      <div class="sidebar-overlay" :class="{ open: sidebarOpen }" @click="sidebarOpen = false" aria-hidden="true"></div>
+      <div class="sidebar-overlay" :class="{ open: sidebarOpen && !sidebarDocked }" @click="sidebarOpen = false" aria-hidden="true"></div>
 
       <!-- Sessions sidebar -->
       <div
         ref="sidebarEl"
         id="chat-sidebar"
         class="sidebar"
-        :class="{ open: sidebarOpen }"
-        role="dialog"
-        aria-modal="true"
+        :class="{ open: sidebarOpen && !sidebarDocked, docked: sidebarDocked }"
+        :role="sidebarDocked ? 'navigation' : 'dialog'"
+        :aria-modal="sidebarDocked ? null : 'true'"
         aria-labelledby="sidebar-title"
-        :inert="!sidebarOpen"
+        :inert="!sidebarOpen && !sidebarDocked"
       >
         <div class="sidebar-header">
           <h2 class="sidebar-title" id="sidebar-title">Chats</h2>
@@ -674,7 +683,7 @@ const Home = {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               New Chat
             </button>
-            <button type="button" class="sidebar-close" @click="sidebarOpen = false" aria-label="Close chat list" title="Close">
+            <button type="button" class="sidebar-close" @click="closeSidebar" :aria-label="sidebarDocked ? 'Hide chat list' : 'Close chat list'" :title="sidebarDocked ? 'Hide' : 'Close'">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -766,15 +775,18 @@ const Home = {
           <button
             ref="menuBtn"
             class="icon-btn"
-            @click="sidebarOpen = !sidebarOpen"
+            @click="toggleSidebar"
             title="Chat history"
             aria-label="Chat history"
             aria-controls="chat-sidebar"
-            :aria-expanded="sidebarOpen ? 'true' : 'false'"
+            :aria-expanded="sidebarOpen || sidebarDocked ? 'true' : 'false'"
           >
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <h1 class="header-title">WebLLM Chat</h1>
+          <div class="header-brand">
+            <h1 class="header-title">Private AI Chat</h1>
+            <span class="header-tagline">Runs on this device</span>
+          </div>
         </div>
         <div class="header-actions">
           <button class="icon-btn" @click="newChat" :disabled="loading || modelLoading" title="New chat" aria-label="New chat">
@@ -1148,15 +1160,51 @@ const Home = {
     const isDownloading = sharedIsDownloading;
     const webgpuError = sharedWebgpuError;
 
-    // The chat list is a drawer over the chat: while it's open, focus moves
-    // into it and stays there, and Escape (or the × button) closes it and
-    // returns focus to the menu button. While closed it is inert, so Tab
-    // doesn't wander into a panel that's off screen.
+    // The chat list.
+    // On wide screens (WIDE_QUERY) it is docked: a column beside the chat,
+    // part of the page like any navigation. The menu button and × hide and
+    // show it, and that choice is remembered.
+    // Otherwise it is a drawer over the chat: while it's open, focus moves
+    // into it and stays there, and Escape (or ×) closes it and returns
+    // focus to the menu button. While closed it is inert, so Tab doesn't
+    // wander into a panel that's off screen.
     const sidebarEl = ref(null);
     const menuBtn = ref(null);
+    const wideQuery = window.matchMedia ? window.matchMedia(WIDE_QUERY) : null;
+    const isWide = ref(!!wideQuery?.matches);
+    wideQuery?.addEventListener?.("change", e => { isWide.value = e.matches; });
+    const sidebarPinned = ref(loadSidebarPinned());
+    const sidebarDocked = Vue.computed(() => isWide.value && sidebarPinned.value);
+
+    function setSidebarPinned(pinned) {
+      sidebarPinned.value = pinned;
+      try { localStorage.setItem(SIDEBAR_KEY, pinned ? "docked" : "hidden"); } catch {}
+    }
+
+    // Menu button: hide / show the docked list on wide screens, open /
+    // close the drawer otherwise.
+    function toggleSidebar() {
+      if (isWide.value) setSidebarPinned(!sidebarPinned.value);
+      else sidebarOpen.value = !sidebarOpen.value;
+    }
+
+    // × in the list's header
+    function closeSidebar() {
+      if (sidebarDocked.value) {
+        setSidebarPinned(false);
+        nextTick(() => menuBtn.value?.focus());
+      } else {
+        sidebarOpen.value = false;
+      }
+    }
+
+    // Becoming docked (window made wider) closes the drawer, so its focus
+    // trap ends; the list simply stays on screen.
+    Vue.watch(sidebarDocked, docked => { if (docked) sidebarOpen.value = false; });
+
     let releaseSidebarFocus = null;
     Vue.watch(sidebarOpen, open => {
-      if (open && sidebarEl.value && !releaseSidebarFocus) {
+      if (open && !sidebarDocked.value && sidebarEl.value && !releaseSidebarFocus) {
         releaseSidebarFocus = openFocusScope(sidebarEl.value, {
           onEscape: () => { sidebarOpen.value = false; },
           returnTo: () => menuBtn.value,
@@ -3064,6 +3112,9 @@ const Home = {
       sidebarOpen,
       sidebarEl,
       menuBtn,
+      sidebarDocked,
+      toggleSidebar,
+      closeSidebar,
       announcedStatus,
       loadInfo,
       loadTitle,

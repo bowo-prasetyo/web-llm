@@ -139,7 +139,9 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  scroll-behavior: smooth;
+  /* No scroll-behavior: smooth. The chat follows streamed text by setting
+     scrollTop every frame; animating each of those lags behind the text
+     and makes the app's own scrolling look like the reader scrolling up. */
 }
 
 .messages::-webkit-scrollbar { width: 4px; }

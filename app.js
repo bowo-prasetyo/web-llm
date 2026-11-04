@@ -1256,9 +1256,11 @@ const Home = {
       return el.scrollHeight - el.scrollTop - el.clientHeight;
     }
 
-    // Only scrolling up stops following. Scroll events from our own
-    // scrolling (including a smooth "Jump to latest" still on its way
-    // down) and from content growing never do.
+    // Only scrolling up stops following. lastScrollTop is recorded both
+    // here and whenever the app scrolls itself, so a scroll event that
+    // arrives late (the browser delivers them on the next frame, later
+    // under load) is never compared with a stale position, and content
+    // growing or our own scrolling never counts as the reader scrolling up.
     let lastScrollTop = 0;
     function onMessagesScroll() {
       const el = messagesContainer.value;
@@ -1271,28 +1273,45 @@ const Home = {
       showJumpToLatest.value = !followLatest.value && !atBottom;
     }
 
-    async function scrollBottom({ force = false, smooth = false } = {}) {
-      if (force) followLatest.value = true;
-      if (!followLatest.value) {
-        // Not following: just keep the button up to date with new content
-        await nextTick();
-        const el = messagesContainer.value;
-        if (el) showJumpToLatest.value = distanceFromBottom(el) > NEAR_BOTTOM_PX;
-        return;
-      }
-      await nextTick();
-      const el = messagesContainer.value;
-      if (!el) return;
-      if (smooth && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      } else {
-        el.scrollTop = el.scrollHeight;
-      }
+    function setScrollToBottom(el) {
+      el.scrollTop = el.scrollHeight;
+      lastScrollTop = el.scrollTop;
       showJumpToLatest.value = false;
     }
 
+    // Follow (or offer the button) after any change to the chat's content:
+    // streamed text, a finished reply growing as code is highlighted and
+    // its buttons appear, a chat being opened. Coalesced to once a frame.
+    let stickFrame = 0;
+    function stickToBottom() {
+      if (stickFrame) return;
+      stickFrame = requestAnimationFrame(() => {
+        stickFrame = 0;
+        const el = messagesContainer.value;
+        if (!el) return;
+        if (followLatest.value) setScrollToBottom(el);
+        else showJumpToLatest.value = distanceFromBottom(el) > NEAR_BOTTOM_PX;
+      });
+    }
+    onMounted(() => {
+      const el = messagesContainer.value;
+      if (!el || typeof MutationObserver === "undefined") return;
+      new MutationObserver(stickToBottom).observe(el, { childList: true, subtree: true, characterData: true });
+    });
+
+    // force: go to the bottom and follow again (sending, opening a chat,
+    // Regenerate, Continue, Jump to latest). Otherwise only while following.
+    async function scrollBottom({ force = false } = {}) {
+      if (force) followLatest.value = true;
+      await nextTick();
+      const el = messagesContainer.value;
+      if (!el) return;
+      if (followLatest.value) setScrollToBottom(el);
+      else showJumpToLatest.value = distanceFromBottom(el) > NEAR_BOTTOM_PX;
+    }
+
     function jumpToLatest() {
-      scrollBottom({ force: true, smooth: true });
+      scrollBottom({ force: true });
       const input = promptInput.value;
       if (input && !isTouch.value) input.focus({ preventScroll: true });
     }

@@ -108,12 +108,13 @@ test.describe("scrolling while a reply streams", () => {
     await expect(jump).toHaveCount(0);
     await expect.poll(() => messages.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(5);
     await expect(page.locator(".message.streaming")).toHaveCount(0, { timeout: 15_000 });
-    check((await messages.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)) < 5, "following again until the end");
+    // following again until the end, including the finished reply's growth
+    await expect.poll(() => messages.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(5);
 
     // Sending always goes to the bottom
     await messages.evaluate(el => { el.scrollTop = 0; el.dispatchEvent(new Event("scroll")); });
-    await send(page, "hello again", 600);
-    check((await messages.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)) < 5, "sending scrolls to the new message");
+    await send(page, "hello again", 0);
+    await expect.poll(() => messages.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(5);
   });
 });
 

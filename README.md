@@ -23,7 +23,7 @@
 
 1. Open **https://bowo-prasetyo.github.io/web-llm/** in Chrome or Edge on desktop, or a recent Safari (macOS 14+ / iOS 17+). The browser needs [WebGPU](#requirements).
 2. Choose what you'll mostly use it for (everyday chat, coding or writing) and a size (Fast, Balanced or Smart).
-3. Wait for the one-time download (from about 1.6 GB for the smallest pick to 7.5 GB for the largest), then start chatting. Next time it loads from your device.
+3. Wait for the one-time download (from about 1.6 GB for the smallest pick to 7.4 GB for the largest), then start chatting. Next time it loads from your device.
 
 New to the app? The **[User Manual](docs/user-manual/README.md)** walks through everything step by step, in plain language: chatting, personas, documents, choosing a model, settings, offline use and backups, and troubleshooting.
 
@@ -97,33 +97,33 @@ supported by the WebLLM version the app uses (0.2.84).
 | Model | Approx Size |
 |---|---|
 | Qwen3.5-0.8B-q4f16_1-MLC (new) | ~1.6 GB |
-| Qwen3.5-0.8B-q4f32_1-MLC (new) | ~1.9 GB |
+| Qwen3.5-0.8B-q4f32_1-MLC (new) | ~1.8 GB |
 | Qwen2.5-0.5B-Instruct-q4f16_1-MLC | ~945 MB |
-| Qwen2.5-0.5B-Instruct-q4f32_1-MLC | ~1.1 GB |
+| Qwen2.5-0.5B-Instruct-q4f32_1-MLC | ~1.0 GB |
 | Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC | ~945 MB |
-| Qwen3-0.6B-q4f16_1-MLC | ~1.1 GB |
+| Qwen3-0.6B-q4f16_1-MLC | ~1.0 GB |
 
 ### Lightweight (1–1.7B)
 
 | Model | Approx Size |
 |---|---|
 | gemma3-1b-it-q4f16_1-MLC (new) | ~711 MB |
-| OLMo-2-0425-1B-Instruct-q4f16_1-MLC (new) | ~1.8 GB |
-| OLMo-2-0425-1B-Instruct-q4f32_1-MLC (new) | ~2.5 GB |
+| OLMo-2-0425-1B-Instruct-q4f16_1-MLC (new) | ~1.7 GB |
+| OLMo-2-0425-1B-Instruct-q4f32_1-MLC (new) | ~2.4 GB |
 | TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC | ~840 MB |
 | Llama-3.2-1B-Instruct-q4f16_1-MLC | ~879 MB |
 | Llama-3.2-1B-Instruct-q4f32_1-MLC | ~1.1 GB |
 | SmolLM2-1.7B-Instruct-q4f16_1-MLC | ~1.7 GB |
 | SmolLM2-1.7B-Instruct-q4f32_1-MLC | ~2.6 GB |
 | Qwen3-1.7B-q4f16_1-MLC | ~1.7 GB |
-| stablelm-2-zephyr-1_6b-q4f16_1-MLC | ~2.1 GB |
+| stablelm-2-zephyr-1_6b-q4f16_1-MLC | ~2.0 GB |
 
 ### Small (1.5B)
 
 | Model | Approx Size |
 |---|---|
 | Qwen2.5-1.5B-Instruct-q4f16_1-MLC | ~1.6 GB |
-| Qwen2.5-1.5B-Instruct-q4f32_1-MLC | ~1.9 GB |
+| Qwen2.5-1.5B-Instruct-q4f32_1-MLC | ~1.8 GB |
 | Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC | ~1.6 GB |
 | Qwen2.5-Math-1.5B-Instruct-q4f16_1-MLC | ~1.6 GB |
 
@@ -132,49 +132,49 @@ supported by the WebLLM version the app uses (0.2.84).
 | Model | Approx Size |
 |---|---|
 | Qwen3.5-2B-q4f16_1-MLC (new) | ~2.2 GB |
-| Qwen3.5-2B-q4f32_1-MLC (new) | ~2.6 GB |
-| Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC (new) | ~2.9 GB |
-| Ministral-3-3B-Instruct-2512-BF16-q4f32_1-MLC (new) | ~3.5 GB |
-| Qwen3.5-4B-q4f16_1-MLC (new) | ~3.9 GB |
-| Qwen3.5-4B-q4f32_1-MLC (new) | ~4.7 GB |
+| Qwen3.5-2B-q4f32_1-MLC (new) | ~2.5 GB |
+| Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC (new) | ~2.8 GB |
+| Ministral-3-3B-Instruct-2512-BF16-q4f32_1-MLC (new) | ~3.4 GB |
+| Qwen3.5-4B-q4f16_1-MLC (new) | ~3.8 GB |
+| Qwen3.5-4B-q4f32_1-MLC (new) | ~4.6 GB |
 | gemma-2-2b-it-q4f16_1-MLC | ~1.9 GB |
 | gemma-2-2b-it-q4f32_1-MLC | ~2.5 GB |
-| Llama-3.2-3B-Instruct-q4f16_1-MLC | ~2.3 GB |
-| Llama-3.2-3B-Instruct-q4f32_1-MLC | ~3.0 GB |
-| Hermes-3-Llama-3.2-3B-q4f16_1-MLC | ~2.3 GB |
-| Qwen2.5-3B-Instruct-q4f16_1-MLC | ~2.5 GB |
-| Qwen2.5-3B-Instruct-q4f32_1-MLC | ~2.9 GB |
-| Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC | ~2.5 GB |
-| Qwen3-4B-q4f16_1-MLC | ~3.2 GB |
+| Llama-3.2-3B-Instruct-q4f16_1-MLC | ~2.2 GB |
+| Llama-3.2-3B-Instruct-q4f32_1-MLC | ~2.9 GB |
+| Hermes-3-Llama-3.2-3B-q4f16_1-MLC | ~2.2 GB |
+| Qwen2.5-3B-Instruct-q4f16_1-MLC | ~2.4 GB |
+| Qwen2.5-3B-Instruct-q4f32_1-MLC | ~2.8 GB |
+| Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC | ~2.4 GB |
+| Qwen3-4B-q4f16_1-MLC | ~3.1 GB |
 
 ### Upper-mid (3.8B)
 
 | Model | Approx Size |
 |---|---|
 | Phi-4-mini-instruct-q4f16_1-MLC (new) | ~3.4 GB |
-| Phi-4-mini-instruct-q4f32_1-MLC (new) | ~4.2 GB |
-| Phi-3.5-mini-instruct-q4f16_1-MLC | ~3.7 GB |
-| Phi-3.5-mini-instruct-q4f32_1-MLC | ~5.5 GB |
+| Phi-4-mini-instruct-q4f32_1-MLC (new) | ~4.1 GB |
+| Phi-3.5-mini-instruct-q4f16_1-MLC | ~3.6 GB |
+| Phi-3.5-mini-instruct-q4f32_1-MLC | ~5.4 GB |
 
 ### Large (7–9B) — requires ≥6 GB VRAM
 
 | Model | Approx Size |
 |---|---|
-| Qwen3.5-9B-q4f16_1-MLC (new) | ~6.4 GB |
-| Qwen3.5-9B-q4f32_1-MLC (new) | ~7.5 GB |
-| Qwen2.5-7B-Instruct-q4f16_1-MLC | ~5.1 GB |
-| Qwen2.5-7B-Instruct-q4f32_1-MLC | ~5.9 GB |
-| Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC | ~5.1 GB |
-| Qwen3-8B-q4f16_1-MLC | ~5.5 GB |
-| Llama-3.1-8B-Instruct-q4f16_1-MLC | ~5.0 GB |
-| Llama-3.1-8B-Instruct-q4f32_1-MLC | ~6.1 GB |
-| Hermes-3-Llama-3.1-8B-q4f16_1-MLC | ~4.9 GB |
-| Mistral-7B-Instruct-v0.3-q4f32_1-MLC | ~5.6 GB |
-| DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC | ~5.1 GB |
-| DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC | ~5.0 GB |
-| gemma-2-9b-it-q4f16_1-MLC | ~6.4 GB |
+| Qwen3.5-9B-q4f16_1-MLC (new) | ~6.3 GB |
+| Qwen3.5-9B-q4f32_1-MLC (new) | ~7.4 GB |
+| Qwen2.5-7B-Instruct-q4f16_1-MLC | ~5.0 GB |
+| Qwen2.5-7B-Instruct-q4f32_1-MLC | ~5.8 GB |
+| Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC | ~5.0 GB |
+| Qwen3-8B-q4f16_1-MLC | ~5.4 GB |
+| Llama-3.1-8B-Instruct-q4f16_1-MLC | ~4.9 GB |
+| Llama-3.1-8B-Instruct-q4f32_1-MLC | ~6.0 GB |
+| Hermes-3-Llama-3.1-8B-q4f16_1-MLC | ~4.8 GB |
+| Mistral-7B-Instruct-v0.3-q4f32_1-MLC | ~5.5 GB |
+| DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC | ~5.0 GB |
+| DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC | ~4.9 GB |
+| gemma-2-9b-it-q4f16_1-MLC | ~6.3 GB |
 
-Sizes are approximate VRAM footprints. Actual download size may vary.
+Sizes are approximate VRAM footprints from `MODEL_SIZES_MB` in `worker.js`, shown the way the app shows them (1 GB = 1024 MB). Actual download size may vary.
 
 **q4f16 vs q4f32.** q4f16 models are smaller and faster but need the GPU's
 16-bit math. Some GPUs and browsers get that math wrong, and those models then
@@ -232,7 +232,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 ### Replies
 
 * **Temperature** — randomness of output (0.0–2.0); low = focused, high = creative
-* **Max Tokens** — maximum length of one reply (16–2048, capped at half the context window), shown with a rough word count. Defaults are 256 for the tiniest models, 512 for 0.5–1B, 768 for 1.5–2B and 1024 for 3B and up. A reply that reaches it is marked "Cut off" with a **Continue** button
+* **Max Tokens** — maximum length of one reply (16–2048, capped at half the context window), shown with a rough word count. Defaults (`modelDefaults()` in `app.js`) are 256 for the 135M and 360M models; 512 for 0.5–0.8B, 1–1.1B and 1.7B; 768 for 1.5–1.6B and 2B; and 1024 for 3B and up (including the Phi mini models). A reply that reaches it is marked "Cut off" with a **Continue** button
 * **Context Window** — how many tokens of conversation the model can see (512–8192). It's the only setting that needs the model to reload: after a change, Settings offers **Reload model now** (otherwise it applies the next time the app starts). When a chat grows past it, the oldest turns (then document context) are left out of what the model sees
 * **Let reasoning models think first** — off by default. Qwen3 and Qwen3.5 can reason step by step before answering; that sometimes helps with hard questions but is slower and uses up the reply length, so it's off unless you turn it on (the reasoning then shows as a collapsible "Thought process"). DeepSeek-R1 always reasons
 * **Advanced sampling** (folded by default):
@@ -409,6 +409,8 @@ Then open:
 http://localhost:8080
 ```
 
+With Node.js 20 or newer installed, `npm run serve` does the same with the server the tests use (`tests/support/server.js`), at http://localhost:4173. It needs no `npm ci` and sends no-cache headers, so a reload always picks up your edits.
+
 ## Testing
 
 The app has no build step; `package.json` only holds the test tooling ([Playwright](https://playwright.dev)).
@@ -421,11 +423,11 @@ npm run test:unit     # pure modules only, no browser
 npm run test:e2e      # the app in Chromium
 ```
 
-* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js` and `pace.js`
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
+* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js` and `personas.js`
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, and the "new version available" banner
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
-* When you change a pinned library version, update `index.html`, `sw.js`, `package.json` and `tests/support/fixtures.js` together
+* When you change a pinned library version, update every place it appears together: `index.html` (Vue, Vue Router, marked, DOMPurify, highlight.js, PDF.js), `worker.js` (WebLLM and its `WEBLLM_VERSION` constant, Transformers.js), `sw.js`, `package.json`, `tests/support/fixtures.js` and the library list in `tests/e2e/offline.spec.js`. `grep -rn "<old version>" --exclude-dir=node_modules .` finds them all
 
 ## Deploy to GitHub Pages
 
@@ -462,7 +464,7 @@ No attached file ever leaves the browser.
 | Storage | Used For |
 |---|---|
 | IndexedDB (`webllm-chats`) | Chats: the chat list, each chat's messages, and documents attached to chats (text, and chunks with embeddings for large ones) |
-| `localStorage` | Settings, cached-model list, model check results (and chats, only if IndexedDB is unavailable) |
+| `localStorage` | Settings, cached-model list, model check results, measured writing speed per model, chat-list shown/hidden (and chats, only if IndexedDB is unavailable) |
 | OPFS | GPU stability flag (and the unused shared document index of earlier versions, until removed) |
 | Browser cache / IndexedDB | WebLLM model weights |
 | Cache Storage (`webllm-shell-v1`, `webllm-libs-v1`) | The app's files and pinned libraries, for offline use |
@@ -560,7 +562,7 @@ Streaming Response → UI
 | Duplicate prevention | Manual resend of the same question is deduplicated |
 | Full-content search | Search titles, questions, and answers across all saved messages with highlighted excerpts |
 | Mid-conversation model switch | Switching models continues the current conversation: the chat history is handed to the new model |
-| Pinned dependencies | WebLLM (0.2.84; 0.2.86 produced garbage output), Vue, Vue Router, marked, DOMPurify and highlight.js load at fixed versions (the Markdown libraries with integrity hashes), so an upstream release can't change the app unexpectedly |
+| Pinned dependencies | WebLLM (0.2.84; 0.2.86 produced garbage output), Vue, Vue Router, marked, DOMPurify, highlight.js, PDF.js (4.4.168) and Transformers.js (2.17.2) load at fixed versions (the Markdown libraries with integrity hashes), so an upstream release can't change the app unexpectedly |
 | Safe reply rendering | Model output is rendered as Markdown with raw HTML escaped and the result sanitized by DOMPurify |
 | Legacy migration | Existing single-session data is migrated to the multi-session format on first run |
 | Settings export / import | Transfer all settings to another browser via a JSON file |

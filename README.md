@@ -25,6 +25,8 @@
 2. Choose what you'll mostly use it for (everyday chat, coding or writing) and a size (Fast, Balanced or Smart).
 3. Wait for the one-time download (from about 1.6 GB for the smallest pick to 7.5 GB for the largest), then start chatting. Next time it loads from your device.
 
+New to the app? The **[User Manual](docs/user-manual/README.md)** walks through everything step by step, in plain language: chatting, personas, documents, choosing a model, settings, offline use and backups, and troubleshooting.
+
 ## What stays on your device, and what is downloaded
 
 * **Stays on your device:** your messages, chats, attached documents and settings (in the browser's storage), and the AI model itself, which runs on your GPU.

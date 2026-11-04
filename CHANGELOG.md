@@ -25,6 +25,7 @@ The first release: a private AI chat that runs entirely in your browser.
 - A quick check after a model's first load catches GPUs with broken 16-bit math and offers a version that works.
 - Shows how fast the model writes on your device, and suggests a smaller one when it's slow.
 - Honest about small models: they often get facts wrong, and the app says so.
+- The tiniest models (SmolLM2 135M and 360M) are kept for testing, last in the model menu under "Tiny (for testing; very limited answers)".
 - Download progress with time left and Cancel; downloaded models are marked ✓.
 
 ### Chats and documents

@@ -53,6 +53,7 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 * Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
 * Persistent local settings (model, temperature, top-p, penalties, context window, personas), saved as you edit them
+* Light and dark themes: follows the device by default, or choose Light or Dark in Settings → Appearance
 * Configurable maximum file upload size (1–200 MB, default 50 MB)
 * Export settings to a JSON file and import on another browser
 * Export all chat sessions to a JSON file and import (merge) on another browser — no duplicates
@@ -269,6 +270,12 @@ conversation so far is kept).
 * Every built-in persona is told to stay consistent with what it said earlier, and to gently correct the user instead of agreeing with something that isn't right (small models otherwise tend to go along with whatever the user says)
 * Settings from earlier versions are migrated automatically: if you had edited the old system prompt, it becomes your Custom persona and stays your default; otherwise you move to Friendly
 
+### Appearance
+
+* **System** (default), **Light** or **Dark**. System follows the device's light/dark setting, also when it changes while the app is open; Light and Dark always apply. The choice is remembered in this browser (`localStorage`, `webllm-theme`)
+* The theme is applied by a small script at the top of `index.html` before the page is drawn, so a light device never sees a dark flash. It also sets the browser's address-bar colour (`theme-color`) and the colour of native controls (`color-scheme`)
+* All colours are tokens at the top of `style.css`; the light theme redefines them under `:root[data-theme="light"]`. Amber is a fill (buttons, badges) in both themes, with darker shades for amber text and outlines on light backgrounds
+
 ### This device
 
 * Shows the WebLLM version, the GPU, and whether it supports 16-bit math
@@ -320,6 +327,7 @@ All settings are saved automatically in `localStorage` as you change them and su
 * **Names**: icon-only buttons, the message box, the model and persona menus and the Settings sliders all have accessible names
 * **Announcements**: status messages (loading, ready, errors) are read out by screen readers; download progress is announced once when it starts, not on every step
 * **Text size**: nothing in the interface is smaller than 12px (the `--fs-meta` and `--fs-small` tokens in `style.css`); a browser test checks every visible text on the chat, Settings and model picker screens
+* **Contrast**: every visible text meets WCAG AA contrast (4.5:1, 3:1 for large text) in both themes; a browser test checks the chat, chat list, search, Settings, the delete dialog and the model picker against the real (blended) background behind each text
 * **Focus ring**: every control shows a visible amber outline when reached with the keyboard, including **Attach** and the Import buttons (their file inputs are visually hidden, not removed)
 * **Confirmations** before anything is deleted: **Clear** (toolbar), **Clear Conversation** (Settings) and the sidebar's trash icon
 
@@ -424,7 +432,7 @@ npm run test:e2e      # the app in Chromium
 ```
 
 * **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js` and `personas.js`
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, and the "new version available" banner
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: light and dark themes and their contrast, the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, and the "new version available" banner
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update every place it appears together: `index.html` (Vue, Vue Router, marked, DOMPurify, highlight.js, PDF.js), `worker.js` (WebLLM and its `WEBLLM_VERSION` constant, Transformers.js), `sw.js`, `package.json`, `tests/support/fixtures.js` and the library list in `tests/e2e/offline.spec.js`. `grep -rn "<old version>" --exclude-dir=node_modules .` finds them all
@@ -488,7 +496,7 @@ Cached data may include AI model weights (potentially several GB), attached docu
 | `personas.js` | Built-in chat personas (prompt, icon, starter prompts), shared by the UI and the worker |
 | `sw.js` | Service worker: offline copies of the app and its libraries |
 | `manifest.webmanifest`, `icons/` | Installable app (PWA) metadata and icons |
-| `style.css` | UI styling (dark amber design system) |
+| `style.css` | UI styling (amber design system, light and dark themes) |
 
 ### Component overview
 

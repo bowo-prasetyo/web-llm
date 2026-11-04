@@ -3252,6 +3252,18 @@ const Settings = {
         </section>
 
         <section class="settings-section">
+          <h2 class="section-label" id="appearance-label">Appearance</h2>
+          <div class="theme-choice" role="radiogroup" aria-labelledby="appearance-label">
+            <label v-for="t in themeOptions" :key="t.id" class="theme-option" :class="{ active: themePref === t.id }">
+              <input type="radio" name="theme" class="sr-only" :value="t.id" :checked="themePref === t.id" @change="setTheme(t.id)" />
+              <span class="theme-icon" aria-hidden="true">{{ t.icon }}</span>
+              <span class="theme-name">{{ t.name }}</span>
+            </label>
+          </div>
+          <p class="section-hint">{{ themeHint }}</p>
+        </section>
+
+        <section class="settings-section">
           <h2 class="section-label">Replies</h2>
 
           <div class="setting-row">
@@ -3506,6 +3518,27 @@ const Settings = {
   `,
 
   setup() {
+    // ── Appearance ───────────────────────────────────────────────────
+    // The theme itself is applied by the script in index.html
+    // (window.appTheme); this is only the choice.
+    const themeOptions = [
+      { id: "system", name: "System", icon: "🖥" },
+      { id: "light",  name: "Light",  icon: "☀️" },
+      { id: "dark",   name: "Dark",   icon: "🌙" },
+    ];
+    const themePref = ref(window.appTheme ? window.appTheme.pref() : "dark");
+    const themeNow = ref(window.appTheme ? window.appTheme.current() : "dark");
+    function setTheme(id) {
+      themePref.value = id;
+      if (window.appTheme) themeNow.value = window.appTheme.set(id);
+    }
+    // Following the device: keep the hint right when the device switches
+    window.matchMedia?.("(prefers-color-scheme: light)")
+      .addEventListener?.("change", () => { if (window.appTheme) themeNow.value = window.appTheme.current(); });
+    const themeHint = Vue.computed(() => themePref.value === "system"
+      ? `Follows this device's setting (${themeNow.value} right now).`
+      : `Always ${themePref.value}, whatever this device is set to.`);
+
     // A token is roughly ¾ of an English word
     function approxWords(tokens) {
       return Math.round(tokens * 0.75 / 10) * 10;
@@ -3566,6 +3599,10 @@ const Settings = {
       newChat: sharedNewChat,
       resetSystemPrompt,
       approxWords,
+      themeOptions,
+      themePref,
+      themeHint,
+      setTheme,
       contextPending,
       confirmResetSettings,
       personas: PERSONAS,

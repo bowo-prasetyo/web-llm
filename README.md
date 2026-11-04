@@ -1,24 +1,37 @@
-# WebLLM Browser Chat
+# Private AI Chat
 
-Pure client-side browser AI chat application (shown to users as **Private AI Chat**) built with:
+**A private AI chat that runs entirely in your browser.** No server, no account, no data leaves your device. Works offline once a model is downloaded. Powered by [WebLLM](https://github.com/mlc-ai/web-llm) and WebGPU.
 
-* Vue 3 CDN
-* Vue Router CDN
-* WebLLM
-* WebGPU
-* Web Worker
-* OPFS (Origin Private File System)
-* Transformers.js
-* PDF.js
-* marked, DOMPurify and highlight.js (reply rendering)
+**[Try it → bowo-prasetyo.github.io/web-llm](https://bowo-prasetyo.github.io/web-llm/)**
 
-The application runs entirely inside the browser without any backend server.
+![A chat in Private AI Chat: the chat list on the left, and Qwen3.5 2B explaining what an LLM is](docs/screenshot.png)
 
-## Live Demo
+## What it does
 
-https://bowo-prasetyo.github.io/web-llm/
+* **Private by design.** The AI model runs on your own GPU. Your messages, chats and documents are stored only in your browser and are never sent anywhere.
+* **No setup.** Open the page, answer two questions, and it picks a model that suits your device. No install, no sign-up, no API key.
+* **Works offline.** After the first visit the app and any model you've downloaded work without an internet connection. You can also install it as an app on desktop and phone.
+* **Personas for different jobs.** Friendly, Precise, Writer, Coder and Brainstorm, or write your own instructions. Pick one per chat.
+* **Ask about your documents.** Attach a PDF, text or Markdown file to a chat and ask questions about it.
+* **Readable answers.** Replies are formatted with headings, lists, tables and highlighted code with a Copy button.
+* **Many models.** 55 open models from 100M to 9B parameters, including Qwen3.5, Llama 3, Phi-4-mini, Gemma and Mistral. The app shows how fast each one writes on your device and suggests a smaller one when it's slow.
+* **Your chats, kept.** Multiple chats with search, saved automatically, with export and import to move them to another browser.
 
-## Features
+<img src="docs/screenshot-phone.png" alt="The first-run model picker on a phone: Everyday chat, Coding or Writing" width="300">
+
+## Getting started
+
+1. Open **https://bowo-prasetyo.github.io/web-llm/** in Chrome or Edge on desktop, or a recent Safari (macOS 14+ / iOS 17+). The browser needs [WebGPU](#requirements).
+2. Choose what you'll mostly use it for (everyday chat, coding or writing) and a size (Fast, Balanced or Smart).
+3. Wait for the one-time download (from about 1.6 GB for the smallest pick to 7.5 GB for the largest), then start chatting. Next time it loads from your device.
+
+## What stays on your device, and what is downloaded
+
+* **Stays on your device:** your messages, chats, attached documents and settings (in the browser's storage), and the AI model itself, which runs on your GPU.
+* **Downloaded once:** the model files (from Hugging Face and GitHub), the app's code libraries (from public CDNs), the fonts (from Google Fonts), and, for large documents, a small search model (~23 MB). Nothing you type is part of these requests.
+* Clearing the site's data in your browser removes everything, including downloaded models.
+
+## All features
 
 * Fully client-side AI chat — no backend, no data leaves the browser
 * Works offline after the first visit, and installable as an app (PWA) on desktop and phone
@@ -182,7 +195,7 @@ On first launch the app asks two questions instead of downloading anything:
 | Coding | Qwen3.5 2B | Qwen3.5 4B | Qwen3.5 9B |
 | Writing | Qwen3.5 2B | Qwen3.5 4B | Qwen3.5 9B |
 
-* Qwen3.5 is the newest model generation WebLLM 0.2.84 supports (also what Kovrune recommends for the browser); coding and writing start at 2B, since smaller models mix up code and lose the thread of longer texts
+* Qwen3.5 is the newest model generation WebLLM 0.2.84 supports; coding and writing start at 2B, since smaller models mix up code and lose the thread of longer texts
 
 * Fast is recommended on phones and devices reporting 4 GB of memory or less, Balanced otherwise; Smart needs a strong GPU
 * Devices where 16-bit GPU math is unsupported or broken get the q4f32 version of each pick automatically
@@ -368,6 +381,16 @@ If the app shows a "WebGPU Not Available" error screen:
 2. On Chrome Android: visit `chrome://flags` and enable **WebGPU** or **Unsafe WebGPU**
 3. Use **Chrome 113+** or **Edge** on desktop for the most reliable WebGPU support
 4. Check your GPU compatibility at [webgpureport.org](https://webgpureport.org)
+
+## Built with
+
+The whole app runs in the browser; there is no backend and no build step.
+
+* [WebLLM](https://github.com/mlc-ai/web-llm) 0.2.84 on WebGPU, in a Web Worker, for the language models
+* [Vue 3](https://vuejs.org) and Vue Router, loaded from a CDN
+* [Transformers.js](https://github.com/xenova/transformers.js) (all-MiniLM-L6-v2) to search large attached documents, and [PDF.js](https://mozilla.github.io/pdf.js/) to read PDFs
+* [marked](https://marked.js.org), [DOMPurify](https://github.com/cure53/DOMPurify) and [highlight.js](https://highlightjs.org) to render replies safely
+* IndexedDB for chats and attachments, and a service worker for offline use
 
 ## Run Locally
 

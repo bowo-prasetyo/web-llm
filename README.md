@@ -101,7 +101,9 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 **New** marks models added after the original list; all of them are
 supported by the WebLLM version the app uses (0.2.84).
 
-### Ultra-micro (100–400M)
+### Tiny (100–400M): for testing; very limited answers
+
+These models can barely hold a conversation: they repeat themselves and get most facts wrong. They're kept for testing and very weak devices, shown last in the model menu under this label, and never suggested by the model picker.
 
 | Model | Approx Size |
 |---|---|

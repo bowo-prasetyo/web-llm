@@ -30,6 +30,15 @@ test.describe("model list", () => {
     check(groupOf("Phi-4-mini-instruct-q4f32_1-MLC") === "Upper-mid (3.8B)", "Phi-4-mini is upper-mid");
     check(groupOf("Qwen3.5-9B-q4f16_1-MLC") === "Large (7–9B)", "Qwen3.5 9B is large");
     check(!("Other" in groups), "nothing ends up in Other");
+
+    // The tiniest models are kept, but last and labelled as very limited
+    const labels = Object.keys(groups);
+    const tiny = "Tiny (for testing; very limited answers)";
+    check(labels.at(-1) === tiny, "the Tiny group comes last");
+    expect(groups[tiny]).toEqual(expect.arrayContaining([
+      "SmolLM2-135M-Instruct-q0f32-MLC", "SmolLM2-360M-Instruct-q4f32_1-MLC",
+    ]));
+    check(groups[tiny].every(id => /-(135|360)M-/.test(id)), "only the 135M–360M models are Tiny");
   });
 
   test("a newer model gets defaults for its size", async ({ page }) => {

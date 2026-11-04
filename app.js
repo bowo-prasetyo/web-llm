@@ -1156,16 +1156,21 @@ const Home = {
     let safeModeActive = false;
 
     // Group the flat models list into labelled tiers for the <optgroup> select.
-    // Order and labels match the AVAILABLE_MODELS tiers in worker.js.
+    // Smallest to largest, as in AVAILABLE_MODELS in worker.js, except the
+    // Tiny group, which comes last.
     // Tests run on the lower-cased ID, in order; the first match wins.
     const MODEL_GROUPS_DEF = [
-      { label: "Ultra-micro (100–400M)", test: m => m.includes("135m") || m.includes("360m") },
       { label: "Micro (0.5–0.8B)",       test: m => m.includes("0.5b") || m.includes("0.6b") || m.includes("0.8b") },
       { label: "Lightweight (1–1.7B)",   test: m => m.includes("1.1b") || (m.includes("1b") && !m.includes("1.5b")) || m.includes("1.7b") || m.includes("1_6b") || m.includes("1.6b") },
       { label: "Small (1.5B)",           test: m => m.includes("1.5b") },
       { label: "Mid (2–4B)",             test: m => m.includes("2b") || m.includes("3b") || m.includes("4b") },
       { label: "Upper-mid (3.8B)",       test: m => m.includes("mini") },
       { label: "Large (7–9B)",           test: m => m.includes("7b") || m.includes("8b") || m.includes("9b") },
+      // Last, and labelled as such: 135M–360M models can barely hold a
+      // conversation (they repeat themselves and get most facts wrong), so
+      // nobody should judge the app by them. Kept for testing and very weak
+      // devices; the picker never suggests them.
+      { label: "Tiny (for testing; very limited answers)", test: m => m.includes("135m") || m.includes("360m") },
     ];
 
     const { computed } = Vue;

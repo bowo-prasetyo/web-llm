@@ -1,0 +1,49 @@
+name: Report a problem
+description: Something doesn't work, a model gives wrong or garbled replies, or the app won't load.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The **Report a problem** button in **Settings → This device** fills in the device details below.
+        Please don't paste private chats or documents; describe the problem instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead. Copy any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen again
+      placeholder: |
+        1. Pick Qwen3.5 2B
+        2. Ask "…"
+        3. …
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings → This device
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and system
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU
+  - type: input
+    id: f16
+    attributes:
+      label: 16-bit GPU support
+  - type: input
+    id: model
+    attributes:
+      label: Model
+  - type: input
+    id: webllm
+    attributes:
+      label: WebLLM version

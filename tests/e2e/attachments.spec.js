@@ -138,7 +138,7 @@ test("exported chats carry their documents", async ({ page }, testInfo) => {
   await expect.poll(async () => (await readChats(page)).length).toBe(0); // not saved back as a document-only chat
 
   await page.click("button[title=Settings]");
-  await page.locator('label:has-text("Import Chats") input[type=file]').setInputFiles(file);
+  await page.locator("input.import-chats-input").setInputFiles(file);
   await expect.poll(async () => (await readAttachments(page)).map(a => a.text)).toEqual([NOTE]);
 });
 

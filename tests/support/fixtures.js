@@ -2,8 +2,8 @@
 //
 // Every test gets a browser context where:
 // - the pinned CDN libraries (Vue, Vue Router, marked, DOMPurify,
-//   highlight.js) are served from node_modules, PDF.js and Google Fonts are
-//   stubbed, and WebLLM / Transformers.js are replaced by mocks, so tests
+//   highlight.js) are served from node_modules, PDF.js is stubbed, and
+//   WebLLM / Transformers.js are replaced by mocks, so tests
 //   need no network, GPU or model downloads;
 // - messages the page sends to its worker are recorded in window.__sent,
 //   and mock-engine reports in window.__calls;
@@ -50,8 +50,6 @@ async function routeLibraries(context) {
   }
   await context.route("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/**", r =>
     r.fulfill({ body: PDF_STUB, contentType: JS, headers: CORS }));
-  await context.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, r =>
-    r.fulfill({ body: "", contentType: "text/css", headers: CORS }));
 }
 
 export const test = base.extend({
@@ -192,7 +190,7 @@ export function readAttachments(page, chatId = null) {
 
 // Attach a text file to the chat on screen
 export function attachText(page, name, text) {
-  return page.setInputFiles(".upload-btn input[type=file]", {
+  return page.setInputFiles("input.attach-input", {
     name, mimeType: "text/plain", buffer: Buffer.from(text),
   });
 }

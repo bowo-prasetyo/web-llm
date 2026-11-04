@@ -26,6 +26,7 @@ const SHELL_FILES = [
   "./picker.js",
   "./chatstore.js",
   "./attachments.js",
+  "./pace.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

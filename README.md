@@ -57,6 +57,7 @@ https://bowo-prasetyo.github.io/web-llm/
 * Automatic model unload after inactivity to free GPU memory
 * Conversation history memory with configurable context window
 * Settings page with the everyday reply settings up front and the advanced sampling settings folded away; changes save automatically
+* Shows how fast the model writes on this device (for example "about 1 word/sec"), and suggests a smaller model when it is slow
 * Six chat personas (Friendly, Precise, Writer, Coder, Brainstorm, Custom), chosen per chat and switchable mid-conversation
 * Welcome screen for new chats with persona cards and starter prompts
 * Responsive UI: on wide screens (1100px and up) the chat list sits beside the chat and can be hidden; narrower screens get a slide-in drawer; on phones Enter starts a new line and the Send button sends, and the message box grows as you type
@@ -395,7 +396,7 @@ npm run test:unit     # pure modules only, no browser
 npm run test:e2e      # the app in Chromium
 ```
 
-* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress) and `attachments.js`
+* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js` and `pace.js`
 * **Browser tests** (`tests/e2e/`) run the real app in Chromium: the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), the model picker, and offline mode
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
@@ -404,7 +405,7 @@ npm run test:e2e      # the app in Chromium
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `style.css`) and the `icons/` folder
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `pace.js`, `style.css`) and the `icons/` folder
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -454,6 +455,7 @@ Cached data may include AI model weights (potentially several GB), attached docu
 | `chatstore.js` | Chat storage in IndexedDB, migration from localStorage, and the localStorage fallback |
 | `picker.js` | Model picker catalog, device-based recommendation, readable model names and load-progress parsing |
 | `quality.js` | Junk-output detection for the model check and the collapsed-reply guard |
+| `pace.js` | Progress-based reply time limits, writing-speed measurement, and the smaller model suggested when one is slow |
 | `context.js` | Fits the conversation into the model's context window |
 | `markdown.js` | Reply rendering (Markdown, code blocks, `<think>` handling), shared by the UI and the worker |
 | `personas.js` | Built-in chat personas (prompt, icon, starter prompts), shared by the UI and the worker |
@@ -473,7 +475,7 @@ worker.js
 ├── initialize()        — device profile detection, model loading, model check
 ├── generate()          — attached documents, context fitting, streamed reply
 ├── continueReply()     — finishes a cut-off reply when the user presses Continue
-├── streamReply()       — streaming with Stop, time limit, junk and repeat guards
+├── streamReply()       — streaming with Stop, stall limit, junk and repeat guards, speed
 ├── setAttachments()    — the chat's documents; large ones chunked and embedded in the background
 └── onmessage handler   — message routing (init, set-config, generate, set-attachments, …)
 ```
@@ -503,14 +505,14 @@ Streaming Response → UI
 | GPU crash recovery | Detects lost-device errors and restarts on the lightest model (asking before downloading it); a second crash stops and shows the troubleshooting screen instead of looping |
 | WebGPU unavailable | Catches incompatible GPU errors, shows friendly troubleshooting screen with retry |
 | Tokenizer crash recovery | Detects WASM `Tokenizer*` errors, resets engine for clean next request |
-| Generation timeout | Hard time limit per generation; delivers partial result rather than discarding, or explains why there is no reply |
+| Generation timeout | A reply is cut off only when it stops making progress: no first words within 3 minutes, or no new text for 1 minute (plus a 20-minute safety cap). A slow but steady reply always finishes. Keeps the partial reply, or explains why there is no reply |
 | Model check | After a model's first load on a device, a short reply is checked for junk; q4f16 models that fail (or need 16-bit support the GPU lacks) get a q4f32 replacement offer |
 | Collapsed-reply guard | A reply that turns into a few repeated words is stopped, replaced by an explanation with Retry, and left out of the model's memory |
 | Context fitting | Before each reply, the oldest turns and then document context are dropped so the prompt fits the context window |
-| Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; the generation time limit ends the stream |
+| Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; a reply stuck for a minute is interrupted in the engine |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |
 | Cancel download | User can abort a model fetch; the previous model and its settings come back, and the cached-model list is cleaned up so confirmation re-appears |
-| Cut-off replies | A reply that hits Max Tokens or the time limit ends cleanly with a note and a **Continue** button; nothing is stitched together automatically |
+| Cut-off replies | A reply that hits Max Tokens or stops making progress ends cleanly with a note and a **Continue** button; nothing is stitched together automatically |
 | Repeated-sentence guard | A reply that starts repeating the same sentence is cut back to just before the repeats, with a note |
 | Continue seam cleanup | Text the model repeats from the end of the reply is removed, and a space is added where the two parts meet |
 | Model swap guard | Waits for active generation to complete before unloading the engine |

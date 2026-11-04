@@ -13,6 +13,10 @@ import {
   pickModelId,
   recommendTier,
   friendlyModelName,
+  modelPrecision,
+  formatSize,
+  describeLoadProgress,
+  estimateRemaining,
 } from "./picker.js";
 
 const {
@@ -177,9 +181,6 @@ function answerConfirm(ok) {
   if (resolve) resolve(ok);
 }
 
-function formatMb(mb) {
-  return mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB";
-}
 
 const ConfirmDialog = {
   template: `
@@ -345,15 +346,49 @@ function f16Problem() {
     .some(([id, h]) => isF16Model(id) && h && h.ok === false);
 }
 
-// Text for a model in the pickers, with a warning where it won't work well.
+// ── Downloaded models ─────────────────────────────────────────────────────
+// localStorage holds the list (the source of truth, also edited by the
+// download cancel); sharedCachedTick changes whenever the app edits it, so
+// labels that show "✓ downloaded" update.
+const CACHED_KEY = "webllm-cached-models";
+const sharedCachedTick = vRef(0);
+function getCachedModels() {
+  try { return JSON.parse(localStorage.getItem(CACHED_KEY) || "[]"); }
+  catch { return []; }
+}
+function setCachedModels(list) {
+  try { localStorage.setItem(CACHED_KEY, JSON.stringify(list)); } catch {}
+  sharedCachedTick.value++;
+}
+function isModelCached(id) {
+  return getCachedModels().includes(id);
+}
+
+// A model as people read it: "Qwen3.5 2B · 16-bit". The full ID is still
+// the option's value and is shown in Settings for reference.
+function modelShortName(id) {
+  const precision = modelPrecision(id);
+  return friendlyModelName(id) + (precision ? " · " + precision : "");
+}
+
+// Text for a model in the menus: name, precision, download size, ✓ when
+// it's already on this device, and a warning where it won't work well.
 function modelOptionLabel(id) {
+  void sharedCachedTick.value; // re-render when the downloaded list changes
+  const size = formatSize(sharedModelSizes.value[id]);
+  let label = modelShortName(id) + (size ? " · " + size : "");
+  if (isModelCached(id)) label += " ✓";
   const h = sharedModelHealth.value[id];
   if (h && h.ok === false) {
-    return `${id}  ⚠ ${h.reason === "no-f16" ? "needs 16-bit GPU support" : "garbled on this GPU"}`;
+    return `${label}  ⚠ ${h.reason === "no-f16" ? "needs 16-bit GPU support" : "garbled on this GPU"}`;
   }
-  if (isF16Model(id) && f16Problem()) return `${id}  ⚠ 16-bit, may not work here`;
-  return id;
+  if (isF16Model(id) && f16Problem()) return `${label}  ⚠ 16-bit, may not work here`;
+  return label;
 }
+
+// "model|contextWindow" of the engine loaded (or loading) in the worker,
+// "" when none. Settings uses it to tell when a change needs a reload.
+const sharedLoadedKey = vRef("");
 // These are populated once Home mounts; Settings reads them directly.
 let sharedApplySettings   = () => {};
 let sharedResetSettings   = () => {};
@@ -495,7 +530,7 @@ const Home = {
             {{ healthModal.reason === "degenerate" ? "This model may not work on your GPU" : "This model doesn't work on your GPU" }}
           </h2>
           <p class="modal-body">
-            <strong>{{ healthModal.model }}</strong>
+            <strong>{{ modelShortName(healthModal.model) }}</strong> <span class="model-id">({{ healthModal.model }})</span>
             <template v-if="healthModal.reason === 'no-f16'"> needs 16-bit GPU support, which this browser doesn't offer.</template>
             <template v-else-if="healthModal.reason === 'degenerate'"> just gave a reply that collapsed into repeated words.</template>
             <template v-else> gave garbled text in a quick check<span v-if="healthModal.sample">: <em>“{{ healthModal.sample }}…”</em></span>.</template>
@@ -503,12 +538,9 @@ const Home = {
             This usually means the GPU does 16-bit math incorrectly. Models marked <strong>q4f32</strong> avoid it.
           </p>
           <p v-if="healthModal.suggestion" class="modal-body health-suggestion">
-            Suggested: <strong>{{ healthModal.suggestion }}</strong>
-            <span v-if="modelSizes[healthModal.suggestion]">
-              (~{{ modelSizes[healthModal.suggestion] >= 1024
-                ? (modelSizes[healthModal.suggestion] / 1024).toFixed(1) + " GB"
-                : modelSizes[healthModal.suggestion] + " MB" }})
-            </span>
+            Suggested: <strong>{{ modelShortName(healthModal.suggestion) }}</strong>
+            <span v-if="modelSizes[healthModal.suggestion]">(~{{ formatSize(modelSizes[healthModal.suggestion]) }})</span>
+            <br><span class="model-id">{{ healthModal.suggestion }}</span>
           </p>
           <div class="modal-actions">
             <button class="action-btn secondary" @click="keepModelAnyway">Keep this model</button>
@@ -574,7 +606,7 @@ const Home = {
                     <span v-if="o.current" class="picker-badge muted">In use</span>
                   </span>
                   <span class="picker-model">{{ o.name }}</span>
-                  <span class="picker-meta">{{ o.cached ? "Already downloaded" : (online ? "~" + formatSize(o.sizeMb) + " download" : "Needs internet to download (~" + formatSize(o.sizeMb) + ")") }}</span>
+                  <span class="picker-meta">{{ o.cached ? "Already downloaded" : (online ? "~" + (formatSize(o.sizeMb) || "?") + " download" : "Needs internet to download (~" + (formatSize(o.sizeMb) || "?") + ")") }}</span>
                   <span class="picker-desc">{{ o.desc }}</span>
                 </span>
               </button>
@@ -720,7 +752,7 @@ const Home = {
                 <span class="session-date">{{ formatDate(s.ts) }}</span>
               </span>
               <span class="session-preview">{{ s.preview }}</span>
-              <span class="session-model">{{ s.model.split('-').slice(0,2).join('-') }}</span>
+              <span class="session-model">{{ friendlyModelName(s.model) }}</span>
             </button>
             <button type="button" class="session-delete" @click="deleteSession(s.id)" title="Delete chat" :aria-label="'Delete chat: ' + s.title">
               <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
@@ -774,7 +806,36 @@ const Home = {
         <button type="button" class="update-dismiss" @click="updateDismissed = true" title="Later" aria-label="Dismiss">×</button>
       </div>
 
-      <div class="messages" ref="messagesContainer" @click="onMessagesClick" role="log" aria-label="Conversation" :aria-busy="loading ? 'true' : 'false'">
+      <!-- Model download / loading progress -->
+      <div v-if="modelLoading && loadInfo" class="load-panel" :class="'phase-' + loadInfo.phase">
+        <div class="load-head">
+          <span class="load-title">{{ loadTitle }}</span>
+          <button
+            v-if="isDownloading && loadInfo.phase === 'download'"
+            type="button"
+            class="load-cancel"
+            @click="cancelDownload"
+          >Cancel</button>
+        </div>
+        <div
+          class="load-track"
+          role="progressbar"
+          :aria-label="loadTitle"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="loadInfo.percent !== null ? loadInfo.percent : null"
+          :aria-valuetext="loadDetail || null"
+          :class="{ indeterminate: loadInfo.percent === null }"
+        >
+          <div class="load-fill" :style="loadInfo.percent !== null ? { width: loadInfo.percent + '%' } : null"></div>
+        </div>
+        <div class="load-detail">{{ loadDetail }}</div>
+        <p v-if="loadInfo.phase === 'download'" class="load-note">
+          Downloads once, then loads from this device. Keep this tab open until it finishes.
+        </p>
+      </div>
+
+      <div class="messages" ref="messagesContainer" @click="onMessagesClick" @scroll.passive="onMessagesScroll" role="log" aria-label="Conversation" :aria-busy="loading ? 'true' : 'false'">
         <!-- Welcome screen for an empty chat: pick a persona, try a starter -->
         <div v-if="messages.length === 0" class="welcome">
           <h2 class="welcome-title">What would you like to chat about?</h2>
@@ -899,6 +960,15 @@ const Home = {
       </div>
 
       <div class="footer-container">
+        <button
+          v-if="showJumpToLatest && messages.length"
+          type="button"
+          class="jump-latest"
+          @click="jumpToLatest"
+        >
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          {{ loading ? "Follow the reply" : "Jump to latest" }}
+        </button>
         <!-- Documents attached to this chat -->
         <div v-if="attachments.length" class="attachments" aria-label="Documents attached to this chat">
           <div
@@ -962,16 +1032,6 @@ const Home = {
             <input type="file" class="sr-only" accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" />
           </label>
 
-          <!-- Cancel download button — shown only while model is downloading -->
-          <button
-            v-if="isDownloading"
-            class="stop-btn cancel-download-btn"
-            @click="cancelDownload"
-            title="Cancel download"
-          >
-            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Cancel Download
-          </button>
         </div>
 
         <div class="footer">
@@ -979,8 +1039,12 @@ const Home = {
             ref="promptInput"
             v-model="prompt"
             aria-label="Message"
-            placeholder="Ask something… (Enter to send, Shift+Enter for newline)"
-            @keydown.enter.exact.prevent="send"
+            rows="1"
+            :placeholder="promptPlaceholder"
+            :enterkeyhint="isTouch ? 'enter' : 'send'"
+            @keydown.enter.exact="onPromptEnter"
+            @keydown.ctrl.enter="onPromptShortcut"
+            @keydown.meta.enter="onPromptShortcut"
           ></textarea>
           <!-- Stop generation button — replaces Send while streaming -->
           <button
@@ -1034,7 +1098,7 @@ const Home = {
     // "model|contextWindowSize" the worker's engine was last loaded with.
     // Reset whenever the worker is replaced. Lets Apply skip a full reload
     // when only sampling parameters or the system prompt changed.
-    let loadedEngineKey = "";
+    // The engine loaded in the worker: sharedLoadedKey ("model|context").
     // Set after a GPU crash forced the fallback model on this page load.
     // A second crash then stops instead of restarting forever.
     let safeModeActive = false;
@@ -1114,40 +1178,142 @@ const Home = {
     const attachments = ref([]);  // [{ id, name, chars, status, current, total, error }]
     let attachmentRecords = [];
     const legacyDocs = ref([]);   // file names in the old shared index
-    const CACHED_KEY = "webllm-cached-models";
     // Tracks the model that was cancelled so applySettings won't re-trigger it
     const postCancelModel = ref("");
+    // Model and settings from before the user switched models, so a
+    // cancelled download can go back to them.
+    let settingsBeforeSwitch = null;
 
-    function getCachedModels() {
-      try {
-        return JSON.parse(localStorage.getItem(CACHED_KEY) || "[]");
-      } catch { return []; }
+    // ── Model loading progress ───────────────────────────────────────────
+    // loadInfo describes the load in progress for the progress panel:
+    // { phase: "download" | "cache" | "gpu" | "other", percent, doneMb, eta }
+    const loadInfo = ref(null);
+    let loadPhaseStart = null; // { phase, pct, time } for the time estimate
+
+    function updateLoadProgress(text, pct) {
+      const info = describeLoadProgress(text, pct);
+      const now = Date.now();
+      if (!loadPhaseStart || loadPhaseStart.phase !== info.phase) {
+        loadPhaseStart = { phase: info.phase, pct: info.percent || 0, time: now };
+      }
+      const eta = info.phase === "download" && info.percent !== null
+        ? estimateRemaining({ startPct: loadPhaseStart.pct, startTime: loadPhaseStart.time, pct: info.percent, now })
+        : null;
+      loadInfo.value = { ...info, eta };
+      status.value = loadTitle.value + (info.percent !== null ? ` · ${info.percent}%` : "");
     }
+
+    Vue.watch(modelLoading, loadingNow => {
+      if (!loadingNow) { loadInfo.value = null; loadPhaseStart = null; }
+    });
+
+    const loadTitle = Vue.computed(() => {
+      const name = modelShortName(settings.value.model);
+      switch (loadInfo.value?.phase) {
+        case "download": return `Downloading ${name}`;
+        case "cache":    return `Loading ${name} from this device`;
+        case "gpu":      return `Preparing ${name} for your GPU`;
+        default:         return `Loading ${name}`;
+      }
+    });
+
+    // "34% · 760 MB of ~2.2 GB · about 2 min left"
+    const loadDetail = Vue.computed(() => {
+      const info = loadInfo.value;
+      if (!info) return "";
+      const parts = [];
+      if (info.percent !== null) parts.push(info.percent + "%");
+      if (info.phase === "download" && info.doneMb !== null) {
+        const total = modelSizes.value[settings.value.model] || 0;
+        parts.push(total && info.doneMb <= total
+          ? `${formatSize(info.doneMb)} of ~${formatSize(total)}`
+          : `${formatSize(info.doneMb)} downloaded`);
+      }
+      if (info.eta) parts.push(info.eta);
+      return parts.join(" · ");
+    });
 
     function markModelCached(modelId) {
-      try {
-        const cached = getCachedModels();
-        if (!cached.includes(modelId)) {
-          cached.push(modelId);
-          localStorage.setItem(CACHED_KEY, JSON.stringify(cached));
-        }
-      } catch {}
+      const cached = getCachedModels();
+      if (!cached.includes(modelId)) setCachedModels([...cached, modelId]);
     }
 
-    function isModelCached(modelId) {
-      return getCachedModels().includes(modelId);
-    }
     const settings = sharedSettings;
     // Always use the module-level worker via getWorker() — never snapshot it
     // into a local variable, as fatal restarts replace the module-level ref.
 
-    async function scrollBottom() {
-      await nextTick();
+    // ── Scrolling ────────────────────────────────────────────────────────
+    // New text keeps the chat scrolled to the bottom only while the reader
+    // is there. Scrolling up (to reread something while a reply streams)
+    // stops that, and a "Jump to latest" button appears instead. Sending a
+    // message, opening a chat, Regenerate and Continue always go to the
+    // bottom.
+    const NEAR_BOTTOM_PX = 80;
+    const followLatest = ref(true);
+    const showJumpToLatest = ref(false);
 
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop =
-          messagesContainer.value.scrollHeight;
-      }
+    function distanceFromBottom(el) {
+      return el.scrollHeight - el.scrollTop - el.clientHeight;
+    }
+
+    // Only scrolling up stops following. lastScrollTop is recorded both
+    // here and whenever the app scrolls itself, so a scroll event that
+    // arrives late (the browser delivers them on the next frame, later
+    // under load) is never compared with a stale position, and content
+    // growing or our own scrolling never counts as the reader scrolling up.
+    let lastScrollTop = 0;
+    function onMessagesScroll() {
+      const el = messagesContainer.value;
+      if (!el) return;
+      const atBottom = distanceFromBottom(el) <= NEAR_BOTTOM_PX;
+      const scrolledUp = el.scrollTop < lastScrollTop - 2;
+      lastScrollTop = el.scrollTop;
+      if (atBottom) followLatest.value = true;
+      else if (scrolledUp) followLatest.value = false;
+      showJumpToLatest.value = !followLatest.value && !atBottom;
+    }
+
+    function setScrollToBottom(el) {
+      el.scrollTop = el.scrollHeight;
+      lastScrollTop = el.scrollTop;
+      showJumpToLatest.value = false;
+    }
+
+    // Follow (or offer the button) after any change to the chat's content:
+    // streamed text, a finished reply growing as code is highlighted and
+    // its buttons appear, a chat being opened. Coalesced to once a frame.
+    let stickFrame = 0;
+    function stickToBottom() {
+      if (stickFrame) return;
+      stickFrame = requestAnimationFrame(() => {
+        stickFrame = 0;
+        const el = messagesContainer.value;
+        if (!el) return;
+        if (followLatest.value) setScrollToBottom(el);
+        else showJumpToLatest.value = distanceFromBottom(el) > NEAR_BOTTOM_PX;
+      });
+    }
+    onMounted(() => {
+      const el = messagesContainer.value;
+      if (!el || typeof MutationObserver === "undefined") return;
+      new MutationObserver(stickToBottom).observe(el, { childList: true, subtree: true, characterData: true });
+    });
+
+    // force: go to the bottom and follow again (sending, opening a chat,
+    // Regenerate, Continue, Jump to latest). Otherwise only while following.
+    async function scrollBottom({ force = false } = {}) {
+      if (force) followLatest.value = true;
+      await nextTick();
+      const el = messagesContainer.value;
+      if (!el) return;
+      if (followLatest.value) setScrollToBottom(el);
+      else showJumpToLatest.value = distanceFromBottom(el) > NEAR_BOTTOM_PX;
+    }
+
+    function jumpToLatest() {
+      scrollBottom({ force: true });
+      const input = promptInput.value;
+      if (input && !isTouch.value) input.focus({ preventScroll: true });
     }
 
     function engineKey() {
@@ -1183,6 +1349,45 @@ const Home = {
         status.value = `${persona.icon} ${persona.name} persona: applies from your next message`;
       }
     }
+
+    // ── Message box ──────────────────────────────────────────────────────
+    // With a keyboard, Enter sends and Shift+Enter starts a new line. On
+    // touch screens Enter starts a new line (as in most phone chat apps)
+    // and the Send button sends; the placeholder doesn't mention keys
+    // there. Ctrl/Cmd+Enter sends everywhere. Enter that confirms an
+    // input-method composition (Chinese, Japanese, Korean…) never sends.
+    const touchQuery = window.matchMedia
+      ? window.matchMedia("(hover: none) and (pointer: coarse)")
+      : null;
+    const isTouch = ref(!!touchQuery?.matches);
+    touchQuery?.addEventListener?.("change", e => { isTouch.value = e.matches; });
+    const promptPlaceholder = Vue.computed(() => isTouch.value
+      ? "Ask something…"
+      : "Ask something… (Enter to send, Shift+Enter for a new line)");
+
+    function isComposing(e) {
+      return e.isComposing || e.keyCode === 229;
+    }
+    function onPromptEnter(e) {
+      if (isComposing(e) || isTouch.value) return; // new line
+      e.preventDefault();
+      send();
+    }
+    function onPromptShortcut(e) {
+      if (isComposing(e)) return;
+      e.preventDefault();
+      send();
+    }
+
+    // The message box grows with its text, up to its max-height in CSS.
+    function autoGrow() {
+      const el = promptInput.value;
+      if (!el) return;
+      el.style.height = "auto";
+      const max = parseFloat(getComputedStyle(el).maxHeight) || 160;
+      el.style.height = Math.min(el.scrollHeight + 2, max) + "px";
+    }
+    Vue.watch(prompt, () => nextTick(autoGrow));
 
     async function useStarter(text) {
       prompt.value = text;
@@ -1292,6 +1497,7 @@ const Home = {
       last.cutOff = null;
       last.notice = null;
       loading.value = true;
+      scrollBottom({ force: true });
       getWorker().postMessage({
         type: "continue",
         previous,
@@ -1309,6 +1515,7 @@ const Home = {
 
       list.splice(list.length - 1, 1);
       saveConversation();
+      scrollBottom({ force: true });
 
       // Rewind the model's memory to just before the question; generate
       // then adds the question again.
@@ -1331,7 +1538,7 @@ const Home = {
         content,
       });
 
-      scrollBottom();
+      scrollBottom({ force: role === "user" });
     }
 
     async function send() {
@@ -1508,7 +1715,7 @@ const Home = {
           // model only when the user asks for it.
           worker = replaceWorker(onWorkerMessage);
           getWorker().onerror = onWorkerError;
-          loadedEngineKey = "";
+          sharedLoadedKey.value = "";
           status.value = "GPU crashed again in safe mode. Stopped to avoid a crash loop.";
           webgpuError.value = true;
           return;
@@ -1526,7 +1733,7 @@ const Home = {
         // Replace the module-level worker so getWorker() stays consistent
         worker = replaceWorker(onWorkerMessage);
         getWorker().onerror = onWorkerError;
-        loadedEngineKey = "";
+        sharedLoadedKey.value = "";
 
         getWorker().postMessage({
           type: "init"
@@ -1537,8 +1744,8 @@ const Home = {
 
       switch (data.type) {
         case "downloading":
-          status.value = data.text;
           isDownloading.value = true;
+          updateLoadProgress(data.text, data.progress);
           break;
 
         case "download-cancelled":
@@ -1660,6 +1867,8 @@ const Home = {
           loading.value = false;
 
           saveConversation();
+          // The finished reply grows (highlighted code, Copy / Regenerate)
+          scrollBottom();
         
           break;
 
@@ -1718,7 +1927,7 @@ const Home = {
           break;
                     
         case "webgpu-error":
-          loadedEngineKey = "";
+          sharedLoadedKey.value = "";
           webgpuError.value = true;
           modelLoading.value = false;
           loading.value = false;
@@ -1739,7 +1948,7 @@ const Home = {
           // A failed model load also reports here; don't leave the UI locked.
           modelLoading.value = false;
           isDownloading.value = false;
-          loadedEngineKey = "";
+          sharedLoadedKey.value = "";
           saveConversation();
           break;
         }
@@ -1820,7 +2029,7 @@ const Home = {
           // The engine didn't load at all
           modelLoading.value = false;
           isDownloading.value = false;
-          loadedEngineKey = "";
+          sharedLoadedKey.value = "";
           status.value = "This model needs 16-bit GPU support, which this browser doesn't offer";
         }
         offerReplacement(data.model, data.reason, data.sample);
@@ -1935,11 +2144,6 @@ const Home = {
     const selectedPick = computed(() =>
       pickerOptions.value.find(o => o.id === picker.value.tier) || null);
 
-    function formatSize(mb) {
-      if (!mb) return "?";
-      return mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB";
-    }
-
     function openPicker({ firstRun = false } = {}) {
       const persona = settings.value.defaultPersona;
       const use = (USES.find(u => u.persona === persona) || USES[0]).id;
@@ -2026,8 +2230,8 @@ const Home = {
           const ok = await askConfirm({
             icon: "⬇",
             title: "Download Model?",
-            subject: model,
-            message: `This model will be downloaded and cached in your browser (~${formatMb(sizeMb)}). After the first download it loads instantly from cache.`,
+            subject: modelShortName(model),
+            message: `About ${formatSize(sizeMb)} will be downloaded and kept in your browser. After that it loads from this device, also offline. You can cancel while it downloads.`,
             confirmText: "Download & Load",
           });
           // The choice changed meanwhile (another model was picked): leave it.
@@ -2048,6 +2252,10 @@ const Home = {
       // saved settings win, so customised values survive a reload.
       // The conversation is preserved either way.
       if (isNewModel) {
+        // Kept so that cancelling the download goes back to this model
+        settingsBeforeSwitch = isUserChange && isModelCached(lastAppliedModel.value)
+          ? { ...settings.value, model: lastAppliedModel.value }
+          : null;
         if (isUserChange || !hasSavedSettings) {
           const defaults = getModelDefaults(settings.value.model);
           // Merge defaults key-by-key to preserve Vue reactivity on the shared ref
@@ -2060,7 +2268,7 @@ const Home = {
 
       // Same model and context window already loaded: only sampling
       // parameters or the system prompt changed, which apply live.
-      if (loadedEngineKey && loadedEngineKey === engineKey()) {
+      if (sharedLoadedKey.value && sharedLoadedKey.value === engineKey()) {
         getWorker().postMessage({
           type: "update-config",
           config: liveConfig(),
@@ -2070,10 +2278,12 @@ const Home = {
       }
 
       modelLoading.value = true;
-      loadedEngineKey = engineKey();
-    
-      status.value =
-        `Loading ${settings.value.model}...`;
+      sharedLoadedKey.value = engineKey();
+      // Until the first progress report: an indeterminate bar
+      loadInfo.value = { phase: "other", percent: null, doneMb: null, eta: null };
+      loadPhaseStart = null;
+
+      status.value = `Loading ${modelShortName(settings.value.model)}…`;
     
       getWorker().postMessage({
         type: "set-config",
@@ -2096,23 +2306,32 @@ const Home = {
       const cancelledModel = settings.value.model;
 
       // Remove from cache list so confirmation shows again next time
-      try {
-        const cached = getCachedModels().filter(m => m !== cancelledModel);
-        localStorage.setItem(CACHED_KEY, JSON.stringify(cached));
-      } catch {}
+      setCachedModels(getCachedModels().filter(m => m !== cancelledModel));
 
       // Remember the cancelled model so applySettings won't re-trigger it
       postCancelModel.value = cancelledModel;
 
-      // Revert the select to the last successfully loaded model (or nothing)
-      settings.value.model = lastAppliedModel.value;
+      // Go back to the model (and settings) from before the switch; the new
+      // worker loads it again. With nothing before it (first launch), the
+      // welcome screen offers the picker.
+      const back = settingsBeforeSwitch;
+      settingsBeforeSwitch = null;
+      if (back && back.model) {
+        Object.assign(settings.value, back);
+        lastAppliedModel.value = back.model;
+      } else {
+        settings.value.model = "";
+        lastAppliedModel.value = "";
+      }
+      saveSettings();
+      loadInfo.value = null;
 
       // Terminate and replace the worker — the new worker sends "models"
       // on its own startup, which will trigger applySettings; we suppress
       // it for the cancelled model via postCancelModel above.
       worker = replaceWorker(onWorkerMessage);
       getWorker().onerror = onWorkerError;
-      loadedEngineKey = "";
+      sharedLoadedKey.value = "";
       status.value = "Download cancelled";
 
       // Send init so the worker reports its models list and stays ready
@@ -2427,7 +2646,7 @@ const Home = {
       const toRestore = unanswered ? parsed.slice(0, -1) : parsed;
 
       messages.value = toRestore;
-      scrollBottom();
+      scrollBottom({ force: true });
       getWorker().postMessage({ type: "restore-history", history: historyForWorker(toRestore) });
 
       if (unanswered) {
@@ -2846,6 +3065,18 @@ const Home = {
       sidebarEl,
       menuBtn,
       announcedStatus,
+      loadInfo,
+      loadTitle,
+      loadDetail,
+      onMessagesScroll,
+      showJumpToLatest,
+      jumpToLatest,
+      isTouch,
+      promptPlaceholder,
+      onPromptEnter,
+      onPromptShortcut,
+      modelShortName,
+      friendlyModelName,
       newChat,
       loadSession,
       deleteSession,
@@ -2878,13 +3109,14 @@ const Settings = {
           Back
         </button>
         <h1 class="settings-title">Settings</h1>
+        <span class="settings-saved">Changes are saved automatically</span>
       </div>
 
       <div class="settings-body">
 
         <section class="settings-section">
           <h2 class="section-label">Model</h2>
-          <select v-model="settings.model" @change="applySettings()" :disabled="modelLoading || loading" class="settings-select" aria-label="Model">
+          <select v-model="settings.model" @change="applySettings()" :disabled="modelLoading || loading" class="settings-select" aria-label="Model" aria-describedby="model-hint">
             <option disabled value="">Select Model</option>
             <template v-for="group in modelGroups" :key="group.label">
               <optgroup :label="group.label">
@@ -2892,19 +3124,22 @@ const Settings = {
               </optgroup>
             </template>
           </select>
-          <p class="section-hint">You can switch models mid-conversation. Generation defaults will update automatically.</p>
+          <p class="section-hint" id="model-hint">
+            ✓ = already downloaded. Switching keeps the conversation and uses the new model's recommended reply settings.
+            <span v-if="settings.model" class="model-id">{{ settings.model }}</span>
+          </p>
           <button class="action-btn secondary" style="margin-top:10px" @click="$router.push('/'); openPicker()">
             Help me choose a model
           </button>
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">Generation</h2>
+          <h2 class="section-label">Replies</h2>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name">Temperature</span>
-              <span class="setting-desc">Randomness of output. Low = focused, High = creative.</span>
+              <span class="setting-name" id="label-temperature">Temperature</span>
+              <span class="setting-desc">How adventurous replies are. Low = focused and predictable, high = more creative (and more mistakes).</span>
             </div>
             <div class="setting-control">
               <input type="range" min="0" max="2" step="0.05" v-model.number="settings.temperature" class="slider" aria-label="Temperature" />
@@ -2914,97 +3149,94 @@ const Settings = {
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name">Top P</span>
-              <span class="setting-desc">Nucleus sampling. Only consider tokens in the top P probability mass. 1.0 = off.</span>
-            </div>
-            <div class="setting-control">
-              <input type="range" min="0.01" max="1" step="0.01" v-model.number="settings.top_p" class="slider" aria-label="Top P" />
-              <span class="setting-value">{{ settings.top_p.toFixed(2) }}</span>
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
               <span class="setting-name">Max Tokens</span>
-              <span class="setting-desc">Maximum number of tokens to generate per response.</span>
+              <span class="setting-desc">Longest reply, in tokens (a token is about ¾ of a word). A longer reply stops with a Continue button.</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" aria-label="Max Tokens" />
-              <span class="setting-value">{{ settings.max_tokens }}</span>
+              <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" aria-label="Max Tokens" :aria-valuetext="settings.max_tokens + ' tokens, about ' + approxWords(settings.max_tokens) + ' words'" />
+              <span class="setting-value">{{ settings.max_tokens }}<small class="setting-sub">≈ {{ approxWords(settings.max_tokens) }} words</small></span>
             </div>
           </div>
 
-          <div class="setting-row">
+          <div class="setting-row" :class="{ pending: contextPending }">
             <div class="setting-info">
               <span class="setting-name">Context Window</span>
-              <span class="setting-desc">Tokens of conversation history visible to the model. Requires model reload.</span>
+              <span class="setting-desc">How much of the conversation (and attached documents) the model can see at once. Bigger uses more GPU memory.</span>
             </div>
             <div class="setting-control">
               <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" aria-label="Context Window" />
               <span class="setting-value">{{ settings.contextWindowSize }}</span>
             </div>
+            <div v-if="contextPending" class="setting-pending" role="status">
+              <span>Saved. The model needs to reload to use it (a few seconds), otherwise it applies the next time the app starts.</span>
+              <button type="button" class="action-btn primary reload-model-btn" @click="applySettings()" :disabled="modelLoading || loading">Reload model now</button>
+            </div>
           </div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name">Let reasoning models think first</span>
+              <span class="setting-name" id="label-thinking">Let reasoning models think first</span>
               <span class="setting-desc">Qwen3 and Qwen3.5 can reason step by step before answering. It can help with hard questions, but it is slower and uses up the reply length. (DeepSeek-R1 always does it.)</span>
             </div>
             <div class="setting-control">
               <label class="toggle">
-                <input type="checkbox" v-model="settings.thinking" class="thinking-toggle" />
-                <span>{{ settings.thinking ? "On" : "Off" }}</span>
+                <input type="checkbox" v-model="settings.thinking" class="thinking-toggle" aria-labelledby="label-thinking" />
+                <span aria-hidden="true">{{ settings.thinking ? "On" : "Off" }}</span>
               </label>
             </div>
           </div>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">Max Upload Size</span>
-              <span class="setting-desc">Maximum file size for document uploads.</span>
-            </div>
-            <div class="setting-control">
-              <input type="range" min="1" max="200" step="1" v-model.number="settings.maxFileSizeMB" class="slider" aria-label="Max Upload Size" />
-              <span class="setting-value">{{ settings.maxFileSizeMB }} MB</span>
-            </div>
-          </div>
-        </section>
+          <details class="advanced">
+            <summary>Advanced sampling <span class="advanced-sub">Top P and repetition penalties; most people never need these</span></summary>
 
-        <section class="settings-section">
-          <h2 class="section-label">Repetition Control</h2>
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">Top P</span>
+                <span class="setting-desc">Nucleus sampling: only consider the most likely words that together make up P of the probability. 1.0 = off.</span>
+              </div>
+              <div class="setting-control">
+                <input type="range" min="0.01" max="1" step="0.01" v-model.number="settings.top_p" class="slider" aria-label="Top P" />
+                <span class="setting-value">{{ settings.top_p.toFixed(2) }}</span>
+              </div>
+            </div>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">Frequency Penalty</span>
-              <span class="setting-desc">Penalises tokens by how often they have appeared. Reduces word repetition. Range −2 to 2.</span>
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">Frequency Penalty</span>
+                <span class="setting-desc">Penalises words by how often they have appeared. Reduces word repetition. Range −2 to 2.</span>
+              </div>
+              <div class="setting-control">
+                <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.frequency_penalty" class="slider" aria-label="Frequency Penalty" />
+                <span class="setting-value">{{ settings.frequency_penalty.toFixed(1) }}</span>
+              </div>
             </div>
-            <div class="setting-control">
-              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.frequency_penalty" class="slider" aria-label="Frequency Penalty" />
-              <span class="setting-value">{{ settings.frequency_penalty.toFixed(1) }}</span>
-            </div>
-          </div>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">Presence Penalty</span>
-              <span class="setting-desc">Penalises tokens that have already appeared at all. Encourages new topics. Range −2 to 2.</span>
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">Presence Penalty</span>
+                <span class="setting-desc">Penalises words that have already appeared at all. Encourages new topics. Range −2 to 2.</span>
+              </div>
+              <div class="setting-control">
+                <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.presence_penalty" class="slider" aria-label="Presence Penalty" />
+                <span class="setting-value">{{ settings.presence_penalty.toFixed(1) }}</span>
+              </div>
             </div>
-            <div class="setting-control">
-              <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.presence_penalty" class="slider" aria-label="Presence Penalty" />
-              <span class="setting-value">{{ settings.presence_penalty.toFixed(1) }}</span>
-            </div>
-          </div>
 
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-name">Repetition Penalty</span>
-              <span class="setting-desc">MLC-specific multiplicative penalty applied to repeated tokens. 1.0 = off, &gt;1 reduces repetition.</span>
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="setting-name">Repetition Penalty</span>
+                <span class="setting-desc">MLC's multiplicative penalty on repeated words. 1.0 = off, above 1 reduces repetition.</span>
+              </div>
+              <div class="setting-control">
+                <input type="range" min="1" max="2" step="0.05" v-model.number="settings.repetition_penalty" class="slider" aria-label="Repetition Penalty" />
+                <span class="setting-value">{{ settings.repetition_penalty.toFixed(2) }}</span>
+              </div>
             </div>
-            <div class="setting-control">
-              <input type="range" min="1" max="2" step="0.05" v-model.number="settings.repetition_penalty" class="slider" aria-label="Repetition Penalty" />
-              <span class="setting-value">{{ settings.repetition_penalty.toFixed(2) }}</span>
-            </div>
-          </div>
+          </details>
+
+          <button type="button" class="action-btn secondary reset-replies-btn" @click="confirmResetSettings">
+            Reset to this model's recommended settings
+          </button>
         </section>
 
         <section class="settings-section">
@@ -3040,6 +3272,20 @@ const Settings = {
           <button class="action-btn secondary" style="margin-top:8px" @click="resetSystemPrompt">
             Reset to Friendly instructions
           </button>
+        </section>
+
+        <section class="settings-section">
+          <h2 class="section-label">Documents</h2>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-name">Max Upload Size</span>
+              <span class="setting-desc">Largest file you can attach to a chat (PDF, TXT, Markdown). Text is limited to about 200 pages either way.</span>
+            </div>
+            <div class="setting-control">
+              <input type="range" min="1" max="200" step="1" v-model.number="settings.maxFileSizeMB" class="slider" aria-label="Max Upload Size" />
+              <span class="setting-value">{{ settings.maxFileSizeMB }} MB</span>
+            </div>
+          </div>
         </section>
 
         <section class="settings-section">
@@ -3130,18 +3376,11 @@ const Settings = {
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">Actions</h2>
-          <div class="settings-actions">
-            <button class="action-btn primary" @click="applySettings()" :disabled="modelLoading || loading">
-              Apply Settings
-            </button>
-            <button class="action-btn secondary" @click="resetSettings">
-              Reset All Defaults
-            </button>
-            <button class="action-btn danger" @click="clearConversation" :disabled="messages.length === 0">
-              Clear Conversation
-            </button>
-          </div>
+          <h2 class="section-label">Current chat</h2>
+          <p class="section-hint" style="margin-bottom:12px">Deletes the chat that is open, with its messages and attached documents. You'll be asked first.</p>
+          <button class="action-btn danger" @click="clearConversation" :disabled="messages.length === 0">
+            Clear Conversation
+          </button>
         </section>
 
       </div>
@@ -3149,6 +3388,31 @@ const Settings = {
   `,
 
   setup() {
+    // A token is roughly ¾ of an English word
+    function approxWords(tokens) {
+      return Math.round(tokens * 0.75 / 10) * 10;
+    }
+
+    // The context window changed for the loaded model: it needs a reload,
+    // which the user starts (or that happens on the next start).
+    const contextPending = Vue.computed(() => {
+      const key = sharedLoadedKey.value;
+      const model = sharedSettings.value.model;
+      if (!key || !model || sharedModelLoading.value) return false;
+      const [loadedModel, loadedContext] = key.split("|");
+      return loadedModel === model && Number(loadedContext) !== sharedSettings.value.contextWindowSize;
+    });
+
+    async function confirmResetSettings() {
+      const ok = await askConfirm({
+        title: "Reset reply settings?",
+        subject: modelShortName(sharedSettings.value.model),
+        message: "Temperature, Max Tokens, Context Window and the advanced sampling settings go back to what's recommended for this model. Personas and your custom instructions are kept.",
+        confirmText: "Reset",
+      });
+      if (ok) sharedResetSettings();
+    }
+
     function resetSystemPrompt() {
       sharedSettings.value.system_prompt = DEFAULT_PERSONA_PROMPT;
     }
@@ -3183,6 +3447,9 @@ const Settings = {
       clearConversation: sharedClearConversation,
       newChat: sharedNewChat,
       resetSystemPrompt,
+      approxWords,
+      contextPending,
+      confirmResetSettings,
       personas: PERSONAS,
       defaultPersona,
       modelOptionLabel,

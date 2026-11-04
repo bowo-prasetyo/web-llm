@@ -44,6 +44,14 @@ self.onmessage = async (event) => {
         sample: verdict === "ok" ? "Hello there!" : " outer outer outer outer outer outer",
       });
     }
+    // mode.download: [{ text, progress }] steps reported before the load
+    // finishes, mode.downloadDelay ms apart (a simulated download)
+    for (const step of m.download || []) {
+      await sleep(m.downloadDelay || 100);
+      postMessage({ type: "downloading", text: step.text, progress: step.progress });
+    }
+    if (m.downloadHang) return; // stays "downloading" until cancelled
+    if (m.download) await sleep(m.downloadDelay || 100);
     postMessage({ type: "status", text: "Model loaded successfully" });
   }
 

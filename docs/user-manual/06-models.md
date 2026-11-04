@@ -19,8 +19,8 @@ Model sizes are measured in **parameters**, written like *0.8B* or *9B* (B = bil
 |---|---|---|---|---|
 | Tiny (under 1B) | ~0.6–2 GB | Fastest | Basic; may get facts wrong | Phones, older laptops |
 | Small (1–2B) | ~1–2.6 GB | Fast | Good for everyday tasks | Most laptops, recent phones |
-| Mid (3–4B) | ~2.3–5.5 GB | Moderate | Noticeably better | Laptops with a good GPU |
-| Large (7–9B) | ~5–7.5 GB | Slower | Best available here | Computers with a dedicated graphics card (6 GB+ video memory) |
+| Mid (3–4B) | ~2.2–5.4 GB | Moderate | Noticeably better | Laptops with a good GPU |
+| Large (7–9B) | ~4.8–7.4 GB | Slower | Best available here | Computers with a dedicated graphics card (6 GB+ video memory) |
 
 ## Recommended picks
 

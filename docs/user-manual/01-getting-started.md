@@ -64,7 +64,7 @@ A progress panel appears at the top of the chat. It shows:
 * a progress bar and percentage,
 * how much has been downloaded, and, once it can estimate, the time left.
 
-Downloads range from about **1.6 GB** (smallest recommended pick) to **7.5 GB** (largest). On a typical home connection that's a few minutes to half an hour.
+Downloads range from about **1.6 GB** (smallest recommended pick) to **7.4 GB** (largest). On a typical home connection that's a few minutes to half an hour.
 
 > **Important:** Keep the tab open until the download finishes. If you change your mind, tap **Cancel** in the panel. The app goes back to how it was before.
 

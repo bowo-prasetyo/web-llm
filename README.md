@@ -569,6 +569,7 @@ Streaming Response → UI
 | Model check | After a model's first load on a device, a short reply is checked for junk; q4f16 models that fail (or need 16-bit support the GPU lacks) get a q4f32 replacement offer |
 | Collapsed-reply guard | A reply that turns into a few repeated words is stopped, replaced by an explanation with Retry, and left out of the model's memory |
 | Context fitting | Before each reply, the oldest turns and then document context are dropped so the prompt fits the context window |
+| Lost GPU recovery | When the browser takes the GPU away (phones do this in the background or under memory pressure), WebLLM disposes the model; the next message reloads it from the device and retries once, and a second failure shows a clear error with Retry |
 | Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; a reply stuck for a minute is interrupted in the engine |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |
 | Cancel download | User can abort a model fetch; the previous model and its settings come back, and the cached-model list is cleaned up so confirmation re-appears |

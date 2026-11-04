@@ -2037,6 +2037,7 @@ const Home = {
           messages.value.push({ role: "assistant", content: "Error: " + data.text, isError: true });
           scrollBottom();
           loading.value = false;
+          status.value = "Something went wrong";
           // A failed model load also reports here; don't leave the UI locked.
           modelLoading.value = false;
           isDownloading.value = false;

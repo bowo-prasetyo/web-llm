@@ -175,11 +175,17 @@ test.describe("keyboard and screen readers", () => {
     expect(await name('button[title="New chat"]')).toBe("New chat");
     await expect(page.locator('.status-bar [role="status"]')).toContainText("Model loaded successfully");
 
-    // Attach is reachable with Tab (its file input isn't display: none)
-    const input = page.locator(".upload-btn input[type=file]");
-    check(await input.evaluate(e => getComputedStyle(e).display !== "none"), "file input can take focus");
-    await input.focus();
-    check(await page.locator(".upload-btn").evaluate(e => e.matches(":focus-within")), "Attach shows focus");
+    // Attach is a real button: reachable with Tab, and it opens the file picker
+    const attach = page.locator(".upload-btn");
+    check(await attach.evaluate(e => e.tagName === "BUTTON"), "Attach is a button");
+    await attach.focus();
+    check(await attach.evaluate(e => e === document.activeElement), "Attach takes focus");
+    const chooser = page.waitForEvent("filechooser");
+    await page.keyboard.press("Enter");
+    check(!!(await chooser), "Enter on Attach opens the file picker");
+    // File inputs are hidden: a visible (even tiny) one adds the browser's
+    // "No file chosen" text to copied text and screen readers
+    await expect(page.locator("input[type=file]:not([hidden])")).toHaveCount(0);
 
     await page.click('button[title="Settings"]');
     for (const label of ["Temperature", "Top P", "Max Tokens", "Context Window"]) {

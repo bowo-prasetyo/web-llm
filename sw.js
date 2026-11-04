@@ -4,7 +4,7 @@
 //   visit), falling back to the saved copy when offline or slow.
 // - Pinned CDN libraries (exact versions, never change): saved on install
 //   and served from the cache first.
-// - Google Fonts: cache first.
+// - The fonts are the app's own files (fonts/), saved with the shell.
 // - Model weights and model libraries (Hugging Face, GitHub) are NOT
 //   handled here: WebLLM and Transformers.js already keep them in the
 //   browser's cache, and saving them twice would double several GB.
@@ -27,6 +27,17 @@ const SHELL_FILES = [
   "./chatstore.js",
   "./attachments.js",
   "./pace.js",
+  "./version.js",
+  "./fonts/dm-mono-300-latin-ext.woff2",
+  "./fonts/dm-mono-300-latin.woff2",
+  "./fonts/dm-mono-400-italic-latin-ext.woff2",
+  "./fonts/dm-mono-400-italic-latin.woff2",
+  "./fonts/dm-mono-400-latin-ext.woff2",
+  "./fonts/dm-mono-400-latin.woff2",
+  "./fonts/dm-mono-500-latin-ext.woff2",
+  "./fonts/dm-mono-500-latin.woff2",
+  "./fonts/dm-sans-latin-ext.woff2",
+  "./fonts/dm-sans-latin.woff2",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -57,10 +68,6 @@ function isPinnedLibrary(url) {
     (url.hostname === "unpkg.com" && /^\/(@[^/]+\/)?[^/@]+@\d/.test(url.pathname)) ||
     (url.hostname === "cdnjs.cloudflare.com" && /\/ajax\/libs\/[^/]+\/\d/.test(url.pathname))
   );
-}
-
-function isFont(url) {
-  return url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
 }
 
 self.addEventListener("install", event => {
@@ -142,9 +149,6 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  if (isFont(url)) {
-    event.respondWith(cacheFirst(request, LIB_CACHE).catch(() => new Response("", { status: 504 })));
-  }
   // Everything else (model weights, model libraries) goes to the network
   // untouched; WebLLM and Transformers.js cache those themselves.
 });

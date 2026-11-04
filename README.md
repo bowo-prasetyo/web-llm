@@ -30,8 +30,23 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 ## What stays on your device, and what is downloaded
 
 * **Stays on your device:** your messages, chats, attached documents and settings (in the browser's storage), and the AI model itself, which runs on your GPU.
-* **Downloaded once:** the model files (from Hugging Face and GitHub), the app's code libraries (from public CDNs), the fonts (from Google Fonts), and, for large documents, a small search model (~23 MB). Nothing you type is part of these requests.
+* **Downloaded once:** the model files (from Hugging Face and GitHub), the app's code libraries (from public CDNs), and, for large documents, a small search model (~23 MB). Nothing you type is part of these requests.
 * Clearing the site's data in your browser removes everything, including downloaded models.
+
+## Known limitations
+
+* **Needs WebGPU.** Recent Chrome and Edge on desktop work best; Android Chrome and Safari (macOS 14+ / iOS 17+) work on many devices. Firefox's WebGPU support is newer and less tested, and older browsers can't run it.
+* **Large downloads.** A model is 1.6–7.5 GB, downloaded once and kept by the browser. Clearing the site's data removes it.
+* **Speed depends on your GPU.** On an integrated or older GPU a 2B model may write about 1 word per second; the app shows the speed and suggests a smaller model.
+* **Small models get facts wrong.** They write fluently even when they're wrong. Check anything important, and prefer a larger model for factual questions.
+* **No internet access.** The model only knows what it learned in training (and the documents you attach); it can't look things up or know recent events.
+* **One device at a time.** Chats stay in the browser where you made them; use Export / Import to move them.
+
+## Version and reporting problems
+
+The current version is **1.0.0** (see [CHANGELOG.md](CHANGELOG.md)); the app shows its version in **Settings → This device**.
+
+Found a problem? Use **Settings → This device → Report a problem**: it opens a GitHub issue form with your app version, browser, GPU and model filled in, which helps a lot with GPU-specific bugs. Nothing is sent until you submit the form, and please don't include private chats. You can also [open an issue](https://github.com/bowo-prasetyo/web-llm/issues/new?template=problem.yml) directly.
 
 ## All features
 
@@ -402,6 +417,7 @@ The whole app runs in the browser; there is no backend and no build step.
 * [Transformers.js](https://github.com/xenova/transformers.js) (all-MiniLM-L6-v2) to search large attached documents, and [PDF.js](https://mozilla.github.io/pdf.js/) to read PDFs
 * [marked](https://marked.js.org), [DOMPurify](https://github.com/cure53/DOMPurify) and [highlight.js](https://highlightjs.org) to render replies safely
 * IndexedDB for chats and attachments, and a service worker for offline use
+* [DM Sans](https://github.com/googlefonts/dm-fonts) and [DM Mono](https://github.com/googlefonts/dm-mono) fonts, served from `fonts/` (SIL Open Font License)
 
 ## Run Locally
 
@@ -438,10 +454,18 @@ npm run test:e2e      # the app in Chromium
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update every place it appears together: `index.html` (Vue, Vue Router, marked, DOMPurify, highlight.js, PDF.js), `worker.js` (WebLLM and its `WEBLLM_VERSION` constant, Transformers.js), `sw.js`, `package.json`, `tests/support/fixtures.js` and the library list in `tests/e2e/offline.spec.js`. `grep -rn "<old version>" --exclude-dir=node_modules .` finds them all
 
+## Releasing a new version
+
+1. Update `APP_VERSION` in `version.js` and `version` in `package.json` (then `npm install --package-lock-only`)
+2. Add the changes under a new heading in `CHANGELOG.md`
+3. Merge to `main` (GitHub Pages deploys it), then tag the merge commit `vX.Y.Z` and publish a GitHub Release with the changelog entry
+
+The tests check that the three version numbers match.
+
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `pace.js`, `style.css`) and the `icons/` folder
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `pace.js`, `version.js`, `style.css`) and the `icons/` and `fonts/` folders
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -596,7 +620,7 @@ Streaming Response → UI
 
 ## License
 
-Open-source libraries and models remain subject to their respective licenses.
+The app is released under the [MIT License](LICENSE). The DM Sans and DM Mono fonts are under the SIL Open Font License (`fonts/OFL-*.txt`). Open-source libraries and models remain subject to their respective licenses.
 
 ## Assisted By
 

@@ -19,6 +19,7 @@ import {
   estimateRemaining,
 } from "./picker.js";
 import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pace.js";
+import { APP_VERSION, problemReportUrl } from "./version.js";
 
 const {
   createApp,
@@ -502,6 +503,7 @@ const APP_FILES = [
   "./index.html", "./app.js", "./worker.js", "./sw.js", "./style.css",
   "./personas.js", "./markdown.js", "./quality.js", "./context.js",
   "./picker.js", "./chatstore.js", "./attachments.js", "./pace.js",
+  "./version.js",
 ];
 const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
 const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
@@ -1071,13 +1073,16 @@ const Home = {
             Clear
           </button>
 
-          <label class="upload-btn" title="Attach a document to this chat (PDF, TXT, Markdown)">
+          <!-- A real button opening a hidden file input: a visible-but-tiny
+               input would add the browser's "No file chosen" text to copied
+               text and screen readers. -->
+          <button type="button" class="upload-btn" title="Attach a document to this chat (PDF, TXT, Markdown)" @click="$refs.attachInput.click()">
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
             <span>Attach</span>
-            <input type="file" class="sr-only" accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" />
-          </label>
+          </button>
+          <input ref="attachInput" type="file" class="attach-input" hidden accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" />
 
         </div>
 
@@ -3452,6 +3457,10 @@ const Settings = {
           <p class="section-hint" style="margin-bottom:12px">What the app found about this browser and GPU. Useful when a model gives garbled replies.</p>
           <div class="device-info">
             <div class="device-row">
+              <span class="device-key">App version</span>
+              <span class="device-val">{{ appVersion }}</span>
+            </div>
+            <div class="device-row">
               <span class="device-key">WebLLM version</span>
               <span class="device-val">{{ diagnostics?.webllmVersion || "…" }}</span>
             </div>
@@ -3492,6 +3501,10 @@ const Settings = {
               </li>
             </ul>
           </div>
+          <div class="report-problem">
+            <a class="action-btn secondary" :href="reportUrl" target="_blank" rel="noopener">Report a problem</a>
+            <span class="section-hint">Opens a form on GitHub with the details above filled in. Nothing is sent until you submit it there; please don't include private chats.</span>
+          </div>
           <button v-if="checkedCount" class="action-btn secondary" style="margin-top:10px" @click="forgetModelHealth">
             Forget check results ({{ checkedCount }})
           </button>
@@ -3511,10 +3524,10 @@ const Settings = {
                 <button class="action-btn secondary" @click="exportSettings">
                   Export Settings
                 </button>
-                <label class="action-btn secondary" style="cursor:pointer;text-align:center">
+                <button type="button" class="action-btn secondary" @click="$refs.importSettingsInput.click()">
                   Import Settings
-                  <input type="file" class="sr-only" accept=".json" @change="importSettings" />
-                </label>
+                </button>
+                <input ref="importSettingsInput" type="file" class="import-settings-input" hidden accept=".json" @change="importSettings" />
               </div>
             </div>
 
@@ -3525,10 +3538,10 @@ const Settings = {
                 <button class="action-btn secondary" @click="exportSessions">
                   Export Chats
                 </button>
-                <label class="action-btn secondary" style="cursor:pointer;text-align:center">
+                <button type="button" class="action-btn secondary" @click="$refs.importSessionsInput.click()">
                   Import Chats
-                  <input type="file" class="sr-only" accept=".json" @change="importSessions" />
-                </label>
+                </button>
+                <input ref="importSessionsInput" type="file" class="import-chats-input" hidden accept=".json" @change="importSessions" />
               </div>
             </div>
           </div>
@@ -3638,6 +3651,17 @@ const Settings = {
       defaultPersona,
       modelOptionLabel,
       diagnostics: sharedDiagnostics,
+      appVersion: APP_VERSION,
+      reportUrl: Vue.computed(() => {
+        const d = sharedDiagnostics.value || {};
+        return problemReportUrl({
+          browser: navigator.userAgent,
+          gpu: d.webgpu === false ? "WebGPU not available" : d.gpu,
+          shaderF16: d.shaderF16,
+          model: sharedSettings.value.model,
+          webllm: d.webllmVersion,
+        });
+      }),
       failedModels,
       checkedCount,
       f16Problem,

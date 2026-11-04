@@ -1,5 +1,6 @@
 {
   "name": "webllm-browser-chat",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Test tooling only. The app itself has no build step: index.html and the .js files are served as they are.",

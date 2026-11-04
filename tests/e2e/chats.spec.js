@@ -137,7 +137,7 @@ test("export and import keep every message", async ({ page }, testInfo) => {
   await expect.poll(async () => (await readChats(page)).length).toBe(0);
 
   await page.click("button[title=Settings]");
-  await page.locator('label:has-text("Import Chats") input[type=file]').setInputFiles(file);
+  await page.locator("input.import-chats-input").setInputFiles(file);
   await expect.poll(async () => (await readChats(page)).map(c => c.id).sort()).toEqual(["long", "short"]);
   const chats = await readChats(page);
   expect(chats.find(c => c.id === "long").messages).toHaveLength(120);

@@ -925,6 +925,35 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
   return result;
 }
 
+// The engine can die without telling us: when the GPU is lost (phones do
+// this when the browser goes to the background or the screen turns off, or
+// under memory pressure) WebLLM unloads the model and disposes its objects,
+// but our `engine` still points at it. The next request then fails with
+// "The current Object has already been disposed".
+function isLostEngineError(err) {
+  const message = err?.message || "";
+  return /already been disposed|deleted object|device (was )?lost/i.test(message);
+}
+
+// Stream a reply; if the engine turns out to have been lost, load the model
+// again (from the browser's cache, no download) and try once more. A second
+// failure is handled as before (handleGenerationError).
+async function streamWithRecovery(messages, maxTokens, opts) {
+  try {
+    return await streamReply(messages, maxTokens, opts);
+  } catch (err) {
+    if (!isLostEngineError(err) || STOP_REQUESTED) throw err;
+    console.warn("Engine was lost; reloading the model and retrying", err);
+    engine = null;
+    initializingPromise = null;
+    postMessage({ type: "status", text: "The browser reset the model (this happens on phones after the app was in the background). Reloading it…" });
+    await initialize();
+    ensureEngine();
+    postMessage({ type: "thinking" });
+    return await streamReply(messages, maxTokens, opts);
+  }
+}
+
 // Errors from WebLLM while generating. Throws a clearer error for the UI,
 // or returns true after a GPU crash (the worker is restarting).
 async function handleGenerationError(err) {
@@ -940,10 +969,11 @@ async function handleGenerationError(err) {
   // "deleted object as a pointer of type Tokenizer*" means the WASM engine
   // was destroyed mid-generation (race with set-config). Reset so the next
   // request reinitialises cleanly instead of crashing again.
-  if (message.includes("deleted object") || message.includes("Tokenizer")) {
+  if (message.includes("deleted object") || message.includes("Tokenizer") ||
+      message.includes("already been disposed")) {
     engine = null;
     initializingPromise = null;
-    throw err;
+    throw new Error("The model stopped working (the browser released the GPU). Press Retry to load it again.");
   }
 
   const gpuCrash =
@@ -1048,7 +1078,7 @@ async function generate(prompt) {
       }
       ensureEngine();
 
-      result = await streamReply(apiHistory, maxTokens, { generationStart });
+      result = await streamWithRecovery(apiHistory, maxTokens, { generationStart });
     } catch (err) {
       if (await handleGenerationError(err)) return;
     }
@@ -1124,7 +1154,7 @@ async function continueReply(previous) {
 
     let result;
     try {
-      result = await streamReply(fitted.history, maxTokens, { prefix: previous, generationStart });
+      result = await streamWithRecovery(fitted.history, maxTokens, { prefix: previous, generationStart });
     } catch (err) {
       if (await handleGenerationError(err)) return;
     }
@@ -1211,28 +1241,22 @@ self.onmessage = async (event) => {
           try { await initializingPromise; } catch (_) {}
         }
 
-        if (engine) {
-      
+        // Forget the engine before unloading it (see resetUnloadTimer)
+        const old = engine;
+        engine = null;
+        initializingPromise = null;
+
+        if (old) {
           postMessage({
             type: "status",
             text: "Unloading previous model...",
           });
-      
           try {
-      
-            await engine.unload();
-      
+            await old.unload();
           } catch (err) {
-      
-            console.warn(
-              "Unload failed",
-              err
-            );
+            console.warn("Unload failed", err);
           }
         }
-      
-        engine = null;
-        initializingPromise = null;
       
         postMessage({
           type: "status",
@@ -1324,23 +1348,19 @@ function resetUnloadTimer() {
       return;
     }
   
-    if (engine) {
-  
-      try {
-  
-        await engine.unload();
-  
-      } catch (err) {
-  
-        console.warn(
-          "Unload failed",
-          err
-        );
-      }
-    }
-  
+    // Forget the engine before unloading it: a message arriving during the
+    // unload must load a fresh engine, not use the one being disposed.
+    const old = engine;
     engine = null;
     initializingPromise = null;
+
+    if (old) {
+      try {
+        await old.unload();
+      } catch (err) {
+        console.warn("Unload failed", err);
+      }
+    }
   
     postMessage({
       type: "status",

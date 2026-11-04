@@ -7,6 +7,20 @@
 const bc = new BroadcastChannel("mock-engine");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// The page can make the GPU "lost", as phones do when the browser goes to the
+// background: WebLLM then disposes the engine, and requests to it throw.
+// { kind: "lose-gpu" } disposes the engines that exist now;
+// { kind: "lose-gpu", always: true } also disposes every later engine, until
+// { kind: "gpu-back" }.
+const engines = [];
+let alwaysLost = false;
+bc.onmessage = e => {
+  if (e.data?.kind === "gpu-back") { alwaysLost = false; return; }
+  if (e.data?.kind !== "lose-gpu") return;
+  engines.forEach(en => { en.disposed = true; });
+  if (e.data.always) alwaysLost = true;
+};
+
 // A real reply from Qwen2.5-Coder-0.5B that repeats itself (and contains
 // seams from the old automatic continuation), for the repeat guard.
 export const LOOPING_REPLY = "To code \"Hello World\" in JavaScript and show it on a browser, you need to write the following code:\n\n```javascript\nconsole.log(\"Hello World\");\n```\nThis code uses the console.log() function to display the string \"Hello World\" on the console. The console.log() function is a built-in function in JavaScript that can be used to output text to the console. The console.log() function is a simple way to display text on the console, and it's a good practice to use it in your code.\n\nTo show the output on a browser, you need to use the document.write() function. Here's an example:\n\n```javascript\nconsole.log(\"Hello World\");\ndocument.write(\"<br>\"); // Adding a line break to separate the output from the next line\n```\nIn this example, the document.write() function is used to write the string \"Hello World\" to the console. The document.write() function is a built-in function in JavaScript that can be used toThe document.write() function is used to write the string \"Hello World\" to the console. The document.write() function is a built-in function in JavaScript that can be used to write the string \"Hello World\" to the console. The document.write() function is a built-in function in JavaScript that can be used to write the string \"Hello World\" to the console. The document.write() function is a built-in function in JavaScript that can be used to write the string \"Hello World\" to the console. The document.write() function is a built-in function in JavaScript that can be used to write the string\n";
@@ -28,6 +42,8 @@ function script(lastUser) {
 export async function CreateMLCEngine(model, engineConfig, chatOpts) {
   bc.postMessage({ kind: "create", model, chatOpts: chatOpts || null });
   let interrupted = false;
+  const state = { disposed: alwaysLost };
+  engines.push(state);
   return {
     async unload() {},
     async resetChat() {},
@@ -36,6 +52,7 @@ export async function CreateMLCEngine(model, engineConfig, chatOpts) {
       bc.postMessage({ kind: "interrupt" });
     },
     chat: { completions: { async create(req) {
+      if (state.disposed) throw new Error("The current Object has already been disposed");
       const lastUser = [...req.messages].reverse().find(m => m.role === "user")?.content || "";
       bc.postMessage({ kind: "request", stream: !!req.stream, max_tokens: req.max_tokens, messages: req.messages, extra_body: req.extra_body || null });
       if (!req.stream) return { choices: [{ message: { content: "Hello there, nice to meet you!" } }] };

@@ -34,6 +34,7 @@ The first release: a private AI chat that runs entirely in your browser.
 
 ### Works anywhere
 - Works offline after the first visit; installable as an app on desktop and phone.
+- Recovers when the browser takes the GPU away (common on phones after the app was in the background): the model reloads from the device and the message is answered.
 - Light and dark themes, following the device or chosen in Settings.
 - Keyboard and screen-reader friendly; docked chat list on wide screens, a drawer on phones.
 - Fonts are served with the app: nothing is requested from third parties except the model and library downloads.

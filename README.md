@@ -40,6 +40,7 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 ## Known limitations
 
 * **Works best on a computer.** Phones give the AI little memory: on many, models of 0.7 GB or more close the page, and only the Tiny models fit, whose answers are very limited. When a model closes the page, the app explains and suggests a smaller one, stepping down one size at a time.
+* **Not yet tested on Safari (iPhone, iPad, Mac) or Firefox.** Version 1.0.0 was tested on Chrome and Edge on a Windows laptop and Chrome on Android. If something doesn't work on yours, please use **Settings → This device → Report a problem**.
 * **Needs WebGPU.** Recent Chrome and Edge on desktop work best; Android Chrome and Safari (macOS 14+ / iOS 17+) work on many devices. Firefox's WebGPU support is newer and less tested, and older browsers can't run it.
 * **Large downloads.** A model is a 0.2–4.9 GB download, kept by the browser, and needs more GPU memory than that while it runs (about 0.6–7.5 GB). Clearing the site's data removes it. **Private (incognito) windows** allow far too little storage for a model; the app warns before downloading when a model probably won't fit.
 * **Speed depends on your GPU.** On an integrated or older GPU a 2B model may write about 1 word per second; the app shows the speed and suggests a smaller model.
@@ -472,7 +473,8 @@ npm run test:e2e      # the app in Chromium
 
 1. Update `APP_VERSION` in `version.js` and `version` in `package.json` (then `npm install --package-lock-only`)
 2. Add the changes under a new heading in `CHANGELOG.md`
-3. Merge to `main` (GitHub Pages deploys it), then tag the merge commit `vX.Y.Z` and publish a GitHub Release with the changelog entry
+3. Write the release notes in `docs/release-notes/vX.Y.Z.md` (a short summary for people, not the full changelog)
+4. Merge to `main` (GitHub Pages deploys it), then tag the merge commit `vX.Y.Z` and publish a GitHub Release with those notes
 
 The tests check that the three version numbers match.
 

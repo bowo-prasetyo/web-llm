@@ -1,4 +1,6 @@
 // Tests: `npm test` (all), `npm run test:unit`, `npm run test:e2e`.
+// `npm run screenshots` redraws the documentation images (docs/*.png); it
+// is left out of `npm test` because it rewrites them.
 // Browser tests run against the repository served as-is (tests/support/
 // server.js), with CDN libraries served from node_modules and WebLLM mocked
 // (tests/support/fixtures.js): no network, GPU or model downloads needed.
@@ -25,6 +27,9 @@ export default defineConfig({
   projects: [
     { name: "unit", testMatch: /unit\/.*\.spec\.js$/ },
     { name: "e2e", testMatch: /e2e\/.*\.spec\.js$/, use: { browserName: "chromium" } },
+    ...(process.env.SCREENSHOTS
+      ? [{ name: "screenshots", testMatch: /screenshots\/.*\.spec\.js$/, use: { browserName: "chromium" } }]
+      : []),
   ],
   webServer: {
     command: "node tests/support/server.js",

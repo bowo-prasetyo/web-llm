@@ -112,9 +112,9 @@ If any models failed the automatic quality check on your device, they're listed 
 
 | Button | What it does |
 |---|---|
-| **Export Settings** | Downloads your settings as a file named `webllm-settings-YYYY-MM-DD.json`. |
+| **Export Settings** | Downloads your settings as a file named `hearth-settings-YYYY-MM-DD.json`. |
 | **Import Settings** | Loads settings from an exported file. Your current model choice is kept, so importing never starts a surprise download. |
-| **Export Chats** | Downloads all your chats (including attached documents) as `webllm-sessions-YYYY-MM-DD.json`. |
+| **Export Chats** | Downloads all your chats (including attached documents) as `hearth-chats-YYYY-MM-DD.json`. |
 | **Import Chats** | Adds chats from an exported file to the ones you already have. Chats you already have are skipped, so nothing is duplicated or overwritten. |
 
 See [Back up and move your data](08-offline-and-backup.md#back-up-and-move-your-data) for step-by-step instructions.
@@ -122,6 +122,8 @@ See [Back up and move your data](08-offline-and-backup.md#back-up-and-move-your-
 ## Current chat
 
 * **Clear Conversation**: deletes the chat that's open, with its messages and attached documents. You'll be asked first.
+
+At the very bottom of Settings you'll find the app's name and version, with links to its source code and to WebLLM, the engine it's built on.
 
 > **Important:** Deleting a chat can't be undone. Export your chats first if you might want them later.
 

@@ -1,7 +1,7 @@
 {
-  "name": "Private AI Chat",
-  "short_name": "AI Chat",
-  "description": "A private AI chat that runs in your browser and works offline.",
+  "name": "Hearth",
+  "short_name": "Hearth",
+  "description": "A private AI chat that lives in your browser. No server. No account. Works offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -10,6 +10,7 @@
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/hearth.svg", "sizes": "any", "type": "image/svg+xml" },
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

@@ -1,10 +1,10 @@
-# Private AI Chat — User Manual
+# Hearth — User Manual
 
-Welcome! This manual explains how to use **Private AI Chat**, an AI assistant that runs entirely inside your web browser. You don't need an account, you don't need to install anything, and nothing you type is sent to a server.
+Welcome! This manual explains how to use **Hearth**, a private AI chat that lives in your web browser. You don't need an account, you don't need to install anything, and nothing you type is sent to a server.
 
 **Open the app:** [bowo-prasetyo.github.io/web-llm](https://bowo-prasetyo.github.io/web-llm/)
 
-![A chat in Private AI Chat: the chat list on the left, and an answer on the right](../screenshot.png)
+![A chat in Hearth: the chat list on the left, and an answer on the right](../screenshot.png)
 
 ## Who this manual is for
 

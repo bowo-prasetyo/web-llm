@@ -2,7 +2,7 @@
 
 [← Documents](05-documents.md) · [Manual home](README.md) · [Next: Settings →](07-settings.md)
 
-The **model** is the AI that writes the replies. Private AI Chat offers 55 open models, from tiny ones that run on phones to large ones that need a powerful graphics card. This chapter helps you pick the right one and switch between them.
+The **model** is the AI that writes the replies. Hearth offers 55 open models, from tiny ones that run on phones to large ones that need a powerful graphics card. This chapter helps you pick the right one and switch between them.
 
 ## The short version
 

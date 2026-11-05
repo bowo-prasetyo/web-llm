@@ -1,11 +1,17 @@
 # Changelog
 
-What changed in each version of Private AI Chat. The version is shown in
+What changed in each version of Hearth. The version is shown in
 **Settings → This device**.
 
 ## [1.0.0] - Unreleased
 
-The first release: a private AI chat that runs entirely in your browser.
+The first release: Hearth, a private AI chat that lives in your browser.
+
+### Name and look
+- The app is called **Hearth** (it was "Private AI Chat"): a new name, an icon of a flame in an arched hearth, and the promise "No server. No account. Works offline." on the welcome screen.
+- Installed apps are named "Hearth" on the home screen (they were "AI Chat").
+- Settings ends with the name, version, a link to the source code and "Powered by WebLLM".
+- Exported files are named `hearth-settings-….json` and `hearth-chats-….json`. Files exported before still import, and saved chats and settings are kept.
 
 ### Chat
 - Chat with an AI model that runs on your own GPU (WebGPU). No server, no account; messages, chats and documents never leave your device.

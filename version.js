@@ -2,7 +2,8 @@
 // reports. Bump it with each release, and add the changes to CHANGELOG.md.
 export const APP_VERSION = "1.0.0";
 
-export const ISSUES_URL = "https://github.com/bowo-prasetyo/web-llm/issues";
+export const REPO_URL = "https://github.com/bowo-prasetyo/web-llm";
+export const ISSUES_URL = `${REPO_URL}/issues`;
 
 // A link to a new GitHub issue with the problem form filled in from this
 // device (field ids match .github/ISSUE_TEMPLATE/problem.yml). Opening it

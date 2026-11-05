@@ -19,7 +19,7 @@ import {
   estimateRemaining,
 } from "./picker.js";
 import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pace.js";
-import { APP_VERSION, problemReportUrl } from "./version.js";
+import { APP_VERSION, REPO_URL, problemReportUrl } from "./version.js";
 import { storageEstimate, spaceShortfall, requestPersistence, friendlyError } from "./storage.js";
 import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, recordCrash, lighterModel } from "./crash.js";
 
@@ -905,8 +905,11 @@ const Home = {
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
           <div class="header-brand">
-            <h1 class="header-title">Private AI Chat</h1>
-            <span class="header-tagline">Runs on this device</span>
+            <svg class="header-mark" aria-hidden="true" viewBox="84 108 344 296" width="26" height="22"><g transform="translate(0 -16)" fill="none" stroke="currentColor" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"><path d="M150 400 V252 A106 106 0 0 1 362 252 V400"/><line x1="104" y1="400" x2="408" y2="400"/><path transform="translate(256 380) scale(1.1) translate(-256 -380)" d="M256 204 C272 238 314 262 314 316 C314 350 289 372 256 372 C223 372 198 350 198 316 C198 289 212 270 225 257 C227 278 235 291 246 296 C239 265 240 234 256 204 Z" fill="currentColor" stroke="none"/></g></svg>
+            <div class="header-names">
+              <h1 class="header-title">Hearth</h1>
+              <span class="header-tagline">Private AI chat on this device</span>
+            </div>
           </div>
         </div>
         <div class="header-actions">
@@ -1005,7 +1008,7 @@ const Home = {
             @click="openPicker()"
           >Choose a model to start</button>
           <p class="welcome-note">
-            Runs privately in your browser. AI can make mistakes, so double-check important facts.
+            No server. No account. Works offline. AI can make mistakes, so double-check important facts.
             <button v-if="lastAppliedModel" type="button" class="link-btn inline" @click="openPicker()">Help me choose a model</button>
           </p>
         </div>
@@ -2715,7 +2718,7 @@ const Home = {
       const ts = new Date().toISOString().slice(0, 10);
       downloadJSON(
         { version: 1, type: "webllm-settings", exportedAt: new Date().toISOString(), settings: settings.value },
-        `webllm-settings-${ts}.json`
+        `hearth-settings-${ts}.json`
       );
     }
 
@@ -2772,7 +2775,7 @@ const Home = {
       const ts = new Date().toISOString().slice(0, 10);
       downloadJSON(
         { version: 1, type: "webllm-sessions", exportedAt: new Date().toISOString(), sessions: allSessions },
-        `webllm-sessions-${ts}.json`
+        `hearth-chats-${ts}.json`
       );
       status.value = `✓ Exported ${allSessions.length} session(s)`;
     }
@@ -3756,6 +3759,15 @@ const Settings = {
           </button>
         </section>
 
+        <footer class="about-credit">
+          <span class="about-name">Hearth {{ appVersion }}</span>
+          <span>Private AI chat that lives in your browser.</span>
+          <span>
+            <a :href="repoUrl" target="_blank" rel="noopener">Open source</a> ·
+            Powered by <a href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noopener">WebLLM</a>
+          </span>
+        </footer>
+
       </div>
     </div>
   `,
@@ -3853,6 +3865,7 @@ const Settings = {
       modelOptionLabel,
       diagnostics: sharedDiagnostics,
       appVersion: APP_VERSION,
+      repoUrl: REPO_URL,
       reportUrl: Vue.computed(() => {
         const d = sharedDiagnostics.value || {};
         return problemReportUrl({

@@ -16,7 +16,11 @@ const engines = [];
 let alwaysLost = false;
 // { kind: "storage-full" }: loading a model fails like a full disk does.
 let storageFull = false;
+// { kind: "check-blank" }: the short model check after loading gets
+// invisible output, as on a GPU with broken 16-bit math.
+let checkBlank = false;
 bc.onmessage = e => {
+  if (e.data?.kind === "check-blank") { checkBlank = true; return; }
   if (e.data?.kind === "storage-full") { storageFull = true; return; }
   if (e.data?.kind === "gpu-back") { alwaysLost = false; return; }
   if (e.data?.kind !== "lose-gpu") return;
@@ -32,6 +36,9 @@ function script(lastUser) {
   if (lastUser.startsWith("Your previous reply was cut off")) return { text: "The rest of the answer, finished properly.", finish: "stop" };
   if (lastUser === "long") return { text: "Here is the first part of a long answer that keeps going and is used to", finish: "length" };
   if (lastUser === "loop") return { text: LOOPING_REPLY, finish: "stop" };
+  // Junk that shows nothing on screen (broken 16-bit GPU math)
+  if (lastUser === "blank") return { pieces: Array(120).fill("\n"), finish: "stop", delay: 5 };
+  if (lastUser === "tags") return { pieces: Array(120).fill("<|im_start|>"), finish: "stop", delay: 5 };
   if (lastUser === "junk") return { text: " outer".repeat(60), finish: "stop" };
   if (lastUser === "slow") return { text: "word ".repeat(200), finish: "stop", delay: 60 };
   // A few words, then nothing until interrupted (a stuck GPU)
@@ -61,10 +68,10 @@ export async function CreateMLCEngine(model, engineConfig, chatOpts) {
       if (state.disposed) throw new Error("The current Object has already been disposed");
       const lastUser = [...req.messages].reverse().find(m => m.role === "user")?.content || "";
       bc.postMessage({ kind: "request", stream: !!req.stream, max_tokens: req.max_tokens, messages: req.messages, extra_body: req.extra_body || null });
-      if (!req.stream) return { choices: [{ message: { content: "Hello there, nice to meet you!" } }] };
+      if (!req.stream) return { choices: [{ message: { content: checkBlank ? "\n\n<|im_start|>\n<|im_start|>\n\n" : "Hello there, nice to meet you!" } }] };
       const s = script(lastUser);
       interrupted = false;
-      const pieces = s.text.match(/\S+\s*|\s+/g) || [];
+      const pieces = s.pieces || s.text.match(/\S+\s*|\s+/g) || [];
       return (async function* () {
         for (let i = 0; i < pieces.length; i++) {
           if (s.delay) await sleep(s.delay);

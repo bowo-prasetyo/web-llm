@@ -14,7 +14,7 @@ import {
 
 import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
-import { looksDegenerate, checkSample, findRepeatLoop } from "./quality.js";
+import { looksDegenerate, looksInvisible, countWords, checkSample, findRepeatLoop } from "./quality.js";
 import { fitToContext, estimateTokens } from "./context.js";
 import { friendlyError } from "./storage.js";
 import { timeLimitReason, withTimeLimits, wordCount, measureSpeed } from "./pace.js";
@@ -857,7 +857,7 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
   // Check the reply so far; true when streaming must stop.
   const guard = () => {
     const full = head + text;
-    if (looksDegenerate(full)) {
+    if (looksDegenerate(full) || looksInvisible(text, chunks)) {
       result.degenerate = true;
       return true;
     }
@@ -895,7 +895,7 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
 
       if (!text) head = prefix + joinSeparator(prefix, delta);
       text += delta;
-      words += delta.split(/\s+/).length;
+      words = countWords(text);
 
       if (++chunks % 8 === 0 && guard()) break;
 

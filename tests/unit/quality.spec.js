@@ -1,7 +1,7 @@
 // quality.js: junk detection (model check, collapsed replies) and the
 // repeated-sentence guard.
 import { test, expect } from "@playwright/test";
-import { checkSample, looksDegenerate, findRepeatLoop } from "../../quality.js";
+import { checkSample, looksDegenerate, findRepeatLoop, visibleText, countWords, looksInvisible } from "../../quality.js";
 import { LOOPING_REPLY } from "../support/mock-webllm.js";
 
 test.describe("checkSample (model check after loading)", () => {
@@ -50,5 +50,38 @@ test.describe("findRepeatLoop (repeated sentences)", () => {
     const code = "```js\n" + Array.from({ length: 12 }, (_, i) => `document.getElementById("item${i}").style.color = "red";`).join("\n") + "\n```\nThat colors every item red.";
     expect(findRepeatLoop(code)).toBe(-1);
     expect(findRepeatLoop("hello hello hello")).toBe(-1);
+  });
+});
+
+test.describe("invisible output", () => {
+  test("visible text drops special tokens, tags and control characters", () => {
+    expect(visibleText("<|im_start|>Hello<|im_end|>").trim()).toBe("Hello");
+    expect(visibleText("a<b>c</b>d")).toBe("a c d");
+    expect(visibleText("x\u0000​y")).toBe("xy");
+    expect(visibleText("if (a < b) return;")).toBe("if (a < b) return;"); // code survives
+  });
+
+  test("the word counter counts only words people can see", () => {
+    expect(countWords("\n\n\n\n")).toBe(0);
+    expect(countWords("<|im_start|> <|im_start|>")).toBe(0);
+    expect(countWords("Hello there, friend!")).toBe(3);
+  });
+
+  test("many pieces that show nothing are junk", () => {
+    expect(looksInvisible("\n".repeat(80), 80)).toBe(true);
+    expect(looksInvisible("<|im_start|>".repeat(60), 60)).toBe(true);
+    expect(looksInvisible("\n".repeat(20), 20)).toBe(false); // too early to judge
+  });
+
+  test("real text and code are never invisible", () => {
+    const prose = "The quick brown fox jumps over the lazy dog. ".repeat(10);
+    expect(looksInvisible(prose, 100)).toBe(false);
+    const code = "```js\nfor (let i = 0; i < n; i++) {\n  sum += a[i];\n}\n```\n".repeat(4);
+    expect(looksInvisible(code, 120)).toBe(false);
+  });
+
+  test("the model check fails output that shows nothing", () => {
+    expect(checkSample("\n\n<|im_start|>\n<|im_start|>\n").ok).toBe(false);
+    expect(checkSample("Hello there, nice to meet you!").ok).toBe(true);
   });
 });

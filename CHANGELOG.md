@@ -3,9 +3,14 @@
 What changed in each version of Hearth. The version is shown in
 **Settings → This device**.
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-05
 
 The first release: Hearth, a private AI chat that lives in your browser.
+
+### Tested on
+- Chrome and Edge on a Windows laptop with an Intel GPU (whose 16-bit math is broken: the app detects it and uses 32-bit models), including the first-run picker in a fresh browser, offline use and reloading while offline.
+- Chrome on a low-end Android phone: only the smallest model (SmolLM2 360M) fits its memory; larger ones close the page, which the app handles. Offline works.
+- **Not tested yet:** Safari (iPhone, iPad and Mac) and Firefox. Please use **Report a problem** if something doesn't work there.
 
 ### Name and look
 - The app is called **Hearth** (it was "Private AI Chat"): a new name, an icon of a flame in an arched hearth, and the promise "No server. No account. Works offline." on the welcome screen.

@@ -23,6 +23,14 @@ test("the version is the same in the app, package.json and the changelog", () =>
   expect(fs.readFileSync("CHANGELOG.md", "utf8")).toContain(`## [${APP_VERSION}]`);
 });
 
+test("the release is dated and has release notes", () => {
+  const log = fs.readFileSync("CHANGELOG.md", "utf8");
+  expect(log).toMatch(new RegExp(`## \\[${APP_VERSION.replace(/\./g, "\\.")}\\] - \\d{4}-\\d{2}-\\d{2}`));
+  const notes = fs.readFileSync(`docs/release-notes/v${APP_VERSION}.md`, "utf8");
+  expect(notes).toContain(`# Hearth ${APP_VERSION}`);
+  expect(notes).toContain("Known limitations");
+});
+
 test("Settings shows the version and a Report a problem link with device details", async ({ page }) => {
   await start(page);
   await page.click('button[title="Settings"]');

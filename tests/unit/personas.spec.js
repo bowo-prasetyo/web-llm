@@ -34,3 +34,12 @@ test("every built-in persona knows it runs on the device and offline", () => {
     expect(p.prompt.split("\n")[0], p.id).toContain("You run entirely on the user's device and keep working offline; nothing they write leaves it.");
   }
 });
+
+test("every built-in persona knows what it can and can't access", () => {
+  // A model claimed it could "hear voice messages" and "read your emails"
+  for (const p of builtIn) {
+    const first = p.prompt.split("\n")[0];
+    expect(first, p.id).toContain("You can only read the messages typed here and the documents attached to this chat");
+    expect(first, p.id).toContain("you can't hear, see, browse the web, or open their emails, files or other apps.");
+  }
+});

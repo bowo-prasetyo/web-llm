@@ -37,7 +37,7 @@ test("after a crash the model isn't loaded again; a lighter one is offered", asy
 
   // The crashed model is marked in the menu
   const label = await page.locator(`.model-select option[value="${Q08}"]`).textContent();
-  check(label.includes("closed the page on this device"), "the menu warns about the crashed model");
+  check(label.includes("crashed on this device"), "the menu warns about the crashed model");
 });
 
 test("Try again loads it; a successful answer clears the warning", async ({ page }) => {
@@ -51,7 +51,7 @@ test("Try again loads it; a successful answer clears the warning", async ({ page
   await expect(page.locator(".message.assistant").last()).toContainText("Echo: hello");
   expect(await readStorage(page, "webllm-model-crashes")).toEqual({});
   const label = await page.locator(`.model-select option[value="${Q08}"]`).textContent();
-  check(!label.includes("closed the page"), "warning gone after it worked");
+  check(!label.includes("crashed on this device"), "warning gone after it worked");
 });
 
 test("Choose another model opens the picker", async ({ page }) => {
@@ -91,9 +91,27 @@ test("reloading the page normally is not a crash", async ({ page }) => {
   await page.keyboard.press("Enter");
   await sleep(400);
   await page.reload();
-  await expect(page.locator(".status-bar")).toContainText("Model loaded successfully");
+  // The model loads again (and resumes the unanswered question, so the
+  // "loaded" status only flashes by): wait for the load itself.
+  await expect.poll(() => creates(page)).toEqual([Q08]);
   await expect(dialog(page)).toHaveCount(0);
   expect(await readStorage(page, "webllm-model-crashes")).toBeNull();
+});
+
+test("a GPU crash while answering keeps the text, explains, and loads nothing", async ({ page }) => {
+  await open(page);
+  await send(page, "gpu-lost", 2000);
+  const reply = page.locator(".message.assistant").last();
+  await expect(reply).toContainText("Here is part of an answer before the GPU");
+  await expect(reply).toContainText("Cut off: the GPU stopped working.");
+  await expect(reply.locator(".msg-action", { hasText: "Copy" })).toHaveCount(1);
+  await expect(dialog(page)).toContainText("The GPU stopped working while answering with Qwen3.5 0.8B");
+  await expect(dialog(page)).toContainText("Suggested: Llama 3.2 1B · 32-bit");
+  await sleep(500);
+  const loaded = await creates(page);
+  check(loaded.every(m => m === Q08), "never switched to another model by itself");
+  expect((await readStorage(page, "webllm-settings")).model).toBe(Q08);
+  expect(Object.keys(await readStorage(page, "webllm-model-crashes"))).toEqual([Q08]);
 });
 
 test.describe("on a phone", () => {

@@ -87,6 +87,7 @@ export function modelParams(id) {
 // facts, so they often make things up in a confident tone.
 export const SMALL_MODEL_MAX_B = 1;
 export function isSmallModel(id) {
+  if (/tinyllama/i.test(id || "")) return true; // 1.1B, but answers like a tiny one
   const b = modelParams(id);
   return b !== null && b <= SMALL_MODEL_MAX_B;
 }

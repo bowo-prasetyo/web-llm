@@ -35,6 +35,8 @@ function script(lastUser) {
   if (lastUser === "stall") return { text: "Here are a few words before it", finish: "stop", stallAfter: true };
   // Steady but slow, about 4 words per second
   if (lastUser === "steady") return { text: Array.from({ length: 24 }, (_, i) => `steady${i + 1} `).join(""), finish: "stop", delay: 250 };
+  // Part of a reply, then the GPU is lost (every time, so the retry fails too)
+  if (lastUser === "gpu-lost") return { text: "Here is part of an answer before the GPU", finish: "stop", throwAfter: true, error: "Device was lost" };
   if (lastUser === "boom") return { text: "Partial text before the crash.", finish: "stop", throwAfter: true };
   return { text: "Echo: " + lastUser, finish: "stop" };
 }
@@ -64,7 +66,7 @@ export async function CreateMLCEngine(model, engineConfig, chatOpts) {
           if (s.delay) await sleep(s.delay);
           if (interrupted) break;
           yield { choices: [{ delta: { content: pieces[i] }, finish_reason: null }] };
-          if (s.throwAfter && i === pieces.length - 1) throw new Error("Something broke in the engine");
+          if (s.throwAfter && i === pieces.length - 1) throw new Error(s.error || "Something broke in the engine");
         }
         if (s.stallAfter) while (!interrupted) await sleep(20);
         yield { choices: [{ delta: { content: "" }, finish_reason: interrupted ? "abort" : s.finish }] };

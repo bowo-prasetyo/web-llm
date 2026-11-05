@@ -91,7 +91,7 @@ test("no suggestion for the smallest models or unknown sizes", () => {
 test("models of about 1B parameters or fewer count as small", () => {
   expect(modelParams("SmolLM2-135M-Instruct-q0f32-MLC")).toBe(0.135);
   for (const id of ["SmolLM2-360M-Instruct-q4f32_1-MLC", "Qwen3.5-0.8B-q4f32_1-MLC",
-    "Llama-3.2-1B-Instruct-q4f32_1-MLC", "gemma3-1b-it-q4f16_1-MLC"]) {
+    "Llama-3.2-1B-Instruct-q4f32_1-MLC", "gemma3-1b-it-q4f16_1-MLC", "TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC"]) {
     expect(isSmallModel(id), id).toBe(true);
   }
   for (const id of ["Qwen3.5-2B-q4f32_1-MLC", "Qwen2.5-1.5B-Instruct-q4f32_1-MLC",

@@ -28,7 +28,7 @@ self.onmessage = async (event) => {
   if (d.type === "set-config") {
     const model = d.config.model;
     if (m.crash) {
-      postMessage({ type: "fatal", reason: "gpu-crash", fallbackModel: "SmolLM2-360M-Instruct-q4f32_1-MLC", text: "GPU crashed" });
+      postMessage({ type: "fatal", reason: "gpu-crash", text: "GPU crashed" });
       return;
     }
     const verdict = (m.check || {})[model] || "ok";

@@ -20,7 +20,7 @@ import {
 } from "./picker.js";
 import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pace.js";
 import { APP_VERSION, problemReportUrl } from "./version.js";
-import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, lighterModel } from "./crash.js";
+import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, recordCrash, lighterModel } from "./crash.js";
 
 const {
   createApp,
@@ -443,7 +443,7 @@ function modelOptionLabel(id) {
   const size = formatSize(sharedModelSizes.value[id]);
   let label = modelShortName(id) + (size ? " · " + size : "");
   if (isModelCached(id)) label += " ✓";
-  if (sharedModelCrashes.value[id]) return `${label}  ⚠ closed the page on this device`;
+  if (sharedModelCrashes.value[id]) return `${label}  ⚠ crashed on this device`;
   const h = sharedModelHealth.value[id];
   if (h && h.ok === false) {
     return `${label}  ⚠ ${h.reason === "no-f16" ? "needs 16-bit GPU support" : "garbled on this GPU"}`;
@@ -620,10 +620,15 @@ const Home = {
       <div class="modal-overlay" v-if="crashModal.show">
         <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="crash-title" aria-describedby="crash-body" v-dialog="chooseAfterCrash">
           <div class="modal-icon" aria-hidden="true">⚠</div>
-          <h2 class="modal-title" id="crash-title">The page closed unexpectedly</h2>
+          <h2 class="modal-title" id="crash-title">{{ crashModal.kind === "gpu" ? "The GPU stopped working" : "The page closed unexpectedly" }}</h2>
           <p class="modal-body" id="crash-body">
-            Last time, the page closed while {{ crashModal.phase === "answering" ? "answering with" : "loading" }}
+            <template v-if="crashModal.kind === 'gpu'">The GPU stopped working while</template>
+            <template v-else>Last time, the page closed while</template>
+            {{ crashModal.phase === "answering" ? "answering with" : "loading" }}
             <strong>{{ modelShortName(crashModal.model) }}</strong>. This usually means this device ran out of memory for that model, so it wasn't loaded again.
+          </p>
+          <p v-if="!crashModal.lighter" class="modal-body">
+            There is no clearly lighter model worth suggesting. Try again, or choose another model.
           </p>
           <p v-if="crashModal.lighter" class="modal-body health-suggestion">
             Suggested: <strong>{{ modelShortName(crashModal.lighter) }}</strong>, which needs about {{ formatSize(modelSizes[crashModal.lighter]) }} instead of {{ formatSize(modelSizes[crashModal.model]) }}.
@@ -694,7 +699,7 @@ const Home = {
                   </span>
                   <span class="picker-model">{{ o.name }}</span>
                   <span class="picker-meta">{{ o.cached ? "Already downloaded" : (online ? "~" + (formatSize(o.sizeMb) || "?") + " download" : "Needs internet to download (~" + (formatSize(o.sizeMb) || "?") + ")") }}</span>
-                  <span v-if="o.crashed" class="picker-meta picker-crashed">⚠ Closed the page on this device (not enough memory?)</span>
+                  <span v-if="o.crashed" class="picker-meta picker-crashed">⚠ Crashed on this device (not enough memory?)</span>
                   <span class="picker-desc">{{ o.desc }}</span>
                 </span>
               </button>
@@ -997,6 +1002,9 @@ const Home = {
             <p v-if="!item.streaming && item.message.notice === 'continue-failed'" class="msg-note">
               Couldn't continue: the model didn't add anything new.
             </p>
+            <p v-if="!item.streaming && item.message.notice === 'gpu-lost'" class="msg-note">
+              Cut off: the GPU stopped working.
+            </p>
             <p v-if="!item.streaming && item.message.cutOff" class="msg-note">
               {{ cutOffNote(item.message.cutOff) }}
               <span v-if="item.isLast">Press Continue for the rest.</span>
@@ -1203,9 +1211,11 @@ const Home = {
     // Reset whenever the worker is replaced. Lets Apply skip a full reload
     // when only sampling parameters or the system prompt changed.
     // The engine loaded in the worker: sharedLoadedKey ("model|context").
-    // Set after a GPU crash forced the fallback model on this page load.
-    // A second crash then stops instead of restarting forever.
+    // Set after the first GPU crash on this page load. A second one stops
+    // with the troubleshooting screen instead of offering models again.
     let safeModeActive = false;
+    // A GPU crash to explain once the restarted worker reports its models
+    let gpuCrashToShow = null;
 
     // Group the flat models list into labelled tiers for the <optgroup> select.
     // Smallest to largest, as in AVAILABLE_MODELS in worker.js, except the
@@ -1213,16 +1223,16 @@ const Home = {
     // Tests run on the lower-cased ID, in order; the first match wins.
     const MODEL_GROUPS_DEF = [
       { label: "Micro (0.5–0.8B)",       test: m => m.includes("0.5b") || m.includes("0.6b") || m.includes("0.8b") },
-      { label: "Lightweight (1–1.7B)",   test: m => m.includes("1.1b") || (m.includes("1b") && !m.includes("1.5b")) || m.includes("1.7b") || m.includes("1_6b") || m.includes("1.6b") },
+      { label: "Lightweight (1–1.7B)",   test: m => !m.includes("tinyllama") && (m.includes("1.1b") || (m.includes("1b") && !m.includes("1.5b")) || m.includes("1.7b") || m.includes("1_6b") || m.includes("1.6b")) },
       { label: "Small (1.5B)",           test: m => m.includes("1.5b") },
       { label: "Mid (2–4B)",             test: m => m.includes("2b") || m.includes("3b") || m.includes("4b") },
       { label: "Upper-mid (3.8B)",       test: m => m.includes("mini") },
       { label: "Large (7–9B)",           test: m => m.includes("7b") || m.includes("8b") || m.includes("9b") },
-      // Last, and labelled as such: 135M–360M models can barely hold a
-      // conversation (they repeat themselves and get most facts wrong), so
-      // nobody should judge the app by them. Kept for testing and very weak
-      // devices; the picker never suggests them.
-      { label: "Tiny (for testing; very limited answers)", test: m => m.includes("135m") || m.includes("360m") },
+      // Last, and labelled as such: 135M–360M models, and TinyLlama (1.1B
+      // but from 2023, often reciting its instructions), can barely hold a
+      // conversation, so nobody should judge the app by them. Kept for
+      // testing and very weak devices; the picker never suggests them.
+      { label: "Tiny (for testing; very limited answers)", test: m => m.includes("135m") || m.includes("360m") || m.includes("tinyllama") },
     ];
 
     const { computed } = Vue;
@@ -1852,35 +1862,48 @@ const Home = {
       const data = event.data;
 
       if (data.type === "fatal") {
-        setPendingWork("", "");
-
         loading.value = false;
         modelLoading.value = false;
         isDownloading.value = false;
 
         const gpuCrash = data.reason === "gpu-crash";
+        const phase = pendingWork.phase === "answering" ? "answering" : "loading";
+        setPendingWork("", "");
 
-        // A crash while already on the fallback model (or a second crash on
-        // this page load) means restarting would only crash again. Stop and
-        // show the GPU troubleshooting screen instead of looping.
-        if (gpuCrash && (safeModeActive || settings.value.model === data.fallbackModel)) {
+        // Keep what the reply had written, marked as cut off
+        const tail = messages.value[messages.value.length - 1];
+        if (tail && tail.role === "assistant-stream") {
+          if (tail.content && tail.content.trim()) {
+            tail.role = "assistant";
+            tail.notice = "gpu-lost";
+          } else {
+            messages.value.pop();
+          }
+          saveConversation();
+        }
+
+        // A second GPU crash on this page load: stop and show the GPU
+        // troubleshooting screen.
+        if (gpuCrash && safeModeActive) {
           // Fresh, idle worker: "Try Again" on the error screen loads a
           // model only when the user asks for it.
           worker = replaceWorker(onWorkerMessage);
           getWorker().onerror = onWorkerError;
           sharedLoadedKey.value = "";
-          status.value = "GPU crashed again in safe mode. Stopped to avoid a crash loop.";
+          status.value = "The GPU crashed twice on this visit. Stopped to avoid a crash loop.";
           webgpuError.value = true;
           return;
         }
 
         status.value = data.text;
 
-        if (gpuCrash && data.fallbackModel) {
-          // Switch to the lightest model. The new worker's "models" message
-          // calls applySettings, which asks before downloading it.
+        if (gpuCrash) {
+          // Usually out of memory, like a page crash: remember it, and let
+          // the person choose what to load (never switch models silently).
           safeModeActive = true;
-          settings.value.model = data.fallbackModel;
+          const model = settings.value.model;
+          sharedModelCrashes.value = { ...recordCrash(localStorage, model, phase) };
+          gpuCrashToShow = { model, phase, kind: "gpu" };
         }
 
         // Replace the module-level worker so getWorker() stays consistent
@@ -2016,7 +2039,7 @@ const Home = {
           {
             const reply = messages.value[messages.value.length - 1];
             reply.cutOff = data.cutOff || null;   // "length" | "stall" | "time" | null
-            reply.notice = data.notice || null;   // "loop" | "continue-failed" | null
+            reply.notice = data.notice || null;   // "loop" | "continue-failed" | "gpu-lost" | null
           }
         
           status.value = "Ready";
@@ -2067,7 +2090,10 @@ const Home = {
           if (settings.value.model) {
             // The page closed while using this model last time (most likely
             // out of memory): loading it again would close it again, so ask.
-            if (!crashPromptShown && startupCrash && startupCrash.model === settings.value.model && !lastAppliedModel.value) {
+            if (gpuCrashToShow) {
+              showCrashPrompt(gpuCrashToShow);
+              gpuCrashToShow = null;
+            } else if (!crashPromptShown && startupCrash && startupCrash.model === settings.value.model && !lastAppliedModel.value) {
               crashPromptShown = true;
               showCrashPrompt(startupCrash);
             } else {
@@ -2316,16 +2342,20 @@ const Home = {
 
     // ── After a page crash ───────────────────────────────────────────────
     let crashPromptShown = false;
-    const crashModal = ref({ show: false, model: "", phase: "", lighter: "" });
+    const crashModal = ref({ show: false, kind: "page", model: "", phase: "", lighter: "" });
 
-    function showCrashPrompt({ model, phase }) {
+    // kind: "page" (found when the page opened) or "gpu" (WebLLM lost the GPU)
+    function showCrashPrompt({ model, phase, kind = "page" }) {
       crashModal.value = {
         show: true,
+        kind,
         model,
         phase,
         lighter: lighterModel(model, modelSizes.value, allModels(), sharedModelCrashes.value),
       };
-      status.value = `Not loaded: ${modelShortName(model)} closed the page last time`;
+      status.value = kind === "gpu"
+        ? `Stopped: the GPU stopped working with ${modelShortName(model)}`
+        : `Not loaded: ${modelShortName(model)} closed the page last time`;
       refreshSessions();
       if (!currentSessionId.value) currentSessionId.value = genId();
     }

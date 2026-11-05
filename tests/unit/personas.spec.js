@@ -27,3 +27,10 @@ test("Friendly answers without ending every reply on a question; Brainstorm stil
   expect(getPersona("friendly").prompt).toContain("Don't end every reply with a question");
   expect(getPersona("brainstorm").prompt).toContain("End with one short question");
 });
+
+test("every built-in persona knows it runs on the device and offline", () => {
+  // So "Can you still answer me offline?" or "Where is my data sent?" get a true answer
+  for (const p of builtIn) {
+    expect(p.prompt.split("\n")[0], p.id).toContain("You run entirely on the user's device and keep working offline; nothing they write leaves it.");
+  }
+});

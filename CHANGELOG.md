@@ -18,6 +18,7 @@ The first release: a private AI chat that runs entirely in your browser.
 ### Personas
 - Friendly, Precise, Writer, Coder and Brainstorm, or your own instructions (Custom). Chosen per chat and switchable mid-conversation.
 - Personas gently correct mistakes instead of agreeing, and stay consistent with what they said earlier.
+- Personas know they run on your device and keep working offline, so they can answer "Do you work without internet?" or "Where is my data sent?" truthfully.
 
 ### Models
 - 55 open models from 135M to 9B parameters, including Qwen3.5, Llama 3, Phi-4-mini, Gemma, Mistral and OLMo 2.

@@ -40,6 +40,26 @@ test("after a crash the model isn't loaded again; a lighter one is offered", asy
   check(label.includes("crashed on this device"), "the menu warns about the crashed model");
 });
 
+test("after Llama 3.2 1B (16-bit) closes the page, Gemma 3 1B is suggested next", async ({ page }) => {
+  const LLAMA16 = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+  await seedStorage(page, {
+    "webllm-settings": { model: LLAMA16, settingsVersion: 2 },
+    "webllm-cached-models": [LLAMA16],
+    "webllm-pending": { model: LLAMA16, phase: "answering", ts: 1 },
+  });
+  await page.goto("/");
+  await expect(dialog(page)).toContainText("Suggested: Gemma 3 1B · 16-bit");
+  await expect(dialog(page).getByRole("button", { name: "Use Gemma 3 1B" })).toBeVisible();
+});
+
+test("the picker doesn't show the phone note on a computer", async ({ page }) => {
+  await seedStorage(page, {});
+  await page.goto("/");
+  await page.locator(".picker-option", { hasText: "Everyday chat" }).click();
+  await expect(page.locator(".picker-option.tier").first()).toBeVisible();
+  await expect(page.locator(".picker-phone-note")).toHaveCount(0);
+});
+
 test("Try again loads it; a successful answer clears the warning", async ({ page }) => {
   await open(page, crashedWhile("loading"), { waitLoaded: false });
   await expect(dialog(page)).toContainText("closed while loading Qwen3.5 0.8B");
@@ -126,5 +146,12 @@ test.describe("on a phone", () => {
     await expect(page.locator(".modal.picker")).toBeVisible();
     await page.locator(".picker-option", { hasText: "Everyday chat" }).click();
     await expect(page.locator('.picker-option.tier:has-text("Fast")')).toContainText("Llama 3.2 1B");
+  });
+
+  test("the picker warns that phones have little memory", async ({ page }) => {
+    await seedStorage(page, {});
+    await page.goto("/");
+    await page.locator(".picker-option", { hasText: "Everyday chat" }).click();
+    await expect(page.locator(".picker-phone-note")).toContainText("Many phones can only run the Tiny models");
   });
 });

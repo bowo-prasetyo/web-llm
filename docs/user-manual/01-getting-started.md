@@ -12,7 +12,7 @@ This chapter gets you from "never used it" to "first answer on screen". It takes
 | **WebGPU** | A browser feature that lets web pages use your graphics chip. The browsers above have it. If yours doesn't, the app tells you and shows how to fix it (see [Troubleshooting](09-troubleshooting.md#webgpu-not-available)). |
 | **Free storage space** | At least 2–3 GB for a small model; up to about 8 GB for the largest. |
 | **An internet connection (first time only)** | To download the app and the AI model. A Wi‑Fi connection is best because the download is large. |
-| **A reasonably modern device** | Any recent laptop or desktop works for small models. A dedicated graphics card helps with bigger, smarter models. Recent phones can run the smallest models. |
+| **A reasonably modern device** | Any recent laptop or desktop works for small models. A dedicated graphics card helps with bigger, smarter models. **A computer gives the best results:** phones have little memory for the AI, and many can only run the Tiny models, whose answers are very limited. |
 
 > **Note:** You don't need an account, a password, or an API key. There is nothing to sign up for.
 
@@ -44,7 +44,7 @@ Your choice also sets the starting *persona* (the assistant's style). You can ch
 
 | Size | What to expect |
 |---|---|
-| **Fast** | Quick replies and the smallest download. Fine on phones. |
+| **Fast** | Quick replies and the smallest download, but more likely to get facts wrong. On phones this is Llama 3.2 1B (about 1 GB). |
 | **Balanced** | Noticeably better answers. Best for most laptops. |
 | **Smart** | Best answers, large download. Needs a strong graphics card. |
 

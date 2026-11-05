@@ -69,24 +69,36 @@ export function forgetCrash(storage, model) {
   return crashes;
 }
 
-// Chat models that run on modest phones, largest first.
+// Chat models that may fit a modest phone, best answers first.
 const LIGHTER_CANDIDATES = [
   "Llama-3.2-1B-Instruct",
+  "gemma3-1b-it",
   "Qwen2.5-0.5B-Instruct",
   "SmolLM2-360M-Instruct",
 ];
 
-// A model needing clearly less memory (at most 60%) than one that crashed,
-// in the same precision so it also runs on this GPU, and not one that has
-// crashed here itself. "" when there is none. `sizes` maps model ID -> MB.
+// The share of the crashed model's memory a suggestion may need: clearly
+// smaller, but close enough to step down one size at a time (Llama 3.2 1B
+// 16-bit, 879 MB -> Gemma 3 1B, 711 MB -> SmolLM2 360M, 580 MB).
+export const LIGHTER_MAX_SHARE = 0.85;
+
+// A model needing clearly less memory than one that crashed, and not one
+// that crashed here itself, or "" when there is none. The best candidate in
+// the same precision comes first; after a 16-bit crash, 32-bit models are
+// tried next (they run on every GPU). After a 32-bit crash only 32-bit
+// models qualify, since 16-bit may be what doesn't work here.
+// `sizes` maps model ID -> MB.
 export function lighterModel(model, sizes, available, crashes = {}) {
   const precision = (/-(q\d+f\d+(?:_\d+)?)-MLC$/.exec(model || "") || [])[1];
   const current = sizes && sizes[model];
   if (!precision || !current) return "";
-  for (const base of LIGHTER_CANDIDATES) {
-    const id = `${base}-${precision}-MLC`;
-    if (id === model || !available.includes(id) || crashes[id]) continue;
-    if (sizes[id] && sizes[id] <= current * 0.6) return id;
+  const precisions = /f16/.test(precision) ? [precision, "q4f32_1"] : [precision];
+  for (const p of precisions) {
+    for (const base of LIGHTER_CANDIDATES) {
+      const id = `${base}-${p}-MLC`;
+      if (id === model || !available.includes(id) || crashes[id]) continue;
+      if (sizes[id] && sizes[id] <= current * LIGHTER_MAX_SHARE) return id;
+    }
   }
   return "";
 }

@@ -29,7 +29,7 @@ No.
 ### Using the app
 
 **Does it work on my phone?**
-Often, yes, with a small model (choose **Fast**). You need a recent phone and browser with WebGPU: Safari on iOS 17 or newer, or a recent Chrome on Android.
+It runs, but phones have little memory for the AI, so many can only run the Tiny models, whose answers are very limited. Phones with plenty of memory can run Llama 3.2 1B (choose **Fast**). If a model is too big, the page closes and the app suggests a smaller one next time; see [Phones](06-models.md#phones). You need a browser with WebGPU: Safari on iOS 17 or newer, or a recent Chrome on Android. For the best answers, use a computer.
 
 **Why is the first start so slow?**
 The first time, the app downloads an AI model, often 1.6 GB or more. After that it loads from your device in seconds.

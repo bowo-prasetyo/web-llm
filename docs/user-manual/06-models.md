@@ -17,17 +17,23 @@ Model sizes are measured in **parameters**, written like *0.8B* or *9B* (B = bil
 
 | Size | Download | Speed | Answer quality | Runs on |
 |---|---|---|---|---|
-| Tiny (under 1B) | ~0.6–2 GB | Fastest | Basic; may get facts wrong | Phones, older laptops |
-| Small (1–2B) | ~1–2.6 GB | Fast | Good for everyday tasks | Most laptops, recent phones |
+| Tiny (under 1B) | ~0.6–2 GB | Fastest | Basic; may get facts wrong | Most phones, older laptops |
+| Small (1–2B) | ~0.7–2.6 GB | Fast | Good for everyday tasks | Most laptops; phones with plenty of memory |
 | Mid (3–4B) | ~2.2–5.4 GB | Moderate | Noticeably better | Laptops with a good GPU |
 | Large (7–9B) | ~4.8–7.4 GB | Slower | Best available here | Computers with a dedicated graphics card (6 GB+ video memory) |
+
+## Phones
+
+Phones give the AI much less memory than computers do. A model that is too big for your phone doesn't show an error: the phone simply closes the page. When you open it again, the app tells you what happened, doesn't load that model again, and suggests a smaller one, so you can step down one size at a time. The model menu marks models that crashed with **⚠ crashed on this device**.
+
+How far down you need to go depends on the phone. On one tested Android phone, Qwen3.5 0.8B, Llama 3.2 1B, Gemma 3 1B and TinyLlama all closed the page, and only SmolLM2 360M (about 0.6 GB) fit. Tiny models like that can barely hold a conversation, so for real use a computer works much better.
 
 ## Recommended picks
 
 | If you want… | Try |
 |---|---|
 | The lightest option | Gemma 3 1B or Qwen3.5 0.8B |
-| Something for a phone | Qwen3.5 0.8B or Llama 3.2 1B |
+| Something for a phone | Llama 3.2 1B or Gemma 3 1B if your phone has enough memory; otherwise SmolLM2 360M (see [Phones](#phones)) |
 | Everyday chat | Qwen3.5 2B, or Qwen3.5 4B on a stronger device |
 | Coding help | Qwen3.5 4B or Qwen3.5 9B |
 | Writing help | Qwen3.5 4B or Ministral 3 3B |

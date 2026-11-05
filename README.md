@@ -21,9 +21,9 @@
 
 ## Getting started
 
-1. Open **https://bowo-prasetyo.github.io/web-llm/** in Chrome or Edge on desktop, or a recent Safari (macOS 14+ / iOS 17+). The browser needs [WebGPU](#requirements).
+1. Open **https://bowo-prasetyo.github.io/web-llm/** in Chrome or Edge on a computer (recommended), or a recent Safari (macOS 14+ / iOS 17+). The browser needs [WebGPU](#requirements). Phones work too, but many can only run the smallest models (see [Known limitations](#known-limitations)).
 2. Choose what you'll mostly use it for (everyday chat, coding or writing) and a size (Fast, Balanced or Smart).
-3. Wait for the one-time download (from about 1.6 GB for the smallest pick to 7.4 GB for the largest), then start chatting. Next time it loads from your device.
+3. Wait for the one-time download (from about 0.9 GB for the smallest pick on a phone to 7.4 GB for the largest), then start chatting. Next time it loads from your device.
 
 New to the app? The **[User Manual](docs/user-manual/README.md)** walks through everything step by step, in plain language: chatting, personas, documents, choosing a model, settings, offline use and backups, and troubleshooting.
 
@@ -35,6 +35,7 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 
 ## Known limitations
 
+* **Works best on a computer.** Phones give the AI little memory: on many, models of 0.7 GB or more close the page, and only the Tiny models fit, whose answers are very limited. When a model closes the page, the app explains and suggests a smaller one, stepping down one size at a time.
 * **Needs WebGPU.** Recent Chrome and Edge on desktop work best; Android Chrome and Safari (macOS 14+ / iOS 17+) work on many devices. Firefox's WebGPU support is newer and less tested, and older browsers can't run it.
 * **Large downloads.** A model is 1.6–7.5 GB, downloaded once and kept by the browser. Clearing the site's data removes it.
 * **Speed depends on your GPU.** On an integrated or older GPU a 2B model may write about 1 word per second; the app shows the speed and suggests a smaller model.
@@ -572,7 +573,7 @@ Streaming Response → UI
 | Collapsed-reply guard | A reply that turns into a few repeated words is stopped, replaced by an explanation with Retry, and left out of the model's memory |
 | Context fitting | Before each reply, the oldest turns and then document context are dropped so the prompt fits the context window |
 | GPU crashes | When WebLLM loses the GPU for good (after one automatic reload), the model is never switched silently: what the reply had written is kept with "Cut off: the GPU stopped working", the model is marked like a page crash, and the same dialog offers a lighter model, **Try again** or **Choose another model**. A second GPU crash on the same visit stops with the troubleshooting screen |
-| Out-of-memory page crashes | A phone that runs out of memory kills the page, so nothing can be caught. The app notes in localStorage when it starts loading a model or answering, and removes the note when that ends or the page is hidden or closed. A note found when the page opens means it crashed: that model isn't loaded again automatically (no crash loop); a dialog explains and offers a model needing at most 60% of the memory, **Try again** or **Choose another model**; the menu and picker mark the model until it loads and answers successfully |
+| Out-of-memory page crashes | A phone that runs out of memory kills the page, so nothing can be caught. The app notes in localStorage when it starts loading a model or answering, and removes the note when that ends or the page is hidden or closed. A note found when the page opens means it crashed: that model isn't loaded again automatically (no crash loop); a dialog explains and offers a model needing at most 85% of the memory (the best of Llama 3.2 1B, Gemma 3 1B, Qwen2.5 0.5B and SmolLM2 360M that fits; same precision first, then 32-bit), so repeated crashes step down one size at a time, **Try again** or **Choose another model**; the menu and picker mark the model until it loads and answers successfully |
 | Lost GPU recovery | When the browser takes the GPU away (phones do this in the background or under memory pressure), WebLLM disposes the model; the next message reloads it from the device and retries once, and a second failure shows a clear error with Retry |
 | Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; a reply stuck for a minute is interrupted in the engine |
 | Stop generation | User can halt any stream mid-response; partial answer is preserved and saved |

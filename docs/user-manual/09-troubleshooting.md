@@ -103,13 +103,15 @@ Every model can only "see" a limited amount of conversation at once (its *contex
 
 ## The app crashed, froze, or the screen went blank
 
-The app recovers from most GPU and engine errors automatically. If it crashes, it may restart on the lightest model (asking first before downloading it).
+The app recovers from most GPU and engine errors automatically: if the browser takes the GPU away (phones do this in the background), the model is reloaded and your question is answered.
+
+When a model is too big for the device's memory, the GPU stops working or the whole page closes. The app then shows **The GPU stopped working** or, when you open it again, **The page closed unexpectedly**. It doesn't load that model again by itself (so it can't get stuck crashing), keeps what the reply had written, and offers a smaller model, **Try again**, or **Choose another model**. The model menu marks it **⚠ crashed on this device** until it works again.
 
 1. **Wait a moment.** Recovery can take a few seconds.
 2. **Reload the page.** Your chats are saved, and an unanswered question is asked again automatically.
-3. **Choose a smaller model.** Crashes often mean the model is too big for your GPU's memory.
+3. **Choose a smaller model.** Crashes usually mean the model is too big for your GPU's memory. On phones, step down one size at a time (see [Phones](06-models.md#phones)).
 4. **Close other GPU-heavy tabs and apps.**
-5. If the **WebGPU Not Available** screen appears after a crash, follow [the steps above](#webgpu-not-available).
+5. If the GPU crashes twice in one visit, the app stops and shows the troubleshooting screen; follow [the steps above](#webgpu-not-available).
 
 > **Note:** After 30 minutes without use, the app unloads the model to free GPU memory. The next message reloads it from your device, which takes a few seconds.
 

@@ -43,3 +43,13 @@ test("every built-in persona knows what it can and can't access", () => {
     expect(first, p.id).toContain("you can't hear, see, browse the web, or open their emails, files or other apps.");
   }
 });
+
+test("every built-in persona knows its name is Hearth, and what it is", () => {
+  // So "What's your name?" and "Who made you?" get a true answer, not
+  // just the model's own name
+  for (const p of builtIn) {
+    const first = p.prompt.split("\n")[0];
+    expect(first, p.id).toMatch(/^You are Hearth, an? /);
+    expect(first, p.id).toContain("Hearth is an open-source app; your replies come from an open AI model running in it.");
+  }
+});

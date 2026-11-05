@@ -42,12 +42,12 @@ test("settings apply live, without reloading the model", async ({ page }) => {
   check(await page.locator("text=Apply Settings").count() === 0, "no Apply button: changes are saved as you make them");
 
   await page.click("text=Reset to Friendly instructions");
-  check((await page.inputValue(".system-prompt-editor")).startsWith("You are a friendly"), "Reset restores the Friendly instructions");
+  check((await page.inputValue(".system-prompt-editor")).startsWith("You are Hearth, a friendly"), "Reset restores the Friendly instructions");
 
   await page.click("text=Back");
   await send(page, "second");
   const gen = (await sent(page, "generate")).pop();
-  check(gen.config.system_prompt.startsWith("You are a friendly") && gen.config.temperature === 1.3, "generate carries the current settings");
+  check(gen.config.system_prompt.startsWith("You are Hearth, a friendly") && gen.config.temperature === 1.3, "generate carries the current settings");
   check((await sent(page, "init")).length === 1 && (await sent(page, "set-config")).length === 1, "visiting Settings and back doesn't reload the model");
 });
 

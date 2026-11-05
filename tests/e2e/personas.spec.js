@@ -18,7 +18,7 @@ test("welcome screen, starters and a persona per chat", async ({ page }) => {
   await page.goto("/");
   await ready(page);
   const st = await readStorage(page, "webllm-settings");
-  check(st.defaultPersona === "friendly" && st.system_prompt.startsWith("You are a friendly"), "Friendly is the default");
+  check(st.defaultPersona === "friendly" && st.system_prompt.startsWith("You are Hearth, a friendly"), "Friendly is the default");
   await expect(page.locator(".persona-card")).toHaveCount(6);
   await expect(page.locator(".persona-card.active")).toContainText("Friendly");
 
@@ -28,7 +28,7 @@ test("welcome screen, starters and a persona per chat", async ({ page }) => {
   await page.click('.persona-card:has-text("Coder")');
   await expect(page.locator('.starter-chip:has-text("debounces")')).toBeVisible();
   await send(page, "write fizzbuzz");
-  check((await lastGenerate(page)).config.system_prompt.startsWith("You are an expert programming assistant"), "Coder prompt sent");
+  check((await lastGenerate(page)).config.system_prompt.startsWith("You are Hearth, an expert programming assistant"), "Coder prompt sent");
   check((await chatIndex(page))[0].persona === "coder", "chat saved with its persona");
   await expect(page.locator(".welcome")).toBeHidden();
 
@@ -36,7 +36,7 @@ test("welcome screen, starters and a persona per chat", async ({ page }) => {
   await sleep(200);
   check((await chatIndex(page))[0].persona === "writer", "switching mid-chat is saved");
   await send(page, "polish this");
-  check((await lastGenerate(page)).config.system_prompt.startsWith("You are a helpful writing partner"), "and applies to the next message");
+  check((await lastGenerate(page)).config.system_prompt.startsWith("You are Hearth, a helpful writing partner"), "and applies to the next message");
 
   await page.click('button[title="New chat"]');
   check((await page.inputValue(".persona-select")) === "friendly", "a new chat starts with the default persona");
@@ -67,7 +67,7 @@ test("default persona and the Custom persona in Settings", async ({ page }) => {
 
   await page.click("button[title=Settings]");
   await page.click("text=Reset to Friendly instructions");
-  check((await page.inputValue(".system-prompt-editor")).startsWith("You are a friendly"), "Reset restores the Friendly text");
+  check((await page.inputValue(".system-prompt-editor")).startsWith("You are Hearth, a friendly"), "Reset restores the Friendly text");
   await page.click("text=Back");
   await sleep(500);
 
@@ -85,7 +85,7 @@ test("an unedited old system prompt migrates to Friendly", async ({ page }) => {
   await ready(page);
   const st = await readStorage(page, "webllm-settings");
   expect(st.defaultPersona).toBe("friendly");
-  expect(st.system_prompt.startsWith("You are a friendly")).toBe(true);
+  expect(st.system_prompt.startsWith("You are Hearth, a friendly")).toBe(true);
   expect(st.temperature).toBe(0.9);
 });
 

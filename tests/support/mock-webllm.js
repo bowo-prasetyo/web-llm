@@ -14,7 +14,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // { kind: "gpu-back" }.
 const engines = [];
 let alwaysLost = false;
+// { kind: "storage-full" }: loading a model fails like a full disk does.
+let storageFull = false;
 bc.onmessage = e => {
+  if (e.data?.kind === "storage-full") { storageFull = true; return; }
   if (e.data?.kind === "gpu-back") { alwaysLost = false; return; }
   if (e.data?.kind !== "lose-gpu") return;
   engines.forEach(en => { en.disposed = true; });
@@ -42,6 +45,7 @@ function script(lastUser) {
 }
 
 export async function CreateMLCEngine(model, engineConfig, chatOpts) {
+  if (storageFull) throw new Error("Quota exceeded.");
   bc.postMessage({ kind: "create", model, chatOpts: chatOpts || null });
   let interrupted = false;
   const state = { disposed: alwaysLost };

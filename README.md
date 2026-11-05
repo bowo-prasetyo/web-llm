@@ -37,7 +37,7 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 
 * **Works best on a computer.** Phones give the AI little memory: on many, models of 0.7 GB or more close the page, and only the Tiny models fit, whose answers are very limited. When a model closes the page, the app explains and suggests a smaller one, stepping down one size at a time.
 * **Needs WebGPU.** Recent Chrome and Edge on desktop work best; Android Chrome and Safari (macOS 14+ / iOS 17+) work on many devices. Firefox's WebGPU support is newer and less tested, and older browsers can't run it.
-* **Large downloads.** A model is 1.6–7.5 GB, downloaded once and kept by the browser. Clearing the site's data removes it.
+* **Large downloads.** A model is 0.6–7.5 GB, downloaded once and kept by the browser. Clearing the site's data removes it. **Private (incognito) windows** allow far too little storage for a model; the app warns before downloading when a model probably won't fit.
 * **Speed depends on your GPU.** On an integrated or older GPU a 2B model may write about 1 word per second; the app shows the speed and suggests a smaller model.
 * **Small models get facts wrong.** They write fluently even when they're wrong. Check anything important, and prefer a larger model for factual questions.
 * **No internet access.** The model only knows what it learned in training (and the documents you attach); it can't look things up or know recent events.
@@ -451,7 +451,7 @@ npm run test:unit     # pure modules only, no browser
 npm run test:e2e      # the app in Chromium
 ```
 
-* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js`, `crash.js` and `personas.js`
+* **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js`, `crash.js`, `storage.js` and `personas.js`
 * **Browser tests** (`tests/e2e/`) run the real app in Chromium: light and dark themes and their contrast, the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, and the "new version available" banner
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
@@ -468,7 +468,7 @@ The tests check that the three version numbers match.
 ## Deploy to GitHub Pages
 
 1. Create a GitHub repository
-2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `pace.js`, `version.js`, `crash.js`, `style.css`) and the `icons/` and `fonts/` folders
+2. Upload all project files (`index.html`, `app.js`, `worker.js`, `sw.js`, `manifest.webmanifest`, `personas.js`, `markdown.js`, `quality.js`, `context.js`, `picker.js`, `chatstore.js`, `attachments.js`, `pace.js`, `version.js`, `crash.js`, `storage.js`, `style.css`) and the `icons/` and `fonts/` folders
 3. Push to the `main` branch
 4. Go to **Settings → Pages**
 5. Set **Source** to `Deploy from branch`, branch `main`, folder `/root`
@@ -518,6 +518,7 @@ Cached data may include AI model weights (potentially several GB), attached docu
 | `chatstore.js` | Chat storage in IndexedDB, migration from localStorage, and the localStorage fallback |
 | `picker.js` | Model picker catalog, device-based recommendation, readable model names and load-progress parsing |
 | `quality.js` | Junk-output detection for the model check and the collapsed-reply guard |
+| `storage.js` | Storage checks before downloads, the plain-language "storage full" message, and asking the browser to keep downloaded models |
 | `crash.js` | Notices a page that was closed by running out of memory, and suggests a lighter model |
 | `pace.js` | Progress-based reply time limits, writing-speed measurement, and the smaller model suggested when one is slow |
 | `context.js` | Fits the conversation into the model's context window |

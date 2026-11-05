@@ -38,6 +38,7 @@ The first release: a private AI chat that runs entirely in your browser.
 - Works offline after the first visit; installable as an app on desktop and phone.
 - Recovers when the browser takes the GPU away (common on phones after the app was in the background): the model reloads from the device and the message is answered.
 - After a GPU crash the app never switches models by itself: the reply so far is kept, and the same dialog explains and offers a lighter model.
+- Warns before downloading a model that probably won't fit in the browser's storage (private windows allow very little), explains a full disk in plain language instead of "Quota exceeded", and asks the browser to keep downloaded models. **Settings → This device → Storage** shows usage and the browser's limit.
 - Remembers when a model closed the page (usually out of memory on phones): it isn't loaded again automatically, a lighter model is offered, and the model menu marks it.
 - On phones the picker's Fast choice is Llama 3.2 1B, which needs about 1 GB of GPU memory.
 - After a crash the app suggests the next smaller model (Llama 3.2 1B → Gemma 3 1B → SmolLM2 360M), and the picker tells phone users that many phones can only run the Tiny models.

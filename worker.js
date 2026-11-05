@@ -16,6 +16,7 @@ import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
 import { looksDegenerate, checkSample, findRepeatLoop } from "./quality.js";
 import { fitToContext, estimateTokens } from "./context.js";
+import { friendlyError } from "./storage.js";
 import { timeLimitReason, withTimeLimits, wordCount, measureSpeed } from "./pace.js";
 import {
   INDEX_MIN_CHARS,
@@ -1328,7 +1329,7 @@ self.onmessage = async (event) => {
   } catch (err) {
     postMessage({
       type: "error",
-      text: err.message,
+      text: friendlyError(err.message),
     });
   }
 };

@@ -24,6 +24,7 @@ The first release: Hearth, a private AI chat that lives in your browser.
 ### Personas
 - Friendly, Precise, Writer, Coder and Brainstorm, or your own instructions (Custom). Chosen per chat and switchable mid-conversation.
 - Personas gently correct mistakes instead of agreeing, and stay consistent with what they said earlier.
+- Personas know their name is Hearth, and that Hearth is an open-source app whose replies come from an open AI model running in it, so "What's your name?" and "Who made you?" get a true answer.
 - Personas know they run on your device and keep working offline, and what they can and can't access (only your messages and attached documents; no voice, web, emails or files), so they can answer "Do you work without internet?", "Where is my data sent?" or "Can you read my emails?" truthfully.
 
 ### Models

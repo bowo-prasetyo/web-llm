@@ -17,6 +17,8 @@ A **persona** sets *how* the assistant talks: its tone, its level of detail, and
 
 Every built-in persona is told to stay consistent with what it said earlier, and to politely correct you if you say something that isn't right instead of just agreeing.
 
+Every built-in persona also knows its name is **Hearth**, so it answers "What's your name?" with "Hearth". Asked who made it, it can explain that Hearth is an open-source app and that its replies come from an open AI model running on your device. The **Custom** persona uses only your own instructions, so it goes by whatever name you give it, or none.
+
 ## Choose a persona for a new chat
 
 On the welcome screen of a new chat, tap one of the persona cards. Each persona also offers a few **starter prompts** below the cards. Tap one to send it straight away.

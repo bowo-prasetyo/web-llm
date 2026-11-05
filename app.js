@@ -319,7 +319,12 @@ const sharedModelLoading = vRef(false);
 const sharedMessages  = vRef([]);
 const sharedSessions  = vRef([]);   // [{id, title, model, ts, preview}]
 const sharedSidebarOpen = vRef(false);
-const sharedModelSizes  = vRef({});  // {modelId: sizeInMB}
+const sharedModelSizes  = vRef({});  // {modelId: GPU memory in MB}
+const sharedDownloadSizes = vRef({}); // {modelId: download size in MB}
+// What downloading a model costs (MB); the memory figure if unknown.
+function downloadMb(id) {
+  return sharedDownloadSizes.value[id] || sharedModelSizes.value[id] || 0;
+}
 const sharedIsDownloading = vRef(false);  // true while model weights are fetching
 const sharedWebgpuError = vRef(false); // true when WebGPU is unavailable
 
@@ -473,7 +478,7 @@ function modelShortName(id) {
 // it's already on this device, and a warning where it won't work well.
 function modelOptionLabel(id) {
   void sharedCachedTick.value; // re-render when the downloaded list changes
-  const size = formatSize(sharedModelSizes.value[id]);
+  const size = formatSize(downloadMb(id));
   let label = modelShortName(id) + (size ? " · " + size : "");
   if (isModelCached(id)) label += " ✓";
   if (sharedModelCrashes.value[id]) return `${label}  ⚠ crashed on this device`;
@@ -639,7 +644,7 @@ const Home = {
           </p>
           <p v-if="healthModal.suggestion" class="modal-body health-suggestion">
             Suggested: <strong>{{ modelShortName(healthModal.suggestion) }}</strong>
-            <span v-if="modelSizes[healthModal.suggestion]">(~{{ formatSize(modelSizes[healthModal.suggestion]) }})</span>
+            <span v-if="downloadMb(healthModal.suggestion)">(~{{ formatSize(downloadMb(healthModal.suggestion)) }} download)</span>
             <br><span class="model-id">{{ healthModal.suggestion }}</span>
           </p>
           <div class="modal-actions">
@@ -664,7 +669,7 @@ const Home = {
             There is no clearly lighter model worth suggesting. Try again, or choose another model.
           </p>
           <p v-if="crashModal.lighter" class="modal-body health-suggestion">
-            Suggested: <strong>{{ modelShortName(crashModal.lighter) }}</strong>, which needs about {{ formatSize(modelSizes[crashModal.lighter]) }} instead of {{ formatSize(modelSizes[crashModal.model]) }}.
+            Suggested: <strong>{{ modelShortName(crashModal.lighter) }}</strong>, which needs about {{ formatSize(modelSizes[crashModal.lighter]) }} of GPU memory instead of {{ formatSize(modelSizes[crashModal.model]) }}.
           </p>
           <div class="modal-actions crash-actions">
             <button class="action-btn secondary" @click="retryCrashedModel">Try again</button>
@@ -1419,7 +1424,7 @@ const Home = {
       const parts = [];
       if (info.percent !== null) parts.push(info.percent + "%");
       if (info.phase === "download" && info.doneMb !== null) {
-        const total = modelSizes.value[settings.value.model] || 0;
+        const total = downloadMb(settings.value.model);
         parts.push(total && info.doneMb <= total
           ? `${formatSize(info.doneMb)} of ~${formatSize(total)}`
           : `${formatSize(info.doneMb)} downloaded`);
@@ -2096,6 +2101,7 @@ const Home = {
         case "models": {
           models.value = data.models;
           sharedAltModels.value = data.altModels || [];
+          if (data.downloadSizes) sharedDownloadSizes.value = data.downloadSizes;
           if (data.sizes) {
             modelSizes.value = data.sizes;
           }
@@ -2464,13 +2470,13 @@ const Home = {
           ...t,
           model: id,
           name: friendlyModelName(id),
-          sizeMb: modelSizes.value[id] || 0,
+          sizeMb: downloadMb(id),
           cached: isModelCached(id),
           recommended: t.id === recommended,
           current: id === lastAppliedModel.value,
           available: known.length === 0 || known.includes(id),
           crashed: !!sharedModelCrashes.value[id],
-          space: isModelCached(id) ? "" : spaceWarning(modelSizes.value[id] || 0),
+          space: isModelCached(id) ? "" : spaceWarning(downloadMb(id)),
         };
       }).filter(o => o.available);
     });
@@ -2558,7 +2564,7 @@ const Home = {
       // @change="applySettings" would pass the event here and skip the
       // question for every model.
       if (isNewModel && isUserChange && skipConfirm !== true && !isModelCached(settings.value.model)) {
-        const sizeMb = modelSizes.value[settings.value.model] || 0;
+        const sizeMb = downloadMb(settings.value.model);
         if (sizeMb > 50) {
           const model = settings.value.model;
           const previousModel = lastAppliedModel.value;
@@ -3434,6 +3440,7 @@ const Home = {
       deleteSession,
       formatDate,
       modelSizes,
+      downloadMb,
       isDownloading,
       stopGeneration,
       cancelDownload,

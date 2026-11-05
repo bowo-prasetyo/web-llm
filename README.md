@@ -27,7 +27,7 @@ The AI model runs on your own device, so nothing you type leaves it. Once a mode
 
 1. Open **https://bowo-prasetyo.github.io/web-llm/** in Chrome or Edge on a computer (recommended), or a recent Safari (macOS 14+ / iOS 17+). The browser needs [WebGPU](#requirements). Phones work too, but many can only run the smallest models (see [Known limitations](#known-limitations)).
 2. Choose what you'll mostly use it for (everyday chat, coding or writing) and a size (Fast, Balanced or Smart).
-3. Wait for the one-time download (from about 0.9 GB for the smallest pick on a phone to 7.4 GB for the largest), then start chatting. Next time it loads from your device.
+3. Wait for the one-time download (from about 0.4 GB for the smallest pick to 4.8 GB for the largest), then start chatting. Next time it loads from your device.
 
 New to the app? The **[User Manual](docs/user-manual/README.md)** walks through everything step by step, in plain language: chatting, personas, documents, choosing a model, settings, offline use and backups, and troubleshooting.
 
@@ -41,7 +41,7 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 
 * **Works best on a computer.** Phones give the AI little memory: on many, models of 0.7 GB or more close the page, and only the Tiny models fit, whose answers are very limited. When a model closes the page, the app explains and suggests a smaller one, stepping down one size at a time.
 * **Needs WebGPU.** Recent Chrome and Edge on desktop work best; Android Chrome and Safari (macOS 14+ / iOS 17+) work on many devices. Firefox's WebGPU support is newer and less tested, and older browsers can't run it.
-* **Large downloads.** A model is 0.6–7.5 GB, downloaded once and kept by the browser. Clearing the site's data removes it. **Private (incognito) windows** allow far too little storage for a model; the app warns before downloading when a model probably won't fit.
+* **Large downloads.** A model is a 0.2–4.9 GB download, kept by the browser, and needs more GPU memory than that while it runs (about 0.6–7.5 GB). Clearing the site's data removes it. **Private (incognito) windows** allow far too little storage for a model; the app warns before downloading when a model probably won't fit.
 * **Speed depends on your GPU.** On an integrated or older GPU a 2B model may write about 1 word per second; the app shows the speed and suggests a smaller model.
 * **Small models get facts wrong.** They write fluently even when they're wrong. Check anything important, and prefer a larger model for factual questions.
 * **No internet access.** The model only knows what it learned in training (and the documents you attach); it can't look things up or know recent events.
@@ -75,7 +75,7 @@ Found a problem? Use **Settings → This device → Report a problem**: it opens
 * Deleting or clearing a chat asks first; nothing is deleted by a single tap
 * Keyboard and screen-reader friendly: dialogs and the chat list keep focus and close with Escape, every control has a name, and status changes are announced
 * Download progress panel: a progress bar with percentage, amount downloaded, estimated time left and a Cancel button (cancelling goes back to the model you had)
-* Models shown by readable name, precision and size ("Qwen3.5 2B · 16-bit · 2.2 GB ✓"), with ✓ for downloaded ones
+* Models shown by readable name, precision and download size ("Qwen3.5 2B · 16-bit · 1010 MB ✓"), with ✓ for downloaded ones
 * Stop generation at any time during streaming response
 * Automatic model caching — confirmed models load instantly on subsequent visits
 * Persistent local settings (model, temperature, top-p, penalties, context window, personas), saved as you edit them
@@ -204,7 +204,7 @@ These models can barely hold a conversation: they repeat themselves, get most fa
 | DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC | ~4.9 GB |
 | gemma-2-9b-it-q4f16_1-MLC | ~6.3 GB |
 
-Sizes are approximate VRAM footprints from `MODEL_SIZES_MB` in `worker.js`, shown the way the app shows them (1 GB = 1024 MB). Actual download size may vary.
+Sizes in these tables are the GPU memory each model needs (`MODEL_SIZES_MB` in `worker.js`, from WebLLM's model registry; 1 GB = 1024 MB). Downloads are smaller: the app shows the real download size (`DOWNLOAD_SIZES_MB`, the model's weight files on Hugging Face), e.g. 404 MB for Qwen3.5 0.8B, which needs about 1.6–1.9 GB of GPU memory.
 
 **q4f16 vs q4f32.** q4f16 models are smaller and faster but need the GPU's
 16-bit math. Some GPUs and browsers get that math wrong, and those models then
@@ -257,7 +257,7 @@ Accessible via the ⚙ Settings page (tap the gear icon in the header):
 
 ### Model
 
-* **Model selection** — choose from 55 models grouped by size tier. Each is shown by name, precision and download size, e.g. "Qwen3.5 2B · 16-bit · 2.2 GB ✓" (✓ = already downloaded); the full model ID is shown under the menu. Switching models keeps the current conversation, and the new model continues it with the same history. Picking a different model applies that model's recommended reply settings.
+* **Model selection** — choose from 55 models grouped by size tier. Each is shown by name, precision and download size, e.g. "Qwen3.5 2B · 16-bit · 1010 MB ✓" (✓ = already downloaded); the full model ID is shown under the menu. Switching models keeps the current conversation, and the new model continues it with the same history. Picking a different model applies that model's recommended reply settings.
 
 ### Replies
 

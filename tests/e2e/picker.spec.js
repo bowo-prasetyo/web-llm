@@ -25,7 +25,7 @@ test.describe("on an 8 GB laptop", () => {
     check(tiers.length === 3 && tiers[0].includes("Qwen3.5 2B") && tiers[1].includes("Qwen3.5 4B") && tiers[2].includes("Qwen3.5 9B"), "coding picks: Qwen3.5 2B / 4B / 9B");
     check(tiers[1].includes("Recommended"), "Balanced recommended");
     await expect(page.locator(".picker-option.tier.active")).toContainText("Balanced");
-    check(tiers[0].includes("2.2 GB"), "download sizes shown");
+    check(tiers[0].includes("~1010 MB download"), "real download sizes shown (not GPU memory)");
     await expect(page.locator(".picker-device")).toContainText("16-bit GPU math supported");
 
     await page.click('button:has-text("Download & start")');

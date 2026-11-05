@@ -5,7 +5,7 @@
 //   degen / timeout   reply that collapsed into junk / timed out (no text)
 //   stopnow / fail    stopped before any text / engine error
 // The model lists are filled in from the real worker.js by the fixture.
-const { models: MODELS, altModels: ALT, sizes: SIZES } = __MODELS__;
+const { models: MODELS, altModels: ALT, sizes: SIZES, downloadSizes: DOWNLOADS } = __MODELS__;
 
 const MD = "Here is **bold** and `inline` code.\n\n```js\nfunction add(a, b) {\n  return a + b; // sum\n}\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nRaw <img src=x onerror=\"window.__xss=1\"> and <b>tag</b>.\n\n[bad](javascript:window.__xss=2) [good](https://example.com)\n\n- one\n- two";
 const THINK = "<think>\nLet me reason about **this** step by step.\n</think>\n\nThe answer is **42**.";
@@ -21,7 +21,7 @@ self.onmessage = async (event) => {
   const m = await mode();
 
   if (d.type === "init") {
-    postMessage({ type: "models", models: MODELS, altModels: ALT, sizes: SIZES });
+    postMessage({ type: "models", models: MODELS, altModels: ALT, sizes: SIZES, downloadSizes: DOWNLOADS });
     postMessage({ type: "diagnostics", webllmVersion: "0.2.84", webgpu: true, gpu: "test gpu", shaderF16: m.f16 !== false });
   }
 

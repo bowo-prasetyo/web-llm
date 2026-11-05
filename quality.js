@@ -29,6 +29,64 @@ export function countWords(text) {
   return words(text).length;
 }
 
+// ── Word salad ──────────────────────────────────────────────────────────
+// Broken 16-bit GPU math can also give random fragments from many languages:
+// "щёspflichtetat Output乡的zymyzymy … Sägeo扑救jetibre". Real text uses one
+// or two writing systems, and a word rarely mixes them (Chinese or Korean
+// with an English term, like "使用Python", is the common exception).
+const SCRIPTS = [
+  ["Latin", /\p{Script=Latin}/u],
+  ["Cyrillic", /\p{Script=Cyrillic}/u],
+  ["Greek", /\p{Script=Greek}/u],
+  ["Arabic", /\p{Script=Arabic}/u],
+  ["Hebrew", /\p{Script=Hebrew}/u],
+  ["Devanagari", /\p{Script=Devanagari}/u],
+  ["Bengali", /\p{Script=Bengali}/u],
+  ["Tamil", /\p{Script=Tamil}/u],
+  ["Thai", /\p{Script=Thai}/u],
+  ["Hangul", /\p{Script=Hangul}/u],
+  ["CJK", /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u],
+  ["Armenian", /\p{Script=Armenian}/u],
+  ["Georgian", /\p{Script=Georgian}/u],
+  ["Ethiopic", /\p{Script=Ethiopic}/u],
+];
+
+// The writing systems in a piece of text, e.g. Set {"Latin", "CJK"}
+export function scriptsIn(text) {
+  const found = new Set();
+  for (const [name, re] of SCRIPTS) if (re.test(text)) found.add(name);
+  return found;
+}
+
+// A word that mixes writing systems in a way real text doesn't: any mix
+// except a CJK or Hangul word with Latin letters in it.
+function mixedWord(word) {
+  const s = scriptsIn(word);
+  if (s.size < 2) return false;
+  if (s.size === 2 && s.has("Latin") && (s.has("CJK") || s.has("Hangul"))) return false;
+  return true;
+}
+
+// Writing systems and mixed-script words in (the end of) a text
+export function scriptStats(text, window = 120) {
+  const ws = words(text).slice(-window);
+  const scripts = new Set();
+  let mixed = 0;
+  for (const w of ws) {
+    scriptsIn(w).forEach(s => scripts.add(s));
+    if (mixedWord(w)) mixed++;
+  }
+  return { scripts: scripts.size, mixed };
+}
+
+// True when the end of a reply is word salad: 4+ writing systems and 3+
+// words that mix them. A legitimate multilingual answer ("Hello in five
+// languages") has many scripts but keeps each word in one.
+export function looksLikeWordSalad(text, { window = 120, minScripts = 4, minMixed = 3 } = {}) {
+  const { scripts, mixed } = scriptStats(text, window);
+  return scripts >= minScripts && mixed >= minMixed;
+}
+
 // True when a reply has streamed many pieces but shows almost nothing:
 // blank lines, control characters or tags instead of text. `pieces` is the
 // number of streamed pieces (about one per token); real text, even code,
@@ -55,6 +113,11 @@ export function checkSample(text) {
   const all = words(text);
   if (all.length === 0) {
     return { ok: false, reason: "no words" };
+  }
+  // A greeting in 3+ writing systems, or with words mixing them, is salad
+  const { scripts, mixed } = scriptStats(text);
+  if (scripts >= 3 || mixed >= 2) {
+    return { ok: false, reason: "mixed scripts" };
   }
   if (all.length >= 6) {
     const counts = new Map();

@@ -32,7 +32,7 @@ No.
 It runs, but phones have little memory for the AI, so many can only run the Tiny models, whose answers are very limited. Phones with plenty of memory can run Llama 3.2 1B (choose **Fast**). If a model is too big, the page closes and the app suggests a smaller one next time; see [Phones](06-models.md#phones). You need a browser with WebGPU: Safari on iOS 17 or newer, or a recent Chrome on Android. For the best answers, use a computer.
 
 **Why is the first start so slow?**
-The first time, the app downloads an AI model, often 1.6 GB or more. After that it loads from your device in seconds.
+The first time, the app downloads an AI model, often 0.4–2 GB. After that it loads from your device in seconds.
 
 **Can I use it without internet?**
 Yes, once the app and a model are downloaded. See [Offline use](08-offline-and-backup.md#use-the-app-offline).

@@ -14,7 +14,7 @@ import {
 
 import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
-import { looksDegenerate, looksInvisible, countWords, checkSample, findRepeatLoop } from "./quality.js";
+import { looksDegenerate, looksInvisible, looksLikeWordSalad, countWords, checkSample, findRepeatLoop } from "./quality.js";
 import { fitToContext, estimateTokens } from "./context.js";
 import { friendlyError } from "./storage.js";
 import { timeLimitReason, withTimeLimits, wordCount, measureSpeed } from "./pace.js";
@@ -40,8 +40,9 @@ function getSystemPrompt() {
 
 const SMALLEST_MODEL = "SmolLM2-360M-Instruct-q4f32_1-MLC";
 
-// Approximate download sizes (MB) for first-time download confirmation.
-// Derived from VRAM footprints in the WebLLM model registry.
+// GPU memory each model needs (MB), from the WebLLM model registry
+// (vram_required_MB). Used for memory decisions: crash suggestions, phones.
+// Not the download size: see DOWNLOAD_SIZES_MB.
 const MODEL_SIZES_MB = {
   // Newer models (all supported by WebLLM 0.2.84)
   "Qwen3.5-0.8B-q4f16_1-MLC":                     1629,
@@ -138,12 +139,90 @@ const F32_ALTERNATIVES_MB = {
 const ALT_MODELS = Object.keys(F32_ALTERNATIVES_MB);
 Object.assign(MODEL_SIZES_MB, F32_ALTERNATIVES_MB);
 
+// Download size of each model's weights (MB): the sum of its weight files
+// on Hugging Face (ndarray-cache.json / tensor-cache.json), measured
+// 2026-11-05. The tokenizer and model library add a few MB. Shown wherever
+// the app talks about downloading or storage.
+const DOWNLOAD_SIZES_MB = {
+  "SmolLM2-135M-Instruct-q0f32-MLC":               257,
+  "SmolLM2-360M-Instruct-q4f32_1-MLC":             194,
+  "SmolLM2-360M-Instruct-q0f32-MLC":               690,
+  "Qwen3.5-0.8B-q4f16_1-MLC":                      404,
+  "Qwen3.5-0.8B-q4f32_1-MLC":                      404,
+  "Qwen2.5-0.5B-Instruct-q4f16_1-MLC":             265,
+  "Qwen2.5-0.5B-Instruct-q4f32_1-MLC":             265,
+  "Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC":       265,
+  "Qwen3-0.6B-q4f16_1-MLC":                        320,
+  "gemma3-1b-it-q4f16_1-MLC":                      537,
+  "OLMo-2-0425-1B-Instruct-q4f16_1-MLC":           797,
+  "OLMo-2-0425-1B-Instruct-q4f32_1-MLC":           797,
+  "TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC":          590,
+  "Llama-3.2-1B-Instruct-q4f16_1-MLC":             663,
+  "Llama-3.2-1B-Instruct-q4f32_1-MLC":             663,
+  "SmolLM2-1.7B-Instruct-q4f16_1-MLC":             918,
+  "SmolLM2-1.7B-Instruct-q4f32_1-MLC":             918,
+  "Qwen3-1.7B-q4f16_1-MLC":                        923,
+  "stablelm-2-zephyr-1_6b-q4f16_1-MLC":            883,
+  "Qwen2.5-1.5B-Instruct-q4f16_1-MLC":             828,
+  "Qwen2.5-1.5B-Instruct-q4f32_1-MLC":             828,
+  "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC":       828,
+  "Qwen2.5-Math-1.5B-Instruct-q4f16_1-MLC":        828,
+  "Qwen3.5-2B-q4f16_1-MLC":                        1010,
+  "Qwen3.5-2B-q4f32_1-MLC":                        1010,
+  "Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC": 1840,
+  "Ministral-3-3B-Instruct-2512-BF16-q4f32_1-MLC": 1840,
+  "Qwen3.5-4B-q4f16_1-MLC":                        2257,
+  "Qwen3.5-4B-q4f32_1-MLC":                        2257,
+  "gemma-2-2b-it-q4f16_1-MLC":                     1403,
+  "gemma-2-2b-it-q4f32_1-MLC":                     1403,
+  "Llama-3.2-3B-Instruct-q4f16_1-MLC":             1724,
+  "Llama-3.2-3B-Instruct-q4f32_1-MLC":             1724,
+  "Hermes-3-Llama-3.2-3B-q4f16_1-MLC":             1724,
+  "Qwen2.5-3B-Instruct-q4f16_1-MLC":               1656,
+  "Qwen2.5-3B-Instruct-q4f32_1-MLC":               1656,
+  "Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC":         1656,
+  "Qwen3-4B-q4f16_1-MLC":                          2158,
+  "Phi-4-mini-instruct-q4f16_1-MLC":               2058,
+  "Phi-4-mini-instruct-q4f32_1-MLC":               2058,
+  "Phi-3.5-mini-instruct-q4f16_1-MLC":             2050,
+  "Phi-3.5-mini-instruct-q4f32_1-MLC":             2050,
+  "Qwen3.5-9B-q4f16_1-MLC":                        4805,
+  "Qwen3.5-9B-q4f32_1-MLC":                        4805,
+  "Qwen2.5-7B-Instruct-q4f16_1-MLC":               4086,
+  "Qwen2.5-7B-Instruct-q4f32_1-MLC":               4086,
+  "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC":         4086,
+  "Qwen3-8B-q4f16_1-MLC":                          4394,
+  "Llama-3.1-8B-Instruct-q4f16_1-MLC":             4308,
+  "Llama-3.1-8B-Instruct-q4f32_1-MLC":             4308,
+  "Hermes-3-Llama-3.1-8B-q4f16_1-MLC":             4308,
+  "Mistral-7B-Instruct-v0.3-q4f32_1-MLC":          3889,
+  "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC":       4086,
+  "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC":      4308,
+  "gemma-2-9b-it-q4f16_1-MLC":                     4958,
+  "Qwen2.5-Coder-0.5B-Instruct-q4f32_1-MLC":       265,
+  "Qwen3-0.6B-q4f32_1-MLC":                        320,
+  "Qwen3-1.7B-q4f32_1-MLC":                        923,
+  "stablelm-2-zephyr-1_6b-q4f32_1-MLC":            883,
+  "Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC":       828,
+  "Qwen2.5-Math-1.5B-Instruct-q4f32_1-MLC":        828,
+  "Hermes-3-Llama-3.2-3B-q4f32_1-MLC":             1724,
+  "Qwen2.5-Coder-3B-Instruct-q4f32_1-MLC":         1656,
+  "Qwen3-4B-q4f32_1-MLC":                          2158,
+  "Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC":         4086,
+  "Qwen3-8B-q4f32_1-MLC":                          4394,
+  "Hermes-3-Llama-3.1-8B-q4f32_1-MLC":             4308,
+  "DeepSeek-R1-Distill-Qwen-7B-q4f32_1-MLC":       4086,
+  "DeepSeek-R1-Distill-Llama-8B-q4f32_1-MLC":      4308,
+  "gemma-2-9b-it-q4f32_1-MLC":                     4958,
+};
+
 function modelsMessage() {
   return {
     type: "models",
     models: AVAILABLE_MODELS,
     altModels: ALT_MODELS,
     sizes: MODEL_SIZES_MB,
+    downloadSizes: DOWNLOAD_SIZES_MB,
   };
 }
 
@@ -738,9 +817,9 @@ async function runModelCheck() {
     const checkStart = Date.now();
     const reply = await engine.chat.completions.create({
       messages: [{ role: "user", content: "Say hello in one short sentence." }],
-      max_tokens: 12,
+      max_tokens: 24, // enough for junk to show, still quick
       temperature: 0,
-      ...thinkingOptions(true), // 12 tokens: no room for reasoning
+      ...thinkingOptions(true), // a short sample: no room for reasoning
     });
     const sample = reply.choices?.[0]?.message?.content || "";
     const verdict = checkSample(sample);
@@ -857,7 +936,7 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
   // Check the reply so far; true when streaming must stop.
   const guard = () => {
     const full = head + text;
-    if (looksDegenerate(full) || looksInvisible(text, chunks)) {
+    if (looksDegenerate(full) || looksInvisible(text, chunks) || looksLikeWordSalad(full)) {
       result.degenerate = true;
       return true;
     }

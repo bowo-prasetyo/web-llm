@@ -1,8 +1,8 @@
 // quality.js: junk detection (model check, collapsed replies) and the
 // repeated-sentence guard.
 import { test, expect } from "@playwright/test";
-import { checkSample, looksDegenerate, findRepeatLoop, visibleText, countWords, looksInvisible } from "../../quality.js";
-import { LOOPING_REPLY } from "../support/mock-webllm.js";
+import { checkSample, looksDegenerate, findRepeatLoop, visibleText, countWords, looksInvisible, looksLikeWordSalad, scriptStats, scriptsIn } from "../../quality.js";
+import { LOOPING_REPLY, SALAD } from "../support/mock-webllm.js";
 
 test.describe("checkSample (model check after loading)", () => {
   test("rejects the broken 16-bit GPU output", () => {
@@ -83,5 +83,39 @@ test.describe("invisible output", () => {
   test("the model check fails output that shows nothing", () => {
     expect(checkSample("\n\n<|im_start|>\n<|im_start|>\n").ok).toBe(false);
     expect(checkSample("Hello there, nice to meet you!").ok).toBe(true);
+  });
+});
+
+test.describe("word salad", () => {
+  test("the real salad from a broken 16-bit GPU is caught", () => {
+    expect(looksLikeWordSalad(SALAD)).toBe(true);
+    expect(checkSample(SALAD.slice(0, 90)).ok).toBe(false);
+  });
+
+  test("normal answers in one or two writing systems are fine", () => {
+    expect(looksLikeWordSalad("The rain falls from clouds when water droplets grow heavy. ".repeat(5))).toBe(false);
+    // Chinese and Korean with English terms mixed into words
+    expect(looksLikeWordSalad("使用Python可以很容易地处理数据。我们用API获取结果，然后用JSON保存。".repeat(4))).toBe(false);
+    expect(looksLikeWordSalad("Python으로 API를 호출하고 JSON을 저장합니다. ".repeat(4))).toBe(false);
+    expect(looksLikeWordSalad("Привет! Это ответ на русском языке, совсем обычный. ".repeat(4))).toBe(false);
+  });
+
+  test("a multilingual answer keeps each word in one script, so it isn't salad", () => {
+    const hello = "Hello in five languages: Japanese こんにちは, Russian Привет, Arabic مرحبا, Korean 안녕하세요, Greek Γειά σου, Thai สวัสดี.";
+    expect(scriptStats(hello).scripts).toBeGreaterThanOrEqual(4);
+    expect(looksLikeWordSalad(hello)).toBe(false);
+  });
+
+  test("the model check accepts a normal greeting, also with a second script", () => {
+    expect(checkSample("Hello! How can I help you today?").ok).toBe(true);
+    expect(checkSample("Hello! 你好！How can I help?").ok).toBe(true);
+    expect(checkSample("Hi щёspflichtetat Output乡的zymy").ok).toBe(false);
+  });
+
+  test("scripts are recognised", () => {
+    expect([...scriptsIn("abc")]).toEqual(["Latin"]);
+    expect([...scriptsIn("щё")]).toEqual(["Cyrillic"]);
+    expect([...scriptsIn("こんにちは漢字")]).toEqual(["CJK"]);
+    expect([...scriptsIn("Sägeo扑救")].sort()).toEqual(["CJK", "Latin"]);
   });
 });

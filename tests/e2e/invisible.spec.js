@@ -19,8 +19,8 @@ async function start(page, items = {}) {
   await expect(page.locator(".status-bar")).toContainText("Model loaded successfully");
 }
 
-for (const kind of ["blank", "tags"]) {
-  test(`a reply of invisible ${kind} output is stopped early and explained`, async ({ page }) => {
+for (const kind of ["blank", "tags", "salad"]) {
+  test(`a reply of ${kind} junk is stopped early and explained`, async ({ page }) => {
     await start(page);
     // Watch the word counter while it streams
     await page.evaluate(() => {
@@ -35,8 +35,10 @@ for (const kind of ["blank", "tags"]) {
     await expect(lastReply(page)).toContainText("collapsed into repeated words or unreadable output");
     await expect(page.locator('.modal-title:has-text("may not work on your GPU")')).toBeVisible();
     await expect(page.locator(".health-suggestion")).toContainText("32-bit");
-    const counts = await page.evaluate(() => window.__counts);
-    check(counts.every(n => n === 0), `the counter never counts invisible output (saw ${counts.slice(-3)})`);
+    if (kind !== "salad") {
+      const counts = await page.evaluate(() => window.__counts);
+      check(counts.every(n => n === 0), `the counter never counts invisible output (saw ${counts.slice(-3)})`);
+    }
   });
 }
 
@@ -47,4 +49,13 @@ test("the model check after loading fails invisible output", async ({ page }) =>
   await page.selectOption(".model-select", Q16); // not checked here yet
   await expect(page.locator('.modal-title:has-text("doesn\'t work on your GPU")')).toBeVisible();
   expect((await readStorage(page, "webllm-model-health"))[Q16].ok).toBe(false);
+});
+
+test("the model check after loading fails word salad", async ({ page }) => {
+  await start(page, { "webllm-settings": { model: Q32, settingsVersion: 2 }, "webllm-model-health": { [Q32]: { ok: true } } });
+  await page.evaluate(() => new BroadcastChannel("mock-engine").postMessage({ kind: "check-salad" }));
+  await sleep(100);
+  await page.selectOption(".model-select", Q16);
+  await expect(page.locator('.modal-title:has-text("doesn\'t work on your GPU")')).toBeVisible();
+  expect((await readStorage(page, "webllm-model-health"))[Q16]).toMatchObject({ ok: false, reason: "mixed scripts" });
 });

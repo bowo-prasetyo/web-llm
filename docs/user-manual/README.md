@@ -36,7 +36,7 @@ New to the app? Read these two first. Together they take about five minutes.
 ## The app in 30 seconds
 
 * **Private.** The AI runs on your own device's graphics chip (GPU). Your messages, chats and files stay in your browser.
-* **One download, then it's yours.** The first time, the app downloads an AI model (about 1.6 GB or more). After that it starts from your device, even offline.
+* **One download, then it's yours.** The first time, the app downloads an AI model (about 0.4 GB or more). After that it starts from your device, even offline.
 * **Choose a style.** Personas make the assistant chattier, shorter, better at writing, or better at code.
 * **Bring your documents.** Attach a file to a chat and ask questions about it.
 * **Keep your chats.** Every chat is saved automatically. Search them, export them, and import them on another device.

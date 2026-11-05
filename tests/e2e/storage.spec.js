@@ -28,7 +28,7 @@ test("the picker warns when a model won't fit", async ({ page }) => {
 
 test("a normal window low on disk space gets the disk-space hint", async ({ page }) => {
   await page.addInitScript(() => {
-    navigator.storage.estimate = async () => ({ quota: 3000 * 1048576, usage: 0 });
+    navigator.storage.estimate = async () => ({ quota: 2000 * 1048576, usage: 0 });
   });
   await seedStorage(page, {});
   await page.goto("/");
@@ -50,7 +50,8 @@ test("the download question warns too", async ({ page }) => {
   await expect(page.locator(".status-bar")).toContainText("Model loaded successfully");
   await page.selectOption(".model-select", Q08);
   await expect(page.locator(".confirm-dialog")).toContainText("Download Model?");
-  await expect(page.locator(".confirm-dialog")).toContainText("this model needs 1.8 GB");
+  await expect(page.locator(".confirm-dialog")).toContainText("this model needs 404 MB");
+  await expect(page.locator(".confirm-dialog")).toContainText("About 404 MB will be downloaded");
 });
 
 test("no warning when there is room", async ({ page }) => {

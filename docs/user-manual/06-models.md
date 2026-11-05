@@ -15,12 +15,14 @@ The **model** is the AI that writes the replies. Hearth offers 55 open models, f
 
 Model sizes are measured in **parameters**, written like *0.8B* or *9B* (B = billion). More parameters usually means a smarter model, but also a bigger download and slower replies.
 
-| Size | Download | Speed | Answer quality | Runs on |
-|---|---|---|---|---|
-| Tiny (under 1B) | ~0.6–2 GB | Fastest | Basic; may get facts wrong | Most phones, older laptops |
-| Small (1–2B) | ~0.7–2.6 GB | Fast | Good for everyday tasks | Most laptops; phones with plenty of memory |
-| Mid (3–4B) | ~2.2–5.4 GB | Moderate | Noticeably better | Laptops with a good GPU |
-| Large (7–9B) | ~4.8–7.4 GB | Slower | Best available here | Computers with a dedicated graphics card (6 GB+ video memory) |
+| Size | Download | GPU memory needed | Speed | Answer quality | Runs on |
+|---|---|---|---|---|---|
+| Tiny (under 1B) | ~0.2–0.7 GB | ~0.6–1.9 GB | Fastest | Basic; may get facts wrong | Most phones, older laptops |
+| Small (1–2B) | ~0.5–1.4 GB | ~0.7–2.6 GB | Fast | Good for everyday tasks | Most laptops; phones with plenty of memory |
+| Mid (3–4B) | ~1.6–2.3 GB | ~2.2–5.4 GB | Moderate | Noticeably better | Laptops with a good GPU |
+| Large (7–9B) | ~3.8–4.9 GB | ~4.8–7.4 GB | Slower | Best available here | Computers with a dedicated graphics card (6 GB+ video memory) |
+
+A model needs more GPU memory while it runs than its download size, up to about four times as much for the smallest ones. Memory, not the download, is what decides whether a model runs on your device.
 
 ## Phones
 
@@ -58,13 +60,13 @@ The **model menu** is in the toolbar (and also in **Settings → Model**). Model
 
 Each entry reads like this:
 
-> **Qwen3.5 2B · 16-bit · 2.2 GB ✓**
+> **Qwen3.5 2B · 16-bit · 1010 MB ✓**
 
 | Part | Meaning |
 |---|---|
 | Qwen3.5 2B | The model's name and size |
 | 16-bit / 32-bit | The type of math the model uses on your GPU (see below) |
-| 2.2 GB | Approximate download size |
+| 1010 MB | Download size |
 | ✓ | Already downloaded to this device |
 | ⚠ | May not work on this device (see below) |
 

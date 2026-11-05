@@ -23,5 +23,6 @@ export function workerModels() {
   const sizes = literal(src, "const MODEL_SIZES_MB", "{", "}");
   const alternatives = literal(src, "const F32_ALTERNATIVES_MB", "{", "}");
   const models = literal(src, "const AVAILABLE_MODELS", "[", "]");
-  return { models, altModels: Object.keys(alternatives), sizes: { ...sizes, ...alternatives } };
+  const downloadSizes = literal(src, "const DOWNLOAD_SIZES_MB", "{", "}");
+  return { models, altModels: Object.keys(alternatives), sizes: { ...sizes, ...alternatives }, downloadSizes };
 }

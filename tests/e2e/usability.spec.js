@@ -72,9 +72,9 @@ test.describe("download progress", () => {
 test("model menus use readable names; the ID stays the value", async ({ page }) => {
   await ready(page);
   const option = page.locator(`.model-select option[value="${M}"]`);
-  await expect(option).toHaveText(/^Qwen3\.5 2B · 16-bit · \d+(\.\d)? GB ✓$/);
+  await expect(option).toHaveText(/^Qwen3\.5 2B · 16-bit · 1010 MB ✓$/);
   const other = page.locator(`.model-select option[value="${BIG}"]`);
-  await expect(other).toHaveText(/^Qwen2\.5 7B · 16-bit · \d+(\.\d)? GB$/);
+  await expect(other).toHaveText(/^Qwen2\.5 7B · 16-bit · 4\.0 GB$/);
   const texts = await page.locator(".model-select option").allTextContents();
   check(!texts.some(t => /MLC|q4f16|Instruct/.test(t)), "no raw IDs in the menu");
 

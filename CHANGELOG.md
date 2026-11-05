@@ -18,7 +18,7 @@ The first release: Hearth, a private AI chat that lives in your browser.
 - Replies stream in and are formatted: headings, lists, tables, links, and highlighted code with a Copy button.
 - Copy any reply; regenerate or retry the last one; Stop at any time.
 - A reply cut off by its length limit, or one that stops making progress, ends with a note and a **Continue** button.
-- Replies that collapse into junk (including output that shows nothing, such as blank lines or invisible characters) or keep repeating a sentence are stopped and explained; the word counter counts only words you can see.
+- Replies that collapse into junk (including word salad from many languages, and output that shows nothing, such as blank lines or invisible characters) or keep repeating a sentence are stopped and explained; the word counter counts only words you can see.
 - Reasoning models (Qwen3, Qwen3.5 with thinking on, DeepSeek-R1) show their reasoning folded away as "Thought process".
 
 ### Personas
@@ -34,7 +34,7 @@ The first release: Hearth, a private AI chat that lives in your browser.
 - Shows how fast the model writes on your device, and suggests a smaller one when it's slow.
 - Honest about small models: they often get facts wrong, and the app says so.
 - The tiniest models (SmolLM2 135M and 360M, and TinyLlama) are kept for testing, last in the model menu under "Tiny (for testing; very limited answers)".
-- Download progress with time left and Cancel; downloaded models are marked ✓.
+- Download progress with time left and Cancel; downloaded models are marked ✓. Sizes shown are real download sizes (the GPU memory a model needs is larger and used only for memory decisions).
 
 ### Chats and documents
 - Multiple chats, saved automatically in the browser (IndexedDB), with search across all of them.

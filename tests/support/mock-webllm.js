@@ -19,14 +19,21 @@ let storageFull = false;
 // { kind: "check-blank" }: the short model check after loading gets
 // invisible output, as on a GPU with broken 16-bit math.
 let checkBlank = false;
+// { kind: "check-salad" }: the model check gets word salad instead.
+let checkSalad = false;
 bc.onmessage = e => {
   if (e.data?.kind === "check-blank") { checkBlank = true; return; }
+  if (e.data?.kind === "check-salad") { checkSalad = true; return; }
   if (e.data?.kind === "storage-full") { storageFull = true; return; }
   if (e.data?.kind === "gpu-back") { alwaysLost = false; return; }
   if (e.data?.kind !== "lose-gpu") return;
   engines.forEach(en => { en.disposed = true; });
   if (e.data.always) alwaysLost = true;
 };
+
+// Real output of Qwen3.5 0.8B (16-bit) on an Intel GPU with broken 16-bit
+// math: word salad from many languages.
+export const SALAD = "klekleklemoc Schle::__otionzeichen!».. щёspflichtetat Output乡的zymyzymyикиратаimismo shootout除外vezvez電子報ocitiessequently Writesмом resumeändigenvez!), antik和提高icielenessenesseness#وندهونده何等十足的ifico址**”,iennesceaulienouroνή*”,甚ournal新生的;** laboratories Cole不回的一天’Tizouбльecuvillakungaceaədابع暂未ологияolasingsepend方式来opo악kejمجitesteingoul:datalb比较高比较高的quio={}reakgeegee쾌urvnov’Tjeroumd boreprobeímiouliv臥essesesses consentingackeriousarily对她äuäu? oudrerikziu情有情有крытие’**’uisse rast']: scel使用的是 corta点是 hingfüorsch ômmeinuitefluenceedeutól сердечноtiles...* 'ificareibs輔élé味的ledeslings íжоocas gelegilan Sägeo扑救jetibremечиcheonduct";
 
 // A real reply from Qwen2.5-Coder-0.5B that repeats itself (and contains
 // seams from the old automatic continuation), for the repeat guard.
@@ -39,6 +46,7 @@ function script(lastUser) {
   // Junk that shows nothing on screen (broken 16-bit GPU math)
   if (lastUser === "blank") return { pieces: Array(120).fill("\n"), finish: "stop", delay: 5 };
   if (lastUser === "tags") return { pieces: Array(120).fill("<|im_start|>"), finish: "stop", delay: 5 };
+  if (lastUser === "salad") return { text: SALAD, finish: "stop", delay: 5 };
   if (lastUser === "junk") return { text: " outer".repeat(60), finish: "stop" };
   if (lastUser === "slow") return { text: "word ".repeat(200), finish: "stop", delay: 60 };
   // A few words, then nothing until interrupted (a stuck GPU)
@@ -68,7 +76,7 @@ export async function CreateMLCEngine(model, engineConfig, chatOpts) {
       if (state.disposed) throw new Error("The current Object has already been disposed");
       const lastUser = [...req.messages].reverse().find(m => m.role === "user")?.content || "";
       bc.postMessage({ kind: "request", stream: !!req.stream, max_tokens: req.max_tokens, messages: req.messages, extra_body: req.extra_body || null });
-      if (!req.stream) return { choices: [{ message: { content: checkBlank ? "\n\n<|im_start|>\n<|im_start|>\n\n" : "Hello there, nice to meet you!" } }] };
+      if (!req.stream) return { choices: [{ message: { content: checkBlank ? "\n\n<|im_start|>\n<|im_start|>\n\n" : checkSalad ? SALAD.slice(0, 90) : "Hello there, nice to meet you!" } }] };
       const s = script(lastUser);
       interrupted = false;
       const pieces = s.pieces || s.text.match(/\S+\s*|\s+/g) || [];

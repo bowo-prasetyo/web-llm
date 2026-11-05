@@ -20,6 +20,7 @@ import {
 } from "./picker.js";
 import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pace.js";
 import { APP_VERSION, problemReportUrl } from "./version.js";
+import { storageEstimate, spaceShortfall, requestPersistence, friendlyError } from "./storage.js";
 import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, recordCrash, lighterModel } from "./crash.js";
 
 const {
@@ -363,6 +364,38 @@ function timeLimitOverrides() {
   catch { return null; }
 }
 
+// ── Storage space ──────────────────────────────────────────────────────────
+// What the browser lets this site store ({ quotaMb, usageMb, persisted }),
+// refreshed before downloads. See storage.js.
+const sharedStorageInfo = vRef(null);
+async function refreshStorageInfo() {
+  const estimate = await storageEstimate();
+  let persisted = null;
+  try { persisted = navigator.storage?.persisted ? await navigator.storage.persisted() : null; } catch {}
+  sharedStorageInfo.value = estimate ? { ...estimate, persisted } : null;
+  return sharedStorageInfo.value;
+}
+refreshStorageInfo();
+
+// A warning when downloading `needMb` probably won't fit, or "".
+function spaceWarning(needMb) {
+  const short = spaceShortfall(sharedStorageInfo.value, needMb);
+  if (!short) return "";
+  const hint = sharedStorageInfo.value.quotaMb < 1024
+    ? "Private (incognito) windows have very little storage; use a normal window."
+    : "Free some disk space, or choose a smaller model.";
+  return `This browser lets this site store only about ${formatSize(short.availableMb) || "0 MB"} more, and this model needs ${formatSize(short.needMb)}. ${hint}`;
+}
+
+// After a model is downloaded, ask once per visit that the browser keep it
+// (not delete it when space runs low). The browser decides.
+let persistenceAsked = false;
+function keepDownloadedModels() {
+  if (persistenceAsked) return;
+  persistenceAsked = true;
+  requestPersistence().then(() => refreshStorageInfo());
+}
+
 // ── Page crashes (out of memory) ──────────────────────────────────────────
 // See crash.js. Checked once, as the page opens and before any model loads.
 const startupCrash = detectCrash(localStorage);    // { model, phase } or null
@@ -534,7 +567,7 @@ const APP_FILES = [
   "./index.html", "./app.js", "./worker.js", "./sw.js", "./style.css",
   "./personas.js", "./markdown.js", "./quality.js", "./context.js",
   "./picker.js", "./chatstore.js", "./attachments.js", "./pace.js",
-  "./version.js", "./crash.js",
+  "./version.js", "./crash.js", "./storage.js",
 ];
 const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
 const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
@@ -702,6 +735,7 @@ const Home = {
                   </span>
                   <span class="picker-model">{{ o.name }}</span>
                   <span class="picker-meta">{{ o.cached ? "Already downloaded" : (online ? "~" + (formatSize(o.sizeMb) || "?") + " download" : "Needs internet to download (~" + (formatSize(o.sizeMb) || "?") + ")") }}</span>
+                  <span v-if="o.space" class="picker-meta picker-crashed picker-space">⚠ {{ o.space }}</span>
                   <span v-if="o.crashed" class="picker-meta picker-crashed">⚠ Crashed on this device (not enough memory?)</span>
                   <span class="picker-desc">{{ o.desc }}</span>
                 </span>
@@ -1394,6 +1428,7 @@ const Home = {
     function markModelCached(modelId) {
       const cached = getCachedModels();
       if (!cached.includes(modelId)) setCachedModels([...cached, modelId]);
+      keepDownloadedModels();
     }
 
     const settings = sharedSettings;
@@ -2141,7 +2176,7 @@ const Home = {
             if (tail.content && tail.content.trim()) tail.role = "assistant";
             else messages.value.pop();
           }
-          messages.value.push({ role: "assistant", content: "Error: " + data.text, isError: true });
+          messages.value.push({ role: "assistant", content: "Error: " + friendlyError(data.text), isError: true });
           scrollBottom();
           loading.value = false;
           status.value = "Something went wrong";
@@ -2432,6 +2467,7 @@ const Home = {
           current: id === lastAppliedModel.value,
           available: known.length === 0 || known.includes(id),
           crashed: !!sharedModelCrashes.value[id],
+          space: isModelCached(id) ? "" : spaceWarning(modelSizes.value[id] || 0),
         };
       }).filter(o => o.available);
     });
@@ -2440,6 +2476,7 @@ const Home = {
       pickerOptions.value.find(o => o.id === picker.value.tier) || null);
 
     function openPicker({ firstRun = false } = {}) {
+      refreshStorageInfo();
       const persona = settings.value.defaultPersona;
       const use = (USES.find(u => u.persona === persona) || USES[0]).id;
       picker.value = {
@@ -2522,11 +2559,14 @@ const Home = {
         if (sizeMb > 50) {
           const model = settings.value.model;
           const previousModel = lastAppliedModel.value;
+          await refreshStorageInfo();
+          const warning = spaceWarning(sizeMb);
           const ok = await askConfirm({
             icon: "⬇",
             title: "Download Model?",
             subject: modelShortName(model),
-            message: `About ${formatSize(sizeMb)} will be downloaded and kept in your browser. After that it loads from this device, also offline. You can cancel while it downloads.`,
+            message: `About ${formatSize(sizeMb)} will be downloaded and kept in your browser. After that it loads from this device, also offline. You can cancel while it downloads.` +
+              (warning ? ` ⚠ ${warning}` : ""),
             confirmText: "Download & Load",
           });
           // The choice changed meanwhile (another model was picked): leave it.
@@ -3634,6 +3674,10 @@ const Settings = {
               <span class="device-val" :class="{ warn: chatStorage.kind === 'localstorage' }">{{ chatStorageText }}</span>
             </div>
             <div class="device-row">
+              <span class="device-key">Storage</span>
+              <span class="device-val" :class="{ warn: storageInfo && storageInfo.quotaMb < 2048 }">{{ storageText }}</span>
+            </div>
+            <div class="device-row">
               <span class="device-key">Works offline</span>
               <span class="device-val" :class="{ warn: offlineReady === false }">{{ offlineText }}</span>
             </div>
@@ -3826,6 +3870,13 @@ const Settings = {
       forgetModelHealth: () => sharedForgetModelHealth(),
       openPicker: () => sharedOpenPicker(),
       offlineReady: sharedOfflineReady,
+      storageInfo: sharedStorageInfo,
+      storageText: Vue.computed(() => {
+        const s = sharedStorageInfo.value;
+        if (!s) return "Unknown";
+        const kept = s.persisted === true ? " · kept by the browser" : s.persisted === false ? " · may be cleared if space runs low" : "";
+        return `${formatSize(s.usageMb) || "0 MB"} used of about ${formatSize(s.quotaMb)} allowed${kept}`;
+      }),
       offlineText: Vue.computed(() => {
         if (!sharedSwSupported) return "Not supported in this browser";
         if (sharedOfflineReady.value === true) return "Yes, the app is saved on this device";

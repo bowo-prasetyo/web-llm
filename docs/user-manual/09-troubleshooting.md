@@ -37,7 +37,7 @@ Then tap **Try Again** on the error screen.
 
 1. **Check your connection.** Models are large (1–8 GB), so use Wi‑Fi if possible.
 2. **Keep the tab open** and your device awake until the download finishes.
-3. **Free up storage.** If your device is nearly full, the download can't be saved. See [Storage is full](#my-device-is-running-out-of-storage).
+3. **"Not enough storage space to download this model"?** In a **private (incognito) window** the browser allows only a little storage, far less than a model needs: open the app in a normal window. Otherwise free up space; see [Storage is full](#my-device-is-running-out-of-storage). The model picker and the **Download Model?** question warn you beforehand when a model probably won't fit, and **Settings → This device → Storage** shows how much the browser allows.
 4. **Try again.** Pick the model again from the model menu. If you cancelled earlier, you'll be asked to confirm the download again; that's normal.
 5. **Choose a smaller model** if your connection or storage is limited.
 
@@ -130,7 +130,7 @@ When a model is too big for the device's memory, the GPU stops working or the wh
 
 ## My device is running out of storage
 
-Downloaded models take the most space (often several gigabytes each).
+Downloaded models take the most space (often several gigabytes each). **Settings → This device → Storage** shows how much the app uses and how much the browser allows. After the first model loads, the app asks the browser to keep its storage, so models aren't deleted when space runs low; whether that's granted is up to the browser ("kept by the browser" in the same row).
 
 1. **Export your chats first:** **Settings → Export Chats**.
 2. In your browser's settings, find the site data for `bowo-prasetyo.github.io` and clear it. In Chrome: **Settings → Privacy and security → Site settings → View permissions and data stored across sites**.

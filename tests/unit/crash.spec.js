@@ -60,21 +60,41 @@ test("a model that works again is forgotten", () => {
 const SIZES = {
   [Q08]: 1894, "Qwen3.5-0.8B-q4f16_1-MLC": 1629,
   "Llama-3.2-1B-Instruct-q4f32_1-MLC": 1129, "Llama-3.2-1B-Instruct-q4f16_1-MLC": 879,
+  "gemma3-1b-it-q4f16_1-MLC": 711,
   "Qwen2.5-0.5B-Instruct-q4f32_1-MLC": 1060, "Qwen2.5-0.5B-Instruct-q4f16_1-MLC": 945,
   "SmolLM2-360M-Instruct-q4f32_1-MLC": 580, "Qwen3.5-2B-q4f32_1-MLC": 2592,
+  "TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC": 840,
 };
 const ALL = Object.keys(SIZES);
 
-test("the lighter model needs at most 60% of the memory, in the same precision", () => {
+test("the lighter model is the best one needing at most 85% of the memory, same precision first", () => {
   expect(lighterModel(Q08, SIZES, ALL)).toBe("Llama-3.2-1B-Instruct-q4f32_1-MLC");
   expect(lighterModel("Qwen3.5-0.8B-q4f16_1-MLC", SIZES, ALL)).toBe("Llama-3.2-1B-Instruct-q4f16_1-MLC");
   expect(lighterModel("Qwen3.5-2B-q4f32_1-MLC", SIZES, ALL)).toBe("Llama-3.2-1B-Instruct-q4f32_1-MLC");
 });
 
+test("crashes on a phone step down one size at a time, to SmolLM2", () => {
+  // What happened on an Android phone: Llama 3.2 1B, then Gemma 3 1B closed the page
+  const crashes = {};
+  let model = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+  const steps = [];
+  while (model) {
+    crashes[model] = { phase: "loading" };
+    model = lighterModel(model, SIZES, ALL, crashes);
+    if (model) steps.push(model);
+  }
+  expect(steps).toEqual(["gemma3-1b-it-q4f16_1-MLC", "SmolLM2-360M-Instruct-q4f32_1-MLC"]);
+  expect(lighterModel("TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC", SIZES, ALL)).toBe("SmolLM2-360M-Instruct-q4f32_1-MLC");
+});
+
+test("after a 32-bit crash only 32-bit models are suggested", () => {
+  // Gemma 3 1B is 16-bit only, and 16-bit may be what fails here
+  expect(lighterModel("Llama-3.2-1B-Instruct-q4f32_1-MLC", SIZES, ALL)).toBe("SmolLM2-360M-Instruct-q4f32_1-MLC");
+});
+
 test("models that crashed here are skipped; the smallest have no lighter one", () => {
   const crashes = { "Llama-3.2-1B-Instruct-q4f32_1-MLC": { phase: "loading" } };
   expect(lighterModel(Q08, SIZES, ALL, crashes)).toBe("Qwen2.5-0.5B-Instruct-q4f32_1-MLC");
-  expect(lighterModel("Llama-3.2-1B-Instruct-q4f32_1-MLC", SIZES, ALL)).toBe("SmolLM2-360M-Instruct-q4f32_1-MLC");
   expect(lighterModel("SmolLM2-360M-Instruct-q4f32_1-MLC", SIZES, ALL)).toBe("");
   expect(lighterModel("Unknown-q4f32_1-MLC", SIZES, ALL)).toBe("");
 });

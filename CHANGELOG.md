@@ -39,6 +39,7 @@ The first release: a private AI chat that runs entirely in your browser.
 - After a GPU crash the app never switches models by itself: the reply so far is kept, and the same dialog explains and offers a lighter model.
 - Remembers when a model closed the page (usually out of memory on phones): it isn't loaded again automatically, a lighter model is offered, and the model menu marks it.
 - On phones the picker's Fast choice is Llama 3.2 1B, which needs about 1 GB of GPU memory.
+- After a crash the app suggests the next smaller model (Llama 3.2 1B → Gemma 3 1B → SmolLM2 360M), and the picker tells phone users that many phones can only run the Tiny models.
 - Light and dark themes, following the device or chosen in Settings.
 - Keyboard and screen-reader friendly; docked chat list on wide screens, a drawer on phones.
 - Fonts are served with the app: nothing is requested from third parties except the model and library downloads.

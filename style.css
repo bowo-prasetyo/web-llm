@@ -2300,3 +2300,15 @@ a.action-btn { text-decoration: none; display: inline-block; }
 /* After a page crash: three choices, wrapping on phones */
 .crash-actions { flex-wrap: wrap; }
 .picker-crashed { color: var(--amber-text); }
+
+/* Model picker on phones: memory is the limit */
+.picker-phone-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--amber-text);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+  line-height: 1.45;
+}

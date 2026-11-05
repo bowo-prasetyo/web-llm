@@ -29,7 +29,7 @@ export const USES = [
 ];
 
 export const TIERS = [
-  { id: "fast",     title: "Fast",     desc: "Quickest replies, smallest download, fine on phones. More likely to get facts wrong." },
+  { id: "fast",     title: "Fast",     desc: "Quickest replies, smallest download. More likely to get facts wrong." },
   { id: "balanced", title: "Balanced", desc: "Noticeably better answers. Best for most laptops." },
   { id: "smart",    title: "Smart",    desc: "Best answers, large download. Needs a strong GPU (4–8 GB)." },
 ];
@@ -87,6 +87,7 @@ export function friendlyModelName(id) {
   return (id || "")
     .replace(/-q\d+f\d+(_\d+)?-MLC$/, "")
     .replace(/-(instruct|it|chat)(?=-|$)/gi, "")
+    .replace(/-v1\.0(?=-|$)/i, "")            // TinyLlama "v1.0" tells people nothing
     .replace(/-(BF16|bf16)(?=-|$)/g, "")
     .replace(/-\d{4}(?=-|$)/g, "")            // release dates: 2512, 0425
     .replace(/(\d+)_(\d+)b$/i, "$1.$2B")     // 1_6b -> 1.6B

@@ -680,6 +680,9 @@ const Home = {
           <template v-else>
             <h2 class="modal-title" id="picker-title">Pick a size</h2>
             <p class="picker-device">{{ deviceSummary }}</p>
+            <p v-if="pickerOnPhone" class="picker-phone-note" role="note">
+              On phones, larger models often close the page because the phone runs out of memory. If that happens, the app offers a smaller one. Many phones can only run the Tiny models, whose answers are very limited.
+            </p>
             <div class="picker-options">
               <button
                 v-for="o in pickerOptions"
@@ -2402,6 +2405,8 @@ const Home = {
       return !f16Problem();
     }
 
+    const pickerOnPhone = computed(() => deviceInfo().mobile);
+
     const deviceSummary = computed(() => {
       const { mobile, memoryGB } = deviceInfo();
       const parts = [mobile ? "Phone or tablet" : "Computer"];
@@ -3307,6 +3312,7 @@ const Home = {
       pickerOptions,
       selectedPick,
       deviceSummary,
+      pickerOnPhone,
       formatSize,
       openPicker,
       chooseUse,

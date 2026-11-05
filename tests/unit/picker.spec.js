@@ -52,6 +52,8 @@ test("friendly model names", () => {
   expect(friendlyModelName("gemma3-1b-it-q4f16_1-MLC")).toBe("Gemma 3 1B");
   expect(friendlyModelName("gemma-2-9b-it-q4f16_1-MLC")).toBe("Gemma 2 9B");
   expect(friendlyModelName("SmolLM2-135M-Instruct-q0f32-MLC")).toBe("SmolLM2 135M");
+  expect(friendlyModelName("TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC")).toBe("TinyLlama 1.1B");
+  expect(friendlyModelName("Mistral-7B-Instruct-v0.3-q4f16_1-MLC")).toBe("Mistral 7B v0.3");
 });
 
 test("every model has a readable, distinct label", () => {

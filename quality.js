@@ -5,12 +5,38 @@
 // Shared by worker.js (model check after loading, guard while streaming)
 // and testable on its own. No DOM access.
 
-// Words: runs of letters/digits/apostrophes in any script.
-function words(text) {
+// What would actually show on screen: without special tokens like
+// "<|im_start|>", HTML-like tags (removed when the reply is rendered) and
+// control characters. GPUs with broken 16-bit math sometimes produce only
+// such invisible output.
+export function visibleText(text) {
   return (text || "")
-    .replace(/<\/?think>/g, " ")
+    .replace(/<\|[^|>]*\|>/g, " ")
+    .replace(/<\/?[A-Za-z_][^<>\n]{0,40}>/g, " ")
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\uFEFF\uFFFD]/g, "");
+}
+
+// Words: runs of letters/digits/apostrophes in any script, in the text
+// that would show on screen.
+function words(text) {
+  return visibleText(text)
     .toLowerCase()
     .match(/[\p{L}\p{N}']+/gu) || [];
+}
+
+// Words for the "Generating… ~N words" counter: only ones people can see.
+export function countWords(text) {
+  return words(text).length;
+}
+
+// True when a reply has streamed many pieces but shows almost nothing:
+// blank lines, control characters or tags instead of text. `pieces` is the
+// number of streamed pieces (about one per token); real text, even code,
+// shows several characters per piece.
+export function looksInvisible(text, pieces, { minPieces = 40, minCharsPerPiece = 0.5 } = {}) {
+  if (!(pieces >= minPieces)) return false;
+  const shown = visibleText(text).replace(/\s+/g, "").length;
+  return shown < pieces * minCharsPerPiece;
 }
 
 // True when a reply's tail has collapsed into a handful of repeated words.

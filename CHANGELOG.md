@@ -12,7 +12,7 @@ The first release: a private AI chat that runs entirely in your browser.
 - Replies stream in and are formatted: headings, lists, tables, links, and highlighted code with a Copy button.
 - Copy any reply; regenerate or retry the last one; Stop at any time.
 - A reply cut off by its length limit, or one that stops making progress, ends with a note and a **Continue** button.
-- Replies that collapse into junk or keep repeating a sentence are stopped and explained.
+- Replies that collapse into junk (including output that shows nothing, such as blank lines or invisible characters) or keep repeating a sentence are stopped and explained; the word counter counts only words you can see.
 - Reasoning models (Qwen3, Qwen3.5 with thinking on, DeepSeek-R1) show their reasoning folded away as "Thought process".
 
 ### Personas

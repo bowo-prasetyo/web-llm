@@ -632,7 +632,7 @@ const Home = {
           <p class="modal-body">
             <strong>{{ modelShortName(healthModal.model) }}</strong> <span class="model-id">({{ healthModal.model }})</span>
             <template v-if="healthModal.reason === 'no-f16'"> needs 16-bit GPU support, which this browser doesn't offer.</template>
-            <template v-else-if="healthModal.reason === 'degenerate'"> just gave a reply that collapsed into repeated words.</template>
+            <template v-else-if="healthModal.reason === 'degenerate'"> just gave a reply that collapsed into repeated words or unreadable output.</template>
             <template v-else> gave garbled text in a quick check<span v-if="healthModal.sample">: <em>“{{ healthModal.sample }}…”</em></span>.</template>
             <br><br>
             This usually means the GPU does 16-bit math incorrectly. Models marked <strong>q4f32</strong> avoid it.
@@ -2341,7 +2341,7 @@ const Home = {
     // instead of junk or an empty bubble. Marked as an error, so it is left
     // out of the model's memory and offers Retry.
     const FAILED_REPLY_TEXT = {
-      degenerate: "⚠ The reply collapsed into repeated words, so it was stopped.",
+      degenerate: "⚠ The reply collapsed into repeated words or unreadable output, so it was stopped.",
       timeout: "⚠ No reply: the model didn't start answering within the time limit. A smaller model may be faster on this device.",
       empty: "⚠ The model returned an empty reply.",
     };

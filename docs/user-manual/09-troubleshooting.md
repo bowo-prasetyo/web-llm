@@ -54,15 +54,16 @@ The AI runs on your own device, so speed depends on your hardware and the model'
 
 ## Replies are gibberish or repeat the same words
 
-For example: *"outer outer outer outer…"*
+For example: *"outer outer outer outer…"*, or **"Generating…" goes on but nothing appears on screen** (the junk can be blank lines or invisible characters).
 
 **What it means:** your graphics chip handles the faster 16-bit math incorrectly. It's a known issue with some GPUs and drivers, not a problem with your device.
 
 1. If a dialog titled **This model doesn't work on your GPU** (or **This model may not work on your GPU**) appears, tap **Switch model**. It picks a working 32-bit version.
 2. Otherwise, open the model menu and choose a model labelled **32-bit** instead of 16-bit.
 3. After updating your browser or graphics driver, you can give 16-bit models another chance: **Settings → This device → Forget check results**.
+4. **In a private (incognito) window** the app starts with empty storage, so it doesn't remember that 16-bit models failed on this device and may pick one again; the check after loading or the first reply then catches it.
 
-The app also stops replies that collapse into repeated words, explains what happened, and keeps them out of the conversation so they don't confuse the model later.
+The app also stops replies that collapse into repeated words or unreadable (even invisible) output, explains what happened, and keeps them out of the conversation so they don't confuse the model later.
 
 ## Replies are cut off
 

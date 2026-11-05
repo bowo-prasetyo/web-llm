@@ -84,11 +84,26 @@ test.describe("wide screens", () => {
 
 test("the header says what the app is", async ({ page }) => {
   await ready(page);
-  await expect(page.locator("h1.header-title")).toHaveText("Private AI Chat");
-  await expect(page.locator(".header-tagline")).toHaveText("Runs on this device");
-  expect(await page.title()).toContain("Private AI Chat");
+  await expect(page.locator("h1.header-title")).toHaveText("Hearth");
+  await expect(page.locator(".header-tagline")).toHaveText("Private AI chat on this device");
+  await expect(page.locator(".header-mark")).toBeVisible();
+  expect(await page.title()).toBe("Hearth · Private AI chat");
+  // The installed app keeps its name on the home screen
   const manifest = JSON.parse(fs.readFileSync(new URL("../../manifest.webmanifest", import.meta.url), "utf8"));
-  expect(manifest.name).toBe("Private AI Chat");
+  expect(manifest.name).toBe("Hearth");
+  expect(manifest.short_name).toBe("Hearth");
+  await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute("content", "Hearth");
+  // The welcome screen shows why it's private
+  await expect(page.locator(".welcome-note")).toContainText("No server. No account. Works offline.");
+});
+
+test("Settings ends with the name, version and credit", async ({ page }) => {
+  await ready(page);
+  await page.click('button[aria-label="Settings"]');
+  const credit = page.locator(".about-credit");
+  await expect(credit).toContainText(/Hearth \d+\.\d+\.\d+/);
+  await expect(credit.getByRole("link", { name: "WebLLM" })).toHaveAttribute("href", "https://github.com/mlc-ai/web-llm");
+  await expect(credit.getByRole("link", { name: "Open source" })).toHaveAttribute("href", "https://github.com/bowo-prasetyo/web-llm");
 });
 
 // Every visible piece of text on the page, with its size

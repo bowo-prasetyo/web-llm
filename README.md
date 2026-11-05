@@ -1,10 +1,14 @@
-# Private AI Chat
+<img src="icons/hearth.svg" alt="" width="72" height="72">
 
-**A private AI chat that runs entirely in your browser.** No server, no account, no data leaves your device. Works offline once a model is downloaded. Powered by [WebLLM](https://github.com/mlc-ai/web-llm) and WebGPU.
+# Hearth
+
+**Private AI chat that lives in your browser.** No server. No account. Works offline.
+
+The AI model runs on your own device, so nothing you type leaves it. Once a model is downloaded, it keeps working without an internet connection. Open source, and powered by [WebLLM](https://github.com/mlc-ai/web-llm) and WebGPU.
 
 **[Try it → bowo-prasetyo.github.io/web-llm](https://bowo-prasetyo.github.io/web-llm/)**
 
-![A chat in Private AI Chat: the chat list on the left, and Qwen3.5 2B explaining what an LLM is](docs/screenshot.png)
+![A chat in Hearth: the chat list on the left, and Qwen3.5 2B explaining what an LLM is](docs/screenshot.png)
 
 ## What it does
 
@@ -42,6 +46,12 @@ New to the app? The **[User Manual](docs/user-manual/README.md)** walks through 
 * **Small models get facts wrong.** They write fluently even when they're wrong. Check anything important, and prefer a larger model for factual questions.
 * **No internet access.** The model only knows what it learned in training (and the documents you attach); it can't look things up or know recent events.
 * **One device at a time.** Chats stay in the browser where you made them; use Export / Import to move them.
+
+## Name and brand
+
+The app is called **Hearth**: the warm place at the centre of a home, where the fire is kept. Like a hearth, it stays in your home (your device) and keeps going without anything from outside. In full it is *Hearth, private AI chat that lives in your browser*, and the short promise is *No server. No account. Works offline.* See [docs/brand.md](docs/brand.md) for the icon, colours and how to write the name.
+
+The repository and web address keep the name `web-llm`, so links, installed apps and saved chats keep working.
 
 ## Version and reporting problems
 
@@ -303,9 +313,9 @@ conversation so far is kept).
 
 ### Export / Import
 
-* **Export Settings** — download all settings as a `webllm-settings-YYYY-MM-DD.json` file
+* **Export Settings** — download all settings as a `hearth-settings-YYYY-MM-DD.json` file
 * **Import Settings** — load settings from a previously exported file; model selection is preserved to avoid an unwanted download
-* **Export Chats** — download all saved sessions as a `webllm-sessions-YYYY-MM-DD.json` file including full message content
+* **Export Chats** — download all saved sessions as a `hearth-chats-YYYY-MM-DD.json` file including full message content
 * **Import Chats** — merge sessions from an exported file into the current browser; duplicate sessions are detected by ID and content fingerprint and skipped automatically
 
 All settings are saved automatically in `localStorage` as you change them and survive page reloads; there is no Apply button. Reply settings and personas apply to the next message, a new model loads when you pick it, and a new context window asks to reload the model.

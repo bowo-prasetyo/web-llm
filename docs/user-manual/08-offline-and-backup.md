@@ -26,14 +26,14 @@ To check that the app is ready for offline use, open **Settings → This device 
 
 ## Install the app
 
-You can install Private AI Chat so it opens in its own window, like a regular app, with an icon on your desktop, dock or home screen.
+You can install Hearth so it opens in its own window, like a regular app, with an icon on your desktop, dock or home screen.
 
 ### Chrome or Edge (Windows, Mac, Linux, Android)
 
 1. Open **Settings → This device**.
 2. Tap **Install app** and confirm.
 
-If you don't see the button, use your browser's own menu: look for **Install Private AI Chat** or **Add to Home screen**. In Chrome and Edge on a computer there's often an install icon in the address bar.
+If you don't see the button, use your browser's own menu: look for **Install Hearth** or **Add to Home screen**. In Chrome and Edge on a computer there's often an install icon in the address bar.
 
 ### Safari on iPhone or iPad
 
@@ -66,7 +66,7 @@ Your chats live only in **this browser on this device**. They don't sync automat
 
 1. Open **Settings → Export / Import**.
 2. Under **💬 Chat History**, tap **Export Chats**.
-3. A file named like `webllm-sessions-2026-11-04.json` is downloaded. Keep it somewhere safe.
+3. A file named like `hearth-chats-2026-11-04.json` is downloaded. Keep it somewhere safe.
 
 The file includes all your chats, messages and attached documents.
 
@@ -74,7 +74,7 @@ The file includes all your chats, messages and attached documents.
 
 ### Back up your settings
 
-Under **⚙ Settings**, tap **Export Settings**. A file named like `webllm-settings-2026-11-04.json` is downloaded.
+Under **⚙ Settings**, tap **Export Settings**. A file named like `hearth-settings-2026-11-04.json` is downloaded.
 
 ### Move to another device or browser
 

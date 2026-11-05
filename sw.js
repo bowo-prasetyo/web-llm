@@ -46,6 +46,7 @@ const SHELL_FILES = [
   "./icons/icon-maskable-512.png",
   "./icons/apple-touch-icon.png",
   "./icons/favicon-32.png",
+  "./icons/hearth.svg",
 ];
 
 // Requested exactly as the pages request them (classic scripts without

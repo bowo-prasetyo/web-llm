@@ -86,7 +86,7 @@ test("the app is installable: manifest and icons", async ({ page }) => {
     const manifest = await (await fetch("/manifest.webmanifest")).json();
     const icons = await Promise.all(manifest.icons.map(async i => {
       const r = await fetch("/" + i.src);
-      return r.ok && r.headers.get("content-type") === "image/png";
+      return r.ok && r.headers.get("content-type") === i.type;
     }));
     const html = await (await fetch("/index.html")).text();
     return { manifest, icons, html };

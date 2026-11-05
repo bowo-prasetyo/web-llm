@@ -81,6 +81,6 @@ Many models do. Qwen3.5 models are a good choice for other languages.
 | **Thinking / Thought process** | Step-by-step reasoning that some models write before their answer. It's shown folded away so you can read it if you like. |
 | **Token** | A piece of a word the model reads and writes. About 100 tokens ≈ 75 English words. |
 | **WebGPU** | A browser feature that lets web pages use your GPU. Required by this app. |
-| **WebLLM** | The open-source engine that runs AI models inside a web browser. Private AI Chat is built on it. |
+| **WebLLM** | The open-source engine that runs AI models inside a web browser. Hearth is built on it. |
 
 [← Troubleshooting](09-troubleshooting.md) · [Manual home](README.md) · [Quick reference →](quick-reference.md)

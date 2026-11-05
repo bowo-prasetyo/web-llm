@@ -1,5 +1,5 @@
 {
-  "name": "webllm-browser-chat",
+  "name": "hearth",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,8 @@
     "test": "playwright test",
     "test:unit": "playwright test --project=unit",
     "test:e2e": "playwright test --project=e2e",
-    "serve": "node tests/support/server.js"
+    "serve": "node tests/support/server.js",
+    "icons": "node icons/build-icons.cjs"
   },
   "devDependencies": {
     "@highlightjs/cdn-assets": "11.12.0",

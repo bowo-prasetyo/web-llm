@@ -67,7 +67,7 @@ test("switching models keeps the conversation and applies the new model's defaul
   check((await readStorage(page, "webllm-settings")).max_tokens === 768, "new model's defaults applied");
 });
 
-test("a GPU crash falls back to the lightest model once, then stops", async ({ page, app }) => {
+test("a GPU crash asks instead of switching models; a second one stops", async ({ page, app }) => {
   const models = [BASE_SETTINGS.model, "SmolLM2-360M-Instruct-q4f32_1-MLC", "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"];
   await seedStorage(page, { "webllm-settings": BASE_SETTINGS, "webllm-cached-models": models });
   await page.goto("/");
@@ -75,10 +75,19 @@ test("a GPU crash falls back to the lightest model once, then stops", async ({ p
   await clearSent(page);
   app.setMode({ crash: true });
   await page.selectOption(".model-select", "Qwen2.5-0.5B-Instruct-q4f16_1-MLC");
-  await expect(page.locator(".webgpu-error-overlay")).toBeVisible();
+
+  // First crash: the crash dialog, and nothing else is loaded
+  const dialog = page.locator('[aria-labelledby="crash-title"]');
+  await expect(dialog).toContainText("The GPU stopped working while loading Qwen2.5 0.5B");
   await sleep(500);
-  const loads = (await sent(page, "set-config")).map(m => m.config.model);
-  expect(loads).toEqual(["Qwen2.5-0.5B-Instruct-q4f16_1-MLC", "SmolLM2-360M-Instruct-q4f32_1-MLC"]);
+  expect((await sent(page, "set-config")).map(m => m.config.model)).toEqual(["Qwen2.5-0.5B-Instruct-q4f16_1-MLC"]);
+  expect((await readStorage(page, "webllm-settings")).model).toBe("Qwen2.5-0.5B-Instruct-q4f16_1-MLC");
+  expect(Object.keys(await readStorage(page, "webllm-model-crashes"))).toEqual(["Qwen2.5-0.5B-Instruct-q4f16_1-MLC"]);
+
+  // Try again crashes again: stop with the troubleshooting screen
+  await dialog.getByRole("button", { name: "Try again" }).click();
+  await expect(page.locator(".webgpu-error-overlay")).toBeVisible();
+  await expect(page.locator(".status-bar")).toContainText("crashed twice");
 
   app.setMode({});
   await page.click("text=Try Again");

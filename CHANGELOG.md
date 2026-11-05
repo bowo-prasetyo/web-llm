@@ -25,7 +25,7 @@ The first release: a private AI chat that runs entirely in your browser.
 - A quick check after a model's first load catches GPUs with broken 16-bit math and offers a version that works.
 - Shows how fast the model writes on your device, and suggests a smaller one when it's slow.
 - Honest about small models: they often get facts wrong, and the app says so.
-- The tiniest models (SmolLM2 135M and 360M) are kept for testing, last in the model menu under "Tiny (for testing; very limited answers)".
+- The tiniest models (SmolLM2 135M and 360M, and TinyLlama) are kept for testing, last in the model menu under "Tiny (for testing; very limited answers)".
 - Download progress with time left and Cancel; downloaded models are marked ✓.
 
 ### Chats and documents
@@ -36,6 +36,7 @@ The first release: a private AI chat that runs entirely in your browser.
 ### Works anywhere
 - Works offline after the first visit; installable as an app on desktop and phone.
 - Recovers when the browser takes the GPU away (common on phones after the app was in the background): the model reloads from the device and the message is answered.
+- After a GPU crash the app never switches models by itself: the reply so far is kept, and the same dialog explains and offers a lighter model.
 - Remembers when a model closed the page (usually out of memory on phones): it isn't loaded again automatically, a lighter model is offered, and the model menu marks it.
 - On phones the picker's Fast choice is Llama 3.2 1B, which needs about 1 GB of GPU memory.
 - Light and dark themes, following the device or chosen in Settings.

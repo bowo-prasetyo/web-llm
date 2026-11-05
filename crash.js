@@ -50,6 +50,16 @@ export function detectCrash(storage, now = Date.now()) {
   return { model: pending.model, phase };
 }
 
+// Record a crash noticed while the page is still alive (the GPU was lost
+// and WebLLM gave up), the same way as one found at startup.
+export function recordCrash(storage, model, phase, now = Date.now()) {
+  const crashes = loadCrashes(storage);
+  if (!model) return crashes;
+  crashes[model] = { phase: phase === "answering" ? "answering" : "loading", ts: now };
+  saveCrashes(storage, crashes);
+  return crashes;
+}
+
 // A model that loaded and answered here no longer counts as crashing.
 export function forgetCrash(storage, model) {
   const crashes = loadCrashes(storage);

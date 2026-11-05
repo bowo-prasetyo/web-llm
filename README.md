@@ -101,15 +101,16 @@ dropdown in the app groups them by size tier using `<optgroup>` labels.
 **New** marks models added after the original list; all of them are
 supported by the WebLLM version the app uses (0.2.84).
 
-### Tiny (100–400M): for testing; very limited answers
+### Tiny: for testing; very limited answers
 
-These models can barely hold a conversation: they repeat themselves and get most facts wrong. They're kept for testing and very weak devices, shown last in the model menu under this label, and never suggested by the model picker.
+These models can barely hold a conversation: they repeat themselves, get most facts wrong, and sometimes recite their own instructions as an answer. TinyLlama has 1.1B parameters but dates from 2023 and answers like the tiny ones, so it's here too. They're kept for testing and very weak devices, shown last in the model menu under this label, and never suggested by the model picker.
 
 | Model | Approx Size |
 |---|---|
 | SmolLM2-135M-Instruct-q0f32-MLC | ~720 MB |
 | SmolLM2-360M-Instruct-q4f32_1-MLC | ~580 MB |
 | SmolLM2-360M-Instruct-q0f32-MLC | ~1.7 GB |
+| TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC | ~840 MB |
 
 ### Micro (0.5–0.8B)
 
@@ -129,7 +130,6 @@ These models can barely hold a conversation: they repeat themselves and get most
 | gemma3-1b-it-q4f16_1-MLC (new) | ~711 MB |
 | OLMo-2-0425-1B-Instruct-q4f16_1-MLC (new) | ~1.7 GB |
 | OLMo-2-0425-1B-Instruct-q4f32_1-MLC (new) | ~2.4 GB |
-| TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC | ~840 MB |
 | Llama-3.2-1B-Instruct-q4f16_1-MLC | ~879 MB |
 | Llama-3.2-1B-Instruct-q4f32_1-MLC | ~1.1 GB |
 | SmolLM2-1.7B-Instruct-q4f16_1-MLC | ~1.7 GB |
@@ -565,13 +565,13 @@ Streaming Response → UI
 
 | Feature | Description |
 |---|---|
-| GPU crash recovery | Detects lost-device errors and restarts on the lightest model (asking before downloading it); a second crash stops and shows the troubleshooting screen instead of looping |
 | WebGPU unavailable | Catches incompatible GPU errors, shows friendly troubleshooting screen with retry |
 | Tokenizer crash recovery | Detects WASM `Tokenizer*` errors, resets engine for clean next request |
 | Generation timeout | A reply is cut off only when it stops making progress: no first words within 3 minutes, or no new text for 1 minute (plus a 20-minute safety cap). A slow but steady reply always finishes. Keeps the partial reply, or explains why there is no reply |
 | Model check | After a model's first load on a device, a short reply is checked for junk; q4f16 models that fail (or need 16-bit support the GPU lacks) get a q4f32 replacement offer |
 | Collapsed-reply guard | A reply that turns into a few repeated words is stopped, replaced by an explanation with Retry, and left out of the model's memory |
 | Context fitting | Before each reply, the oldest turns and then document context are dropped so the prompt fits the context window |
+| GPU crashes | When WebLLM loses the GPU for good (after one automatic reload), the model is never switched silently: what the reply had written is kept with "Cut off: the GPU stopped working", the model is marked like a page crash, and the same dialog offers a lighter model, **Try again** or **Choose another model**. A second GPU crash on the same visit stops with the troubleshooting screen |
 | Out-of-memory page crashes | A phone that runs out of memory kills the page, so nothing can be caught. The app notes in localStorage when it starts loading a model or answering, and removes the note when that ends or the page is hidden or closed. A note found when the page opens means it crashed: that model isn't loaded again automatically (no crash loop); a dialog explains and offers a model needing at most 60% of the memory, **Try again** or **Choose another model**; the menu and picker mark the model until it loads and answers successfully |
 | Lost GPU recovery | When the browser takes the GPU away (phones do this in the background or under memory pressure), WebLLM disposes the model; the next message reloads it from the device and retries once, and a second failure shows a clear error with Retry |
 | Streaming stall detection | Warns in the status bar when no output arrives for 45–90 seconds; a reply stuck for a minute is interrupted in the engine |

@@ -687,8 +687,7 @@ async function initialize() {
         postMessage({
           type: "fatal",
           reason: "gpu-crash",
-          fallbackModel: SMALLEST_MODEL,
-          text: "GPU became unstable. Restarting in safe GPU mode.",
+          text: "The GPU stopped working while loading the model.",
         });
 
         self.close();
@@ -987,8 +986,7 @@ async function handleGenerationError(err) {
     postMessage({
       type: "fatal",
       reason: "gpu-crash",
-      fallbackModel: SMALLEST_MODEL,
-      text: "GPU inference crashed. Restarting in safe GPU mode.",
+      text: "The GPU stopped working while answering.",
     });
     self.close();
     return true;

@@ -37,8 +37,10 @@ test.describe("model list", () => {
     check(labels.at(-1) === tiny, "the Tiny group comes last");
     expect(groups[tiny]).toEqual(expect.arrayContaining([
       "SmolLM2-135M-Instruct-q0f32-MLC", "SmolLM2-360M-Instruct-q4f32_1-MLC",
+      "TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC",
     ]));
-    check(groups[tiny].every(id => /-(135|360)M-/.test(id)), "only the 135M–360M models are Tiny");
+    check(groups[tiny].every(id => /-(135|360)M-|^TinyLlama-/.test(id)), "only 135M–360M models and TinyLlama are Tiny");
+    check(groups["Lightweight (1–1.7B)"].includes("Llama-3.2-1B-Instruct-q4f32_1-MLC"), "Llama 3.2 1B stays lightweight");
   });
 
   test("a newer model gets defaults for its size", async ({ page }) => {

@@ -12,6 +12,7 @@ What changed in each version of Hearth. The version is shown in
 - The README and the user manual in Indonesian ([README.id.md](README.id.md), [docs/user-manual/id/](docs/user-manual/id/README.md)) and Japanese ([README.ja.md](README.ja.md), [docs/user-manual/ja/](docs/user-manual/ja/README.md)).
 
 ### Changed
+- On computers, Hearth fills the window: the header, status line and message bar span the whole width instead of a narrow strip in the middle, while messages stay in a comfortable reading column (Settings too). The chat list now sits beside the chat from 1024px wide, so it also does on laptops with display scaling (such as 1366px at 125%).
 - Dates in the chat list follow the app's language (in your browser's regional style, such as 7 Nov in a British English browser).
 - Counts read naturally: "Exported 1 session" instead of "1 session(s)".
 - On phones, **Clear** and **Attach** in the chat toolbar show only their icons, so the model menu stays readable.

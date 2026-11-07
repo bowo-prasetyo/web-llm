@@ -163,6 +163,15 @@
   --fs-meta:     12px;   /* timestamps, badges, labels, model IDs */
   --fs-small:    12.5px; /* previews, hints, secondary lines */
 
+  /* Layout. The app fills the window; the conversation (and Settings)
+     sit in a centred column of readable width inside it. --gutter is
+     the space each side of that column, for use in padding or margins
+     of the full-width areas (a percentage there is of the area's
+     width, so the column comes out the same everywhere). */
+  --chat-w:      840px;
+  --settings-w:  760px;
+  --gutter:      max(0px, calc((100% - var(--chat-w)) / 2));
+
   --radius:      10px;
   --radius-sm:   6px;
 
@@ -311,8 +320,10 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  max-width: 780px;
-  margin: 0 auto;
+  /* Full width: the header, status line and message bar span the
+     window; the messages and the composer keep a readable column
+     (--chat-w) through padding, see .messages and .footer-container. */
+  width: 100%;
   position: relative;
 }
 
@@ -389,7 +400,9 @@ html, body, #app {
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 16px;
+  /* Scrolls at full width (scrollbar at the window's edge), content in
+     the column */
+  padding: 20px calc(var(--gutter) + 16px);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -439,6 +452,8 @@ html, body, #app {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
   background: var(--surface);
+  /* The bar spans the window; what's in it lines up with the messages */
+  padding-inline: var(--gutter);
 }
 
 /* ── Toolbar ──────────────────────────────────────────────────── */
@@ -586,9 +601,12 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  max-width: 780px;
-  margin: 0 auto;
+  width: 100%;
   background: var(--bg);
+  /* Narrower column here. --gutter is redeclared because a custom
+     property's var()s are resolved where it is declared (:root). */
+  --chat-w: var(--settings-w);
+  --gutter: max(0px, calc((100% - var(--chat-w)) / 2));
 }
 
 .settings-header {
@@ -629,7 +647,7 @@ html, body, #app {
 .settings-body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 16px;
+  padding: 24px calc(var(--gutter) + 16px);
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -1552,6 +1570,9 @@ html, body, #app {
 /* Replies are HTML now; whitespace comes from the markup.
    User messages keep pre-wrap so typed text shows exactly as written. */
 .message.assistant { white-space: normal; min-width: 0; }
+/* Code and tables benefit from width: such replies use the whole column
+   instead of 88% of it. */
+.message.assistant:has(.code-block, table) { max-width: 100%; }
 .message.assistant.error { border-color: var(--danger-border-soft); color: var(--danger-text); }
 
 .md { overflow-wrap: anywhere; }
@@ -1912,7 +1933,7 @@ html, body, #app {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px 10px;
-  margin: 0 12px 8px;
+  margin: 0 calc(var(--gutter) + 12px) 8px;
   padding: 8px 12px;
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
@@ -2039,7 +2060,7 @@ label.action-btn:focus-within {
 ══════════════════════════════════════════════════════════════ */
 .load-panel {
   flex-shrink: 0;
-  margin: 10px 12px 0;
+  margin: 10px calc(var(--gutter) + 12px) 0;
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2261,9 +2282,9 @@ label.action-btn:focus-within {
 
 /* ══════════════════════════════════════════════════════════════
    CHAT LIST DOCKED BESIDE THE CHAT (wide screens)
-   Keep the width in sync with WIDE_QUERY in app.js.
+   Keep the width (1024px) in sync with WIDE_QUERY in app.js.
 ══════════════════════════════════════════════════════════════ */
-@media (min-width: 1100px) {
+@media (min-width: 1024px) {
   :root { --sidebar-w: 280px; }
   .sidebar.docked {
     width: var(--sidebar-w);
@@ -2272,11 +2293,10 @@ label.action-btn:focus-within {
     box-shadow: none;
     z-index: 30;
   }
-  /* The chat column, centred in the space right of the list */
+  /* The chat takes the rest of the window, right of the list */
   .container.sidebar-docked {
-    margin-left: calc(var(--sidebar-w) + max(0px, (100vw - var(--sidebar-w) - 780px) / 2));
-    margin-right: 0;
-    width: calc(100vw - var(--sidebar-w));
+    margin-left: var(--sidebar-w);
+    width: calc(100% - var(--sidebar-w));
   }
 }
 

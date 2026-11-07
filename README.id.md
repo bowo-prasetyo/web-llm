@@ -111,7 +111,7 @@ Menemukan masalah? Gunakan **Setelan → Perangkat ini → Laporkan masalah**: t
 * Jujur tentang model kecil: chat Ramah dan Presisi dengan model sekitar 1B parameter atau lebih kecil menampilkan petunjuk bahwa model itu sering salah soal fakta (bisa disembunyikan per model dengan ×), dan ukuran Cepat di pemilih model juga menyebutkannya
 * Enam persona chat (Ramah, Presisi, Penulis, Pemrogram, Curah Gagasan, Kustom), dipilih per chat dan bisa diganti di tengah percakapan
 * Layar pembuka untuk chat baru dengan kartu persona dan contoh pertanyaan
-* Antarmuka responsif: di layar lebar (1100px ke atas) daftar chat berada di samping chat dan bisa disembunyikan; layar yang lebih sempit mendapat laci yang bergeser masuk; di ponsel, Enter membuat baris baru dan tombol Kirim yang mengirim, dan kotak pesan membesar saat Anda mengetik
+* Antarmuka responsif: di layar lebar (1024px ke atas) daftar chat berada di samping chat dan bisa disembunyikan; layar yang lebih sempit mendapat laci yang bergeser masuk; di ponsel, Enter membuat baris baru dan tombol Kirim yang mengirim, dan kotak pesan membesar saat Anda mengetik
 
 ## Model yang didukung
 
@@ -343,7 +343,7 @@ Semua setelan disimpan otomatis di `localStorage` saat Anda mengubahnya dan teta
 
 ## Banyak sesi chat
 
-* Di layar lebar (1100px ke atas), daftar chat ditampilkan di samping chat. **Tombol menu ☰** (atau **×** di daftar) menyembunyikan dan menampilkannya, dan aplikasi mengingat pilihan Anda
+* Di layar lebar (1024px ke atas), daftar chat ditampilkan di samping chat. **Tombol menu ☰** (atau **×** di daftar) menyembunyikan dan menampilkannya, dan aplikasi mengingat pilihan Anda
 * Di layar yang lebih sempit, ketuk **tombol menu ☰** di kepala halaman untuk membuka daftar sebagai laci di atas chat
 * Ketuk **+ Chat Baru** untuk memulai percakapan baru — sesi saat ini disimpan otomatis lebih dulu
 * Chat yang tersimpan dicantumkan dengan judul otomatis, cuplikan, model, dan waktu

@@ -5,6 +5,7 @@
 //   degen / timeout   reply that collapsed into junk / timed out (no text)
 //   stopnow / fail    stopped before any text / engine error
 // The model lists are filled in from the real worker.js by the fixture.
+// Status messages carry codes from status.js (the page chooses the words).
 const { models: MODELS, altModels: ALT, sizes: SIZES, downloadSizes: DOWNLOADS } = __MODELS__;
 
 const MD = "Here is **bold** and `inline` code.\n\n```js\nfunction add(a, b) {\n  return a + b; // sum\n}\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nRaw <img src=x onerror=\"window.__xss=1\"> and <b>tag</b>.\n\n[bad](javascript:window.__xss=2) [good](https://example.com)\n\n- one\n- two";
@@ -28,14 +29,14 @@ self.onmessage = async (event) => {
   if (d.type === "set-config") {
     const model = d.config.model;
     if (m.crash) {
-      postMessage({ type: "fatal", reason: "gpu-crash", text: "GPU crashed" });
+      postMessage({ type: "fatal", reason: "gpu-crash", phase: "loading" });
       return;
     }
     const verdict = (m.check || {})[model] || "ok";
     if (d.config.selfTest) {
       if (verdict === "no-f16") {
         postMessage({ type: "model-check", model, ok: false, reason: "no-f16", sample: "" });
-        postMessage({ type: "status", text: "This model needs 16-bit GPU support" });
+        postMessage({ type: "status", code: "needs-f16" });
         return;
       }
       postMessage({
@@ -52,12 +53,12 @@ self.onmessage = async (event) => {
     }
     if (m.downloadHang) return; // stays "downloading" until cancelled
     if (m.download) await sleep(m.downloadDelay || 100);
-    postMessage({ type: "status", text: "Model loaded successfully" });
+    postMessage({ type: "status", code: "model-loaded" });
   }
 
   if (d.type === "generate") {
     const p = d.prompt;
-    if (p === "fail") { postMessage({ type: "error", text: "boom" }); return; }
+    if (p === "fail") { postMessage({ type: "error", detail: "boom" }); return; }
     postMessage({ type: "thinking" });
     if (p === "degen") {
       postMessage({ type: "stream", text: "outer outer outer outer" });

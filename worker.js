@@ -16,7 +16,7 @@ import { DEFAULT_PERSONA_PROMPT } from "./personas.js";
 import { stripThinking } from "./markdown.js";
 import { looksDegenerate, looksInvisible, looksLikeWordSalad, countWords, checkSample, findRepeatLoop } from "./quality.js";
 import { fitToContext, estimateTokens } from "./context.js";
-import { friendlyError } from "./storage.js";
+import { STATUS } from "./status.js";
 import { timeLimitReason, withTimeLimits, wordCount, measureSpeed } from "./pace.js";
 import {
   INDEX_MIN_CHARS,
@@ -420,7 +420,8 @@ async function detectBestModel() {
       
     postMessage({
       type: "status",
-      text: `Using manually selected model: ${MODEL}`,
+      code: STATUS.MANUAL_MODEL,
+      params: { model: MODEL },
     });
   
     return;
@@ -452,7 +453,7 @@ async function detectBestModel() {
   
     postMessage({
       type: "status",
-      text: "Using persistent safe GPU mode",
+      code: STATUS.SAFE_GPU_MODE,
     });
   
     return;
@@ -543,7 +544,8 @@ async function detectBestModel() {
 
   postMessage({
     type: "status",
-    text: `GPU detected: ${gpuText || "Unknown GPU"}`,
+    code: STATUS.GPU_DETECTED,
+    params: { gpu: gpuText.trim() },
   });
 
   // ------------------------------------------------
@@ -692,7 +694,7 @@ async function initialize() {
 
     postMessage({
       type: "status",
-      text: `Loading AI model for device profile...`,
+      code: STATUS.LOADING_MODEL,
     });
 
     try {
@@ -713,11 +715,13 @@ async function initialize() {
               progress.text?.toLowerCase().includes("fetch") ||
               progress.text?.toLowerCase().includes("download") ||
               (pct < 100 && !progress.text?.toLowerCase().includes("finish"));
-            postMessage({
-              type: isDownloading ? "downloading" : "status",
-              text: progress.text || `Loading ${pct}%`,
-              progress: pct,
-            });
+            // "downloading" carries WebLLM's own progress text, which the
+            // page parses (picker.js describeLoadProgress) rather than shows.
+            if (isDownloading) {
+              postMessage({ type: "downloading", text: progress.text || "", progress: pct });
+            } else {
+              postMessage({ type: "status", code: STATUS.LOAD_PROGRESS, params: { detail: progress.text || "", percent: pct } });
+            }
           },
         },
         chatOpts
@@ -753,7 +757,7 @@ async function initialize() {
           reason: "no-f16",
           sample: "",
         });
-        postMessage({ type: "status", text: "This model needs 16-bit GPU support" });
+        postMessage({ type: "status", code: STATUS.NEEDS_F16 });
         return;
       }
 
@@ -767,7 +771,7 @@ async function initialize() {
         postMessage({
           type: "fatal",
           reason: "gpu-crash",
-          text: "The GPU stopped working while loading the model.",
+          phase: "loading",
         });
 
         self.close();
@@ -780,7 +784,7 @@ async function initialize() {
 
         postMessage({
           type: "webgpu-error",
-          text: message,
+          detail: message,
         });
         return; // Don't throw — let the UI handle it gracefully
       }
@@ -802,7 +806,7 @@ async function initialize() {
 
     postMessage({
       type: "status",
-      text: "Model loaded successfully",
+      code: STATUS.MODEL_LOADED,
     });
   })();
 
@@ -812,7 +816,7 @@ async function initialize() {
 // Ask for a few words and make sure they aren't junk. Catches GPUs whose
 // 16-bit math is broken, where q4f16 models reply "outer outer outer…".
 async function runModelCheck() {
-  postMessage({ type: "status", text: "Checking that the model works on this GPU..." });
+  postMessage({ type: "status", code: STATUS.CHECKING_MODEL });
   try {
     const checkStart = Date.now();
     const reply = await engine.chat.completions.create({
@@ -920,9 +924,7 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
     result.timeReason = reason;
     postMessage({
       type: "status",
-      text: reason === "max"
-        ? "Response cut off: reply time limit reached"
-        : "Response cut off: the model stopped producing text",
+      code: reason === "max" ? STATUS.CUT_OFF_TIME_LIMIT : STATUS.CUT_OFF_STALLED,
     });
     return true;
   };
@@ -953,7 +955,7 @@ async function streamReply(messages, maxTokens, { prefix = "", generationStart }
     for await (const chunk of completion) {
       if (STOP_REQUESTED) {
         result.stopped = true;
-        postMessage({ type: "status", text: "Generation stopped" });
+        postMessage({ type: "status", code: STATUS.STOPPED });
         break;
       }
       if (timeUp()) break;
@@ -1025,7 +1027,7 @@ async function streamWithRecovery(messages, maxTokens, opts) {
     console.warn("Engine was lost; reloading the model and retrying", err);
     engine = null;
     initializingPromise = null;
-    postMessage({ type: "status", text: "The browser reset the model (this happens on phones after the app was in the background). Reloading it…" });
+    postMessage({ type: "status", code: STATUS.ENGINE_RESET });
     await initialize();
     ensureEngine();
     postMessage({ type: "thinking" });
@@ -1066,7 +1068,7 @@ async function handleGenerationError(err) {
     postMessage({
       type: "fatal",
       reason: "gpu-crash",
-      text: "The GPU stopped working while answering.",
+      phase: "answering",
     });
     self.close();
     return true;
@@ -1150,7 +1152,7 @@ async function generate(prompt) {
       // The engine may have been torn down since generate() started
       // (e.g. by a concurrent set-config): reinitialise if so.
       if (!engine) {
-        postMessage({ type: "status", text: "Engine not ready, reinitialising..." });
+        postMessage({ type: "status", code: STATUS.REINITIALISING });
         initializingPromise = null;
         await initialize();
       }
@@ -1163,7 +1165,7 @@ async function generate(prompt) {
 
     if (result.superseded) return;
 
-    postMessage({ type: "status", text: `Ready (${DEVICE_PROFILE.name})` });
+    postMessage({ type: "status", code: STATUS.READY, params: { profile: DEVICE_PROFILE.name } });
 
     const answer = result.full;
 
@@ -1239,7 +1241,7 @@ async function continueReply(previous) {
 
     if (result.superseded) return;
 
-    postMessage({ type: "status", text: `Ready (${DEVICE_PROFILE.name})` });
+    postMessage({ type: "status", code: STATUS.READY, params: { profile: DEVICE_PROFILE.name } });
 
     // Drop text the model repeated from the end of the reply so far
     let full = result.full;
@@ -1296,7 +1298,7 @@ self.onmessage = async (event) => {
         if (ACTIVE_GENERATION) {
           postMessage({
             type: "status",
-            text: "Waiting for generation to finish before switching model...",
+            code: STATUS.WAITING_TO_SWITCH,
           });
           // Poll until generation completes, then re-dispatch
           await new Promise(resolve => {
@@ -1327,7 +1329,7 @@ self.onmessage = async (event) => {
         if (old) {
           postMessage({
             type: "status",
-            text: "Unloading previous model...",
+            code: STATUS.UNLOADING_PREVIOUS,
           });
           try {
             await old.unload();
@@ -1338,8 +1340,8 @@ self.onmessage = async (event) => {
       
         postMessage({
           type: "status",
-          text:
-            `Initializing ${data.config.model}...`,
+          code: STATUS.INITIALIZING_MODEL,
+          params: { model: data.config.model },
         });
       
         await initialize();
@@ -1408,7 +1410,8 @@ self.onmessage = async (event) => {
   } catch (err) {
     postMessage({
       type: "error",
-      text: friendlyError(err.message),
+      // The engine's own message; the page decides what to show
+      detail: err?.message || "",
     });
   }
 };
@@ -1442,8 +1445,7 @@ function resetUnloadTimer() {
   
     postMessage({
       type: "status",
-      text:
-        "Model unloaded to save memory",
+      code: STATUS.UNLOADED_IDLE,
     });
   
   }, 1800000);
@@ -1464,7 +1466,7 @@ async function initializeEmbedder() {
 
   postMessage({
     type: "status",
-    text: "Loading embedding model...",
+    code: STATUS.LOADING_EMBEDDER,
   });
 
   embedderPromise = (async () => {
@@ -1480,7 +1482,7 @@ async function initializeEmbedder() {
 
       postMessage({
         type: "status",
-        text: "Embedding model loaded",
+        code: STATUS.EMBEDDER_LOADED,
       });
 
       return embedder;
@@ -1554,7 +1556,7 @@ async function indexDocument(chatId, doc) {
     doc.chunks = chunks;
     postMessage({ type: "attachment-indexed", chatId, id: doc.id, chunks });
   } catch (err) {
-    postMessage({ type: "attachment-error", chatId, id: doc.id, error: err?.message || "Could not index the document" });
+    postMessage({ type: "attachment-error", chatId, id: doc.id, error: err?.message || "" });
   } finally {
     doc.indexing = false;
   }
@@ -1627,8 +1629,7 @@ function resetStallTimer() {
     // only warning
     postMessage({
       type: "status",
-      text:
-        "Generation is taking longer than usual...",
+      code: STATUS.SLOW_GENERATION,
     });
 
     // DO NOT terminate here

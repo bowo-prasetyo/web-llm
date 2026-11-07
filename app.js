@@ -21,6 +21,7 @@ import {
 import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pace.js";
 import { APP_VERSION, REPO_URL, problemReportUrl } from "./version.js";
 import { storageEstimate, spaceShortfall, requestPersistence, friendlyError } from "./storage.js";
+import { STATUS, statusText, fatalText, isEngineReady } from "./status.js";
 import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, recordCrash, lighterModel } from "./crash.js";
 
 const {
@@ -1913,7 +1914,7 @@ const Home = {
         isDownloading.value = false;
 
         const gpuCrash = data.reason === "gpu-crash";
-        const phase = pendingWork.phase === "answering" ? "answering" : "loading";
+        const phase = data.phase || (pendingWork.phase === "answering" ? "answering" : "loading");
         setPendingWork("", "");
 
         // Keep what the reply had written, marked as cut off
@@ -1941,7 +1942,7 @@ const Home = {
           return;
         }
 
-        status.value = data.text;
+        status.value = fatalText(data.reason, phase);
 
         if (gpuCrash) {
           // Usually out of memory, like a page crash: remember it, and let
@@ -1977,13 +1978,11 @@ const Home = {
           break;
 
         case "status":
-          status.value = data.text;
+          // The worker sends a code; the words are chosen here (status.js)
+          status.value = statusText(data.code, data.params);
           // Any non-download status means the download phase is over
           isDownloading.value = false;
-          if (
-            data.text.includes("Model loaded successfully") ||
-            data.text.startsWith("Ready")
-          ) {
+          if (isEngineReady(data.code)) {
             modelLoading.value = false;
             if (pendingWork.phase === "loading") setPendingWork("", "");
             // Mark this model as cached so future selects skip the confirmation
@@ -1995,7 +1994,7 @@ const Home = {
             if (!conversationRestored.value) {
               conversationRestored.value = true;
               loadConversation();
-            } else if (data.text.includes("Model loaded successfully")) {
+            } else if (data.code === STATUS.MODEL_LOADED) {
               // The engine was (re)loaded mid-session: after a model switch
               // or a worker restart. Give it the current conversation so it
               // continues the chat instead of starting with no memory.
@@ -2185,7 +2184,7 @@ const Home = {
             if (tail.content && tail.content.trim()) tail.role = "assistant";
             else messages.value.pop();
           }
-          messages.value.push({ role: "assistant", content: "Error: " + friendlyError(data.text), isError: true });
+          messages.value.push({ role: "assistant", content: "Error: " + friendlyError(data.detail), isError: true });
           scrollBottom();
           loading.value = false;
           status.value = "Something went wrong";
@@ -2225,7 +2224,9 @@ const Home = {
         case "attachment-error":
           if (data.chatId !== currentSessionId.value) break;
           attachments.value = attachments.value.map(a => a.id === data.id
-            ? { ...a, status: "error", error: `Couldn't prepare this document for search (${data.error}). The beginning of it is still used.` }
+            ? { ...a, status: "error", error: data.error
+              ? `Couldn't prepare this document for search (${data.error}). The beginning of it is still used.`
+              : "Couldn't prepare this document for search. The beginning of it is still used." }
             : a);
           break;
       }

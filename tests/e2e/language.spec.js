@@ -1,9 +1,10 @@
 // Settings → Language: choosing the app's language, following the browser,
 // and remembering the choice.
 //
-// Only English ships so far, so these tests add a stand-in second language:
-// "de", whose messages are the English ones marked "DE·". Its name in the
-// list ("Deutsch") comes from the browser, as for a real translation.
+// Besides the real translations (English, Indonesian), these tests add a
+// stand-in language, "de", whose messages are the English ones marked
+// "DE·", so a change of language is easy to see. Its name in the list
+// ("Deutsch") comes from the browser, as for a real translation.
 import { test, expect } from "../support/fixtures.js";
 import fs from "node:fs";
 import en from "../../locales/en.js";
@@ -11,7 +12,7 @@ import en from "../../locales/en.js";
 test.use({ fakeWorker: true, downloaded: "SmolLM2-135M-Instruct-q0f32-MLC" });
 
 const I18N_SRC = fs.readFileSync(new URL("../../i18n.js", import.meta.url), "utf8")
-  .replace('export const SUPPORTED_LOCALES = ["en"];', 'export const SUPPORTED_LOCALES = ["en", "de"];');
+  .replace(/export const SUPPORTED_LOCALES = \[([^\]]*)\];/, 'export const SUPPORTED_LOCALES = [$1, "de"];');
 
 // Every message marked, placeholders and plural forms kept
 const mark = v => typeof v === "string" ? "DE·" + v
@@ -21,7 +22,7 @@ const DE_SRC = `export default ${JSON.stringify(mark(en))};`;
 const JS = "text/javascript; charset=utf-8";
 
 test.beforeEach(async ({ context }) => {
-  expect(I18N_SRC).toContain('["en", "de"]');
+  expect(I18N_SRC).toContain('"id", "de"]');
   await context.route(/\/i18n\.js(\?.*)?$/, r => r.fulfill({ body: I18N_SRC, contentType: JS }));
   await context.route(/\/locales\/de\.js(\?.*)?$/, r => r.fulfill({ body: DE_SRC, contentType: JS }));
 });
@@ -40,7 +41,7 @@ test("the list offers Automatic and each language in its own words", async ({ pa
   await openSettings(page);
   const select = page.locator(".language-select");
   await expect(select).toHaveValue("auto");
-  await expect(select.locator("option")).toHaveText(["Automatic (English)", "English", "Deutsch"]);
+  await expect(select.locator("option")).toHaveText(["Automatic (English)", "English", "Indonesia", "Deutsch"]);
   await expect(select.locator('option[value="de"]')).toHaveAttribute("lang", "de");
   await expect(page.getByRole("combobox", { name: "Language" })).toBeVisible();
   await expect(page.locator("#language-hint a")).toHaveAttribute("href", /docs\/translating\.md$/);
@@ -104,4 +105,40 @@ test("a saved language the app no longer ships falls back to Automatic", async (
   await expect(page.locator(".welcome-title")).toHaveText("What would you like to chat about?");
   await page.click(".header-actions .icon-btn:last-child");
   await expect(page.locator(".language-select")).toHaveValue("auto");
+});
+
+// ── The Indonesian translation ────────────────────────────────────────────
+
+test.describe("in an Indonesian browser", () => {
+  test.use({ locale: "id-ID" });
+
+  test("the app starts in Indonesian, with Indonesian dates and numbers", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".status-text")).toContainText("Model berhasil dimuat");
+    await expect(page.locator(".welcome-title")).toHaveText("Mau ngobrol tentang apa?");
+    await expect(page.locator(".persona-card").first()).toContainText("Ramah");
+    await expect(page.locator(".model-select optgroup").first()).toHaveAttribute("label", /^(Mikro|Ringan|Kecil|Menengah|Besar|Sangat kecil)/);
+    expect(await html(page)).toEqual({ lang: "id", dir: "ltr", title: "Hearth · Chat AI pribadi" });
+
+    await page.click(".header-actions .icon-btn:last-child");
+    await expect(page.locator(".settings-title")).toHaveText("Setelan");
+    await expect(page.locator(".language-select option").first()).toHaveText("Otomatis (Indonesia)");
+    // Decimal comma, as Indonesian writes numbers
+    await expect(page.locator(".setting-row").first().locator(".setting-value")).toHaveText(/^\d,\d\d$/);
+
+    // Back to English from the list, without a reload
+    await page.locator(".language-select").selectOption("en");
+    await expect(page.locator(".settings-title")).toHaveText("Settings");
+  });
+});
+
+test("Indonesian can be chosen in an English browser", async ({ page }) => {
+  await openSettings(page);
+  await page.locator(".language-select").selectOption("id");
+  await expect(page.locator(".settings-title")).toHaveText("Setelan");
+  await expect(page.locator("#language-label")).toHaveText("Bahasa");
+  await page.click(".back-btn");
+  await expect(page.locator(".welcome-title")).toHaveText("Mau ngobrol tentang apa?");
+  await expect(page.locator(".send-btn")).toHaveAttribute("aria-label", "Kirim pesan");
+  expect(await languagePref(page)).toBe("id");
 });

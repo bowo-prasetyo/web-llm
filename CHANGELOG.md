@@ -6,11 +6,13 @@ What changed in each version of Hearth. The version is shown in
 ## [Unreleased]
 
 ### Added
-- **Settings → Language**: choose the language of the app, or keep **Automatic** to follow the browser. The app is ready for translations (see [docs/translating.md](docs/translating.md)); English is the only one so far.
+- **Settings → Language**: choose the language of the app, or keep **Automatic** to follow the browser. More languages can be added (see [docs/translating.md](docs/translating.md)).
+- **Bahasa Indonesia**: the whole app in Indonesian. Browsers set to Indonesian get it automatically.
 
 ### Changed
 - Dates in the chat list follow the app's language (in your browser's regional style, such as 7 Nov in a British English browser).
 - Counts read naturally: "Exported 1 session" instead of "1 session(s)".
+- On phones, **Clear** and **Attach** in the chat toolbar show only their icons, so the model menu stays readable.
 
 ## [1.0.0] - 2026-11-05
 

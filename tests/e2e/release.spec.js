@@ -83,6 +83,10 @@ test("every font file the stylesheet names exists and is saved for offline use",
 });
 
 test("Import buttons open a file picker; no stray file-input text on the page", async ({ page }) => {
+  // Turn on file-chooser interception now: waitForEvent("filechooser")
+  // turns it on without waiting, so a picker opened right after could be
+  // missed (1 in 10 runs under load).
+  page.on("filechooser", () => {});
   await start(page);
   await page.click('button[title="Settings"]');
   for (const name of ["Import Settings", "Import Chats"]) {

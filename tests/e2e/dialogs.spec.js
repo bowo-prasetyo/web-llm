@@ -166,6 +166,10 @@ test.describe("keyboard and screen readers", () => {
   });
 
   test("controls have names, and status changes are announced", async ({ page }) => {
+    // Turn on file-chooser interception now: waitForEvent("filechooser")
+    // turns it on without waiting, so a picker opened right after could be
+    // missed (1 in 10 runs under load).
+    page.on("filechooser", () => {});
     await ready(page);
     const name = sel => page.locator(sel).getAttribute("aria-label");
     expect(await name(".send-btn")).toBe("Send message");

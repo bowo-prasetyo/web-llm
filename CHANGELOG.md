@@ -3,6 +3,15 @@
 What changed in each version of Hearth. The version is shown in
 **Settings → This device**.
 
+## [Unreleased]
+
+### Added
+- **Settings → Language**: choose the language of the app, or keep **Automatic** to follow the browser. The app is ready for translations (see [docs/translating.md](docs/translating.md)); English is the only one so far.
+
+### Changed
+- Dates in the chat list follow the app's language (in your browser's regional style, such as 7 Nov in a British English browser).
+- Counts read naturally: "Exported 1 session" instead of "1 session(s)".
+
 ## [1.0.0] - 2026-11-05
 
 The first release: Hearth, a private AI chat that lives in your browser.

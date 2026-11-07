@@ -12,7 +12,7 @@ Everything the interface shows is in the catalog: about 400 messages. What stays
 4. Add `"./locales/<code>.js"` to `SHELL_FILES` in `sw.js`, so the language works offline.
 5. Run `npm run test:unit`. It checks that your file has every English key, no extra ones, the same placeholders, and every plural form your language needs.
 
-The app picks the first language in the browser's list that it ships, so a browser set to `pt-PT` gets `pt-BR` if that is the closest, and English when nothing matches. A missing message falls back to English, so a half-finished translation never shows a blank.
+People choose the language in **Settings → Language**. Your language appears there under its own name (from the browser, e.g. "Deutsch") as soon as it is in `SUPPORTED_LOCALES`. With **Automatic**, the default, the app picks the first language in the browser's list that it ships, so a browser set to `pt-PT` gets `pt-BR` if that is the closest, and English when nothing matches. A missing message falls back to English, so a half-finished translation never shows a blank.
 
 ## Messages
 

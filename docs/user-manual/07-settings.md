@@ -13,6 +13,7 @@ Open Settings by tapping **⚙** in the top-right corner of the header. Tap **Ba
 | Section | What's in it |
 |---|---|
 | [Model](#model) | Which AI model to use, and **Help me choose a model** |
+| [Language](#language) | The language of the app's buttons and messages |
 | [Replies](#replies) | Creativity, reply length, memory, and thinking |
 | [Personas](#personas) | Default persona and your Custom instructions |
 | [Documents](#documents) | Maximum file size for attachments |
@@ -26,6 +27,17 @@ Open Settings by tapping **⚙** in the top-right corner of the header. Tap **Ba
 * **Help me choose a model**: opens the two-question picker.
 
 Picking a different model also applies that model's recommended reply settings. See [Choosing a model](06-models.md) for help.
+
+## Language
+
+The language of the app itself: its buttons, menus and messages.
+
+* **Automatic** (the default) uses your browser's language when Hearth has it, and English otherwise. The language it picked is shown in brackets.
+* Or pick a language from the list. Each one is written in its own language, so you can find yours.
+
+The change applies at once and is remembered on this device. It doesn't change the AI's replies: the AI answers in the language you write in.
+
+Don't see your language? **Help translate Hearth** links to the guide for adding one.
 
 ## Replies
 

@@ -49,6 +49,40 @@ export function pickLocale(preferred, supported = SUPPORTED_LOCALES, fallback = 
   return fallback;
 }
 
+// What a saved choice means: "auto" (or nothing, or a language the app
+// no longer ships) follows the browser; anything else is that language.
+export function resolveLanguage(pref, preferred = browserLanguages(), supported = SUPPORTED_LOCALES) {
+  if (pref && pref !== "auto" && supported.includes(pref)) return pref;
+  return pickLocale(preferred, supported);
+}
+
+// The languages the browser asks for, most wanted first
+export function browserLanguages(nav = globalThis.navigator) {
+  const list = nav?.languages?.length ? nav.languages : [nav?.language];
+  return list.filter(Boolean);
+}
+
+// A language's name in that language, as people look for it in a list:
+// "English", "Deutsch", "Indonesia", "日本語" (CLDR's names).
+export function languageName(code) {
+  try {
+    const name = new Intl.DisplayNames([code], { type: "language" }).of(code);
+    if (!name || name === code) return code;
+    return name.charAt(0).toLocaleUpperCase(code) + name.slice(1);
+  } catch {
+    return code;
+  }
+}
+
+// How to write dates and numbers: the browser's own variant when it is the
+// same language as the page ("en-GB" for English in a British browser:
+// 7 Nov, not Nov 7), otherwise the page's language.
+export function regionalLocale(locale, preferred = []) {
+  const base = String(locale).toLowerCase().split("-")[0];
+  const same = preferred.find(p => String(p).toLowerCase().split("-")[0] === base);
+  return same || locale;
+}
+
 // "rtl" or "ltr"
 export function textDirection(locale) {
   return RTL_LANGUAGES.has(String(locale || "").toLowerCase().split("-")[0]) ? "rtl" : "ltr";
@@ -101,6 +135,7 @@ export function createI18n({
   fallback = DEFAULT_LOCALE,
   reactive = x => x,
   onMissing = null,
+  preferred = browserLanguages(),
 } = {}) {
   const state = reactive({ locale, catalogs: { ...messages } });
   const cache = new Map(); // Intl objects are slow to create
@@ -132,15 +167,20 @@ export function createI18n({
     if (onMissing) onMissing(key, state.locale);
   }
 
+  // Dates and numbers: the browser's variant of the page's language
+  function formatLocale(loc = state.locale) {
+    return regionalLocale(loc, preferred);
+  }
+
   function formatNumber(n, options) {
-    return intl("number", state.locale, options).format(n);
+    return intl("number", formatLocale(), options).format(n);
   }
 
   function interpolate(text, params, loc) {
     return text.replace(/\{(\w+)\}/g, (whole, name) => {
       if (!(name in params)) return whole;
       const v = params[name];
-      return typeof v === "number" ? intl("number", loc).format(v) : String(v ?? "");
+      return typeof v === "number" ? intl("number", formatLocale(loc)).format(v) : String(v ?? "");
     });
   }
 
@@ -161,7 +201,7 @@ export function createI18n({
 
   // Dates and times, e.g. formatDate(ts, { weekday: "short" })
   function formatDate(value, options) {
-    return intl("date", state.locale, options).format(value instanceof Date ? value : new Date(value));
+    return intl("date", formatLocale(), options).format(value instanceof Date ? value : new Date(value));
   }
 
   // Adds or replaces a language's messages (e.g. after loading them).

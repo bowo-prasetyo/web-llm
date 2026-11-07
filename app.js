@@ -22,7 +22,7 @@ import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pa
 import { APP_VERSION, REPO_URL, problemReportUrl } from "./version.js";
 import { storageEstimate, spaceShortfall, requestPersistence, friendlyError } from "./storage.js";
 import { STATUS, statusText, fatalText, isEngineReady } from "./status.js";
-import { useReactive, pickLocale, t } from "./i18n.js";
+import { useReactive, pickLocale, t, formatNumber } from "./i18n.js";
 import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, recordCrash, lighterModel } from "./crash.js";
 
 const {
@@ -161,6 +161,30 @@ const dialogDirective = {
   },
 };
 
+// ── <i18n-t>: a translated sentence with markup inside ─────────────────────
+// For messages that contain links, bold text or buttons. The whole sentence
+// stays one message (translators can reorder it); each {name} that has a
+// slot of the same name is replaced by that slot, other {params} by text:
+//   <i18n-t path="health.suggested"><template #model><strong>…</strong></template></i18n-t>
+// Renders no wrapper element unless `tag` is given.
+const I18nT = {
+  props: {
+    path: { type: String, required: true },
+    params: { type: Object, default: () => ({}) },
+    tag: { type: String, default: "" },
+  },
+  setup(props, { slots }) {
+    return () => {
+      const parts = t(props.path, props.params).split(/\{(\w+)\}/);
+      const children = parts.flatMap((part, i) => {
+        if (i % 2 === 0) return part ? [part] : [];
+        return slots[part] ? slots[part]() : [`{${part}}`];
+      });
+      return props.tag ? Vue.h(props.tag, children) : Vue.h(Vue.Fragment, children);
+    };
+  },
+};
+
 // ── Confirmation dialog (shared by the chat page and Settings) ────────────
 // askConfirm({...}) shows it and resolves to true (confirmed) or false.
 const sharedConfirm = Vue.reactive({
@@ -169,8 +193,8 @@ const sharedConfirm = Vue.reactive({
   title: "",
   subject: "",   // shown in bold above the message (e.g. a model or chat name)
   message: "",
-  confirmText: "OK",
-  cancelText: "Cancel",
+  confirmText: "",
+  cancelText: "",
   danger: false,
   resolve: null,
 });
@@ -180,7 +204,7 @@ function askConfirm(opts) {
   if (sharedConfirm.resolve) sharedConfirm.resolve(false);
   return new Promise(resolve => {
     Object.assign(sharedConfirm, {
-      icon: "", subject: "", message: "", confirmText: "OK", cancelText: "Cancel", danger: false,
+      icon: "", subject: "", message: "", confirmText: t("common.ok"), cancelText: t("common.cancel"), danger: false,
       ...opts,
       show: true,
       resolve,
@@ -396,10 +420,12 @@ refreshStorageInfo();
 function spaceWarning(needMb) {
   const short = spaceShortfall(sharedStorageInfo.value, needMb);
   if (!short) return "";
-  const hint = sharedStorageInfo.value.quotaMb < 1024
-    ? "Private (incognito) windows have very little storage; use a normal window."
-    : "Free some disk space, or choose a smaller model.";
-  return `This browser lets this site store only about ${formatSize(short.availableMb) || "0 MB"} more, and this model needs ${formatSize(short.needMb)}. ${hint}`;
+  const hint = t(sharedStorageInfo.value.quotaMb < 1024 ? "download.space-hint-private" : "download.space-hint-disk");
+  return t("download.space-warning", {
+    available: formatSize(short.availableMb) || t("units.mb", { size: 0 }),
+    need: formatSize(short.needMb),
+    hint,
+  });
 }
 
 // After a model is downloaded, ask once per visit that the browser keep it
@@ -491,12 +517,12 @@ function modelOptionLabel(id) {
   const size = formatSize(downloadMb(id));
   let label = modelShortName(id) + (size ? " · " + size : "");
   if (isModelCached(id)) label += " ✓";
-  if (sharedModelCrashes.value[id]) return `${label}  ⚠ crashed on this device`;
+  if (sharedModelCrashes.value[id]) return t("models.label-crashed", { label });
   const h = sharedModelHealth.value[id];
   if (h && h.ok === false) {
-    return `${label}  ⚠ ${h.reason === "no-f16" ? "needs 16-bit GPU support" : "garbled on this GPU"}`;
+    return t(h.reason === "no-f16" ? "models.label-needs-f16" : "models.label-garbled", { label });
   }
-  if (isF16Model(id) && f16Problem()) return `${label}  ⚠ 16-bit, may not work here`;
+  if (isF16Model(id) && f16Problem()) return t("models.label-f16-risk", { label });
   return label;
 }
 
@@ -582,7 +608,8 @@ const APP_FILES = [
   "./index.html", "./app.js", "./worker.js", "./sw.js", "./style.css",
   "./personas.js", "./markdown.js", "./quality.js", "./context.js",
   "./picker.js", "./chatstore.js", "./attachments.js", "./pace.js",
-  "./version.js", "./crash.js", "./storage.js",
+  "./version.js", "./crash.js", "./storage.js", "./status.js", "./i18n.js",
+  "./locales/en.js",
 ];
 const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
 const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
@@ -642,24 +669,24 @@ const Home = {
         <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="health-title" v-dialog="keepModelAnyway">
           <div class="modal-icon" aria-hidden="true">⚠</div>
           <h2 class="modal-title" id="health-title">
-            {{ healthModal.reason === "degenerate" ? "This model may not work on your GPU" : "This model doesn't work on your GPU" }}
+            {{ $t(healthModal.reason === "degenerate" ? "health.title-may-not-work" : "health.title-doesnt-work") }}
           </h2>
           <p class="modal-body">
-            <strong>{{ modelShortName(healthModal.model) }}</strong> <span class="model-id">({{ healthModal.model }})</span>
-            <template v-if="healthModal.reason === 'no-f16'"> needs 16-bit GPU support, which this browser doesn't offer.</template>
-            <template v-else-if="healthModal.reason === 'degenerate'"> just gave a reply that collapsed into repeated words or unreadable output.</template>
-            <template v-else> gave garbled text in a quick check<span v-if="healthModal.sample">: <em>“{{ healthModal.sample }}…”</em></span>.</template>
+            <i18n-t :path="healthBodyKey">
+              <template #model><strong>{{ modelShortName(healthModal.model) }}</strong> <span class="model-id">({{ healthModal.model }})</span></template>
+              <template #sample><em>“{{ healthModal.sample }}…”</em></template>
+            </i18n-t>
             <br><br>
-            This usually means the GPU does 16-bit math incorrectly. Models marked <strong>q4f32</strong> avoid it.
+            <i18n-t path="health.f16-explain"><template #q4f32><strong>q4f32</strong></template></i18n-t>
           </p>
           <p v-if="healthModal.suggestion" class="modal-body health-suggestion">
-            Suggested: <strong>{{ modelShortName(healthModal.suggestion) }}</strong>
-            <span v-if="downloadMb(healthModal.suggestion)">(~{{ formatSize(downloadMb(healthModal.suggestion)) }} download)</span>
+            <i18n-t path="health.suggested"><template #model><strong>{{ modelShortName(healthModal.suggestion) }}</strong></template></i18n-t>
+            <span v-if="downloadMb(healthModal.suggestion)">{{ $t("health.suggested-size", { size: formatSize(downloadMb(healthModal.suggestion)) }) }}</span>
             <br><span class="model-id">{{ healthModal.suggestion }}</span>
           </p>
           <div class="modal-actions">
-            <button class="action-btn secondary" @click="keepModelAnyway">Keep this model</button>
-            <button v-if="healthModal.suggestion" class="action-btn primary" @click="switchToSuggestion">Switch model</button>
+            <button class="action-btn secondary" @click="keepModelAnyway">{{ $t("health.keep") }}</button>
+            <button v-if="healthModal.suggestion" class="action-btn primary" @click="switchToSuggestion">{{ $t("health.switch") }}</button>
           </div>
         </div>
       </div>
@@ -668,23 +695,24 @@ const Home = {
       <div class="modal-overlay" v-if="crashModal.show">
         <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="crash-title" aria-describedby="crash-body" v-dialog="chooseAfterCrash">
           <div class="modal-icon" aria-hidden="true">⚠</div>
-          <h2 class="modal-title" id="crash-title">{{ crashModal.kind === "gpu" ? "The GPU stopped working" : "The page closed unexpectedly" }}</h2>
+          <h2 class="modal-title" id="crash-title">{{ $t(crashModal.kind === "gpu" ? "crash.title-gpu" : "crash.title-page") }}</h2>
           <p class="modal-body" id="crash-body">
-            <template v-if="crashModal.kind === 'gpu'">The GPU stopped working while</template>
-            <template v-else>Last time, the page closed while</template>
-            {{ crashModal.phase === "answering" ? "answering with" : "loading" }}
-            <strong>{{ modelShortName(crashModal.model) }}</strong>. This usually means this device ran out of memory for that model, so it wasn't loaded again.
+            <i18n-t :path="'crash.body-' + (crashModal.kind === 'gpu' ? 'gpu' : 'page') + '-' + (crashModal.phase === 'answering' ? 'answering' : 'loading')">
+              <template #model><strong>{{ modelShortName(crashModal.model) }}</strong></template>
+            </i18n-t>
           </p>
           <p v-if="!crashModal.lighter" class="modal-body">
-            There is no clearly lighter model worth suggesting. Try again, or choose another model.
+            {{ $t("crash.no-lighter") }}
           </p>
           <p v-if="crashModal.lighter" class="modal-body health-suggestion">
-            Suggested: <strong>{{ modelShortName(crashModal.lighter) }}</strong>, which needs about {{ formatSize(modelSizes[crashModal.lighter]) }} of GPU memory instead of {{ formatSize(modelSizes[crashModal.model]) }}.
+            <i18n-t path="crash.suggested" :params="{ lighterSize: formatSize(modelSizes[crashModal.lighter]), currentSize: formatSize(modelSizes[crashModal.model]) }">
+              <template #model><strong>{{ modelShortName(crashModal.lighter) }}</strong></template>
+            </i18n-t>
           </p>
           <div class="modal-actions crash-actions">
-            <button class="action-btn secondary" @click="retryCrashedModel">Try again</button>
-            <button class="action-btn secondary" @click="chooseAfterCrash">Choose another model</button>
-            <button v-if="crashModal.lighter" class="action-btn primary" @click="useLighterModel">Use {{ friendlyModelName(crashModal.lighter) }}</button>
+            <button class="action-btn secondary" @click="retryCrashedModel">{{ $t("crash.try-again") }}</button>
+            <button class="action-btn secondary" @click="chooseAfterCrash">{{ $t("crash.choose-another") }}</button>
+            <button v-if="crashModal.lighter" class="action-btn primary" @click="useLighterModel">{{ $t("crash.use", { model: friendlyModelName(crashModal.lighter) }) }}</button>
           </div>
         </div>
       </div>
@@ -694,12 +722,12 @@ const Home = {
         <div class="modal picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" v-dialog="closePicker">
           <template v-if="picker.step === 1">
             <h2 class="modal-title" id="picker-title">
-              {{ picker.firstRun ? "Welcome! Let's pick a model" : "Choose a model" }}
+              {{ $t(picker.firstRun ? "picker.title-first-run" : "picker.title") }}
             </h2>
             <p class="modal-body picker-intro">
-              Everything runs privately in your browser. The model downloads once and is kept for next time.
+              {{ $t("picker.intro") }}
             </p>
-            <p class="picker-question">What will you mostly use it for?</p>
+            <p class="picker-question">{{ $t("picker.question-use") }}</p>
             <div class="picker-options">
               <button
                 v-for="u in uses"
@@ -720,16 +748,16 @@ const Home = {
             </div>
             <div class="modal-actions picker-actions">
               <button type="button" class="link-btn" @click="closePicker">
-                {{ picker.firstRun ? "Skip, I'll choose myself" : "Cancel" }}
+                {{ $t(picker.firstRun ? "picker.skip" : "common.cancel") }}
               </button>
             </div>
           </template>
 
           <template v-else>
-            <h2 class="modal-title" id="picker-title">Pick a size</h2>
+            <h2 class="modal-title" id="picker-title">{{ $t("picker.title-size") }}</h2>
             <p class="picker-device">{{ deviceSummary }}</p>
             <p v-if="pickerOnPhone" class="picker-phone-note" role="note">
-              On phones, larger models often close the page because the phone runs out of memory. If that happens, the app offers a smaller one. Many phones can only run the Tiny models, whose answers are very limited.
+              {{ $t("picker.phone-note") }}
             </p>
             <div class="picker-options">
               <button
@@ -745,21 +773,21 @@ const Home = {
                 <span class="picker-text">
                   <span class="picker-head">
                     <strong>{{ o.title }}</strong>
-                    <span v-if="o.recommended" class="picker-badge">Recommended</span>
-                    <span v-if="o.current" class="picker-badge muted">In use</span>
+                    <span v-if="o.recommended" class="picker-badge">{{ $t("picker.recommended") }}</span>
+                    <span v-if="o.current" class="picker-badge muted">{{ $t("picker.in-use") }}</span>
                   </span>
                   <span class="picker-model">{{ o.name }}</span>
-                  <span class="picker-meta">{{ o.cached ? "Already downloaded" : (online ? "~" + (formatSize(o.sizeMb) || "?") + " download" : "Needs internet to download (~" + (formatSize(o.sizeMb) || "?") + ")") }}</span>
+                  <span class="picker-meta">{{ o.cached ? $t("picker.downloaded") : $t(online ? "picker.download-size" : "picker.needs-internet", { size: formatSize(o.sizeMb) || "?" }) }}</span>
                   <span v-if="o.space" class="picker-meta picker-crashed picker-space">⚠ {{ o.space }}</span>
-                  <span v-if="o.crashed" class="picker-meta picker-crashed">⚠ Crashed on this device (not enough memory?)</span>
+                  <span v-if="o.crashed" class="picker-meta picker-crashed">{{ $t("picker.crashed") }}</span>
                   <span class="picker-desc">{{ o.desc }}</span>
                 </span>
               </button>
             </div>
             <div class="modal-actions">
-              <button type="button" class="action-btn secondary" @click="picker.step = 1">Back</button>
+              <button type="button" class="action-btn secondary" @click="picker.step = 1">{{ $t("common.back") }}</button>
               <button type="button" class="action-btn primary" @click="confirmPick" :disabled="!selectedPick">
-                {{ selectedPick && selectedPick.cached ? "Start" : "Download & start" }}
+                {{ $t(selectedPick && selectedPick.cached ? "picker.start" : "picker.download-start") }}
               </button>
             </div>
           </template>
@@ -770,30 +798,30 @@ const Home = {
       <div v-if="webgpuError" class="webgpu-error-overlay">
         <div class="webgpu-error-card" role="alertdialog" aria-modal="true" aria-labelledby="webgpu-error-title" v-dialog="null">
           <div class="webgpu-error-icon" aria-hidden="true">⚠</div>
-          <h2 class="webgpu-error-title" id="webgpu-error-title">WebGPU Not Available</h2>
+          <h2 class="webgpu-error-title" id="webgpu-error-title">{{ $t("webgpu.title") }}</h2>
           <p class="webgpu-error-body">
-            Your browser or device doesn't support WebGPU, which is required to run AI models locally.
+            {{ $t("webgpu.body") }}
           </p>
           <div class="webgpu-error-steps">
             <div class="webgpu-step">
               <span class="step-num">1</span>
-              <span>Make sure <strong>Hardware Acceleration</strong> is enabled in your browser settings</span>
+              <i18n-t path="webgpu.step-acceleration" tag="span"><template #setting><strong>{{ $t("webgpu.acceleration-setting") }}</strong></template></i18n-t>
             </div>
             <div class="webgpu-step">
               <span class="step-num">2</span>
-              <span>On Chrome Android, visit <code>chrome://flags</code> and enable <strong>WebGPU</strong></span>
+              <i18n-t path="webgpu.step-flags" tag="span"><template #flags><code>chrome://flags</code></template><template #webgpu><strong>WebGPU</strong></template></i18n-t>
             </div>
             <div class="webgpu-step">
               <span class="step-num">3</span>
-              <span>Try <strong>Chrome 113+</strong> or <strong>Edge</strong> on desktop for best support</span>
+              <i18n-t path="webgpu.step-browsers" tag="span"><template #chrome><strong>Chrome 113+</strong></template><template #edge><strong>Edge</strong></template></i18n-t>
             </div>
             <div class="webgpu-step">
               <span class="step-num">4</span>
-              <span>Check your GPU compatibility at <a href="https://webgpureport.org" target="_blank" rel="noopener">webgpureport.org</a></span>
+              <i18n-t path="webgpu.step-report" tag="span"><template #link><a href="https://webgpureport.org" target="_blank" rel="noopener">webgpureport.org</a></template></i18n-t>
             </div>
           </div>
           <button class="action-btn primary" style="margin-top:20px;width:100%" data-autofocus @click="webgpuError = false; applySettings()">
-            Try Again
+            {{ $t("webgpu.try-again") }}
           </button>
         </div>
       </div>
@@ -813,13 +841,13 @@ const Home = {
         :inert="!sidebarOpen && !sidebarDocked"
       >
         <div class="sidebar-header">
-          <h2 class="sidebar-title" id="sidebar-title">Chats</h2>
+          <h2 class="sidebar-title" id="sidebar-title">{{ $t("sidebar.title") }}</h2>
           <div class="sidebar-header-actions">
             <button class="new-chat-btn" @click="newChat" :disabled="loading || modelLoading">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              New Chat
+              {{ $t("sidebar.new-chat") }}
             </button>
-            <button type="button" class="sidebar-close" @click="closeSidebar" :aria-label="sidebarDocked ? 'Hide chat list' : 'Close chat list'" :title="sidebarDocked ? 'Hide' : 'Close'">
+            <button type="button" class="sidebar-close" @click="closeSidebar" :aria-label="$t(sidebarDocked ? 'sidebar.hide-list' : 'sidebar.close-list')" :title="$t(sidebarDocked ? 'sidebar.hide' : 'common.close')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -831,12 +859,12 @@ const Home = {
           <input
             class="search-input"
             type="search"
-            placeholder="Search chats…"
-            aria-label="Search chats"
+            :placeholder="$t('sidebar.search-placeholder')"
+            :aria-label="$t('sidebar.search')"
             v-model="searchQuery"
             @input="onSearchInput"
           />
-          <button v-if="searchQuery" type="button" class="search-clear" @click="searchQuery = ''; searchResults = []" title="Clear search" aria-label="Clear search">
+          <button v-if="searchQuery" type="button" class="search-clear" @click="searchQuery = ''; searchResults = []" :title="$t('sidebar.clear-search')" :aria-label="$t('sidebar.clear-search')">
             <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -844,9 +872,9 @@ const Home = {
         <!-- Search results -->
         <div v-if="searchQuery" class="sidebar-list">
           <div v-if="searchResults.length === 0 && !searchPending" class="sidebar-empty" role="status">
-            No results for "{{ searchQuery }}"
+            {{ $t("sidebar.no-results", { query: searchQuery }) }}
           </div>
-          <div v-if="searchPending" class="sidebar-empty" role="status">Searching…</div>
+          <div v-if="searchPending" class="sidebar-empty" role="status">{{ $t("sidebar.searching") }}</div>
           <template v-for="r in searchResults" :key="r.session.id">
             <div
               class="session-item search-result-item"
@@ -859,7 +887,7 @@ const Home = {
                 :aria-current="r.session.id === currentSessionId ? 'true' : null"
               >
                 <span class="session-meta">
-                  <span class="session-title">{{ r.session.id === currentSessionId ? "Current chat" : r.session.title }}</span>
+                  <span class="session-title">{{ r.session.id === currentSessionId ? $t("chats.current") : r.session.title }}</span>
                   <span class="session-date">{{ formatDate(r.session.ts) }}</span>
                 </span>
                 <!-- Show up to 3 matching excerpts per session -->
@@ -868,10 +896,10 @@ const Home = {
                   :key="mi"
                   class="search-match"
                 >
-                  <span class="match-role">{{ match.role === "user" ? "You" : "AI" }}</span>
+                  <span class="match-role">{{ $t(match.role === "user" ? "sidebar.match-you" : "sidebar.match-ai") }}</span>
                   <span class="match-snippet" v-html="match.highlighted"></span>
                 </span>
-                <span v-if="r.matches.length > 3" class="search-more">+{{ r.matches.length - 3 }} more matches</span>
+                <span v-if="r.matches.length > 3" class="search-more">{{ $t("sidebar.more-matches", { count: r.matches.length - 3 }) }}</span>
               </button>
             </div>
           </template>
@@ -879,7 +907,7 @@ const Home = {
 
         <!-- Normal sessions list -->
         <div v-else class="sidebar-list">
-          <div v-if="sessions.length === 0" class="sidebar-empty">No saved chats yet</div>
+          <div v-if="sessions.length === 0" class="sidebar-empty">{{ $t("sidebar.empty") }}</div>
           <div
             v-for="s in sessions"
             :key="s.id"
@@ -899,7 +927,7 @@ const Home = {
               <span class="session-preview">{{ s.preview }}</span>
               <span class="session-model">{{ friendlyModelName(s.model) }}</span>
             </button>
-            <button type="button" class="session-delete" @click="deleteSession(s.id)" title="Delete chat" :aria-label="'Delete chat: ' + s.title">
+            <button type="button" class="session-delete" @click="deleteSession(s.id)" :title="$t('sidebar.delete-chat')" :aria-label="$t('sidebar.delete-chat-named', { title: s.title })">
               <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
             </button>
           </div>
@@ -912,8 +940,8 @@ const Home = {
             ref="menuBtn"
             class="icon-btn"
             @click="toggleSidebar"
-            title="Chat history"
-            aria-label="Chat history"
+            :title="$t('header.chat-history')"
+            :aria-label="$t('header.chat-history')"
             aria-controls="chat-sidebar"
             :aria-expanded="sidebarOpen || sidebarDocked ? 'true' : 'false'"
           >
@@ -923,15 +951,15 @@ const Home = {
             <svg class="header-mark" aria-hidden="true" viewBox="84 108 344 296" width="26" height="22"><g transform="translate(0 -16)" fill="none" stroke="currentColor" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"><path d="M150 400 V252 A106 106 0 0 1 362 252 V400"/><line x1="104" y1="400" x2="408" y2="400"/><path transform="translate(256 380) scale(1.1) translate(-256 -380)" d="M256 204 C272 238 314 262 314 316 C314 350 289 372 256 372 C223 372 198 350 198 316 C198 289 212 270 225 257 C227 278 235 291 246 296 C239 265 240 234 256 204 Z" fill="currentColor" stroke="none"/></g></svg>
             <div class="header-names">
               <h1 class="header-title">Hearth</h1>
-              <span class="header-tagline">Private AI chat on this device</span>
+              <span class="header-tagline">{{ $t("header.tagline") }}</span>
             </div>
           </div>
         </div>
         <div class="header-actions">
-          <button class="icon-btn" @click="newChat" :disabled="loading || modelLoading" title="New chat" aria-label="New chat">
+          <button class="icon-btn" @click="newChat" :disabled="loading || modelLoading" :title="$t('header.new-chat')" :aria-label="$t('header.new-chat')">
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
-          <button class="icon-btn" @click="$router.push('/settings')" title="Settings" aria-label="Settings">
+          <button class="icon-btn" @click="$router.push('/settings')" :title="$t('header.settings')" :aria-label="$t('header.settings')">
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
@@ -945,16 +973,16 @@ const Home = {
         <!-- Announced to screen readers. Download progress updates many times
              a second, so only its start is announced, not every step. -->
         <span class="sr-only" role="status" aria-live="polite">{{ announcedStatus }}</span>
-        <span v-if="!online" class="offline-badge" title="No internet connection. Downloaded models still work.">Offline</span>
+        <span v-if="!online" class="offline-badge" :title="$t('statusbar.offline-hint')">{{ $t("statusbar.offline") }}</span>
       </div>
 
       <!-- A newer version of the app was deployed while this tab was open -->
       <div v-if="updateAvailable && !updateDismissed" class="update-banner" role="status">
-        <span class="update-text">A new version of the app is available.</span>
+        <span class="update-text">{{ $t("update.available") }}</span>
         <button type="button" class="action-btn primary update-reload" @click="reloadApp" :disabled="loading">
-          {{ loading ? "Reload after this reply" : "Reload" }}
+          {{ $t(loading ? "update.reload-after" : "update.reload") }}
         </button>
-        <button type="button" class="update-dismiss" @click="updateDismissed = true" title="Later" aria-label="Dismiss">×</button>
+        <button type="button" class="update-dismiss" @click="updateDismissed = true" :title="$t('update.later')" :aria-label="$t('common.dismiss')">×</button>
       </div>
 
       <!-- Model download / loading progress -->
@@ -966,7 +994,7 @@ const Home = {
             type="button"
             class="load-cancel"
             @click="cancelDownload"
-          >Cancel</button>
+          >{{ $t("common.cancel") }}</button>
         </div>
         <div
           class="load-track"
@@ -982,16 +1010,16 @@ const Home = {
         </div>
         <div class="load-detail">{{ loadDetail }}</div>
         <p v-if="loadInfo.phase === 'download'" class="load-note">
-          Downloads once, then loads from this device. Keep this tab open until it finishes.
+          {{ $t("load.note") }}
         </p>
       </div>
 
-      <div class="messages" ref="messagesContainer" @click="onMessagesClick" @scroll.passive="onMessagesScroll" role="log" aria-label="Conversation" :aria-busy="loading ? 'true' : 'false'">
+      <div class="messages" ref="messagesContainer" @click="onMessagesClick" @scroll.passive="onMessagesScroll" role="log" :aria-label="$t('messages.label')" :aria-busy="loading ? 'true' : 'false'">
         <!-- Welcome screen for an empty chat: pick a persona, try a starter -->
         <div v-if="messages.length === 0" class="welcome">
-          <h2 class="welcome-title">What would you like to chat about?</h2>
-          <p class="welcome-sub">Pick a persona for this chat. You can switch at any time.</p>
-          <div class="persona-grid" role="radiogroup" aria-label="Persona">
+          <h2 class="welcome-title">{{ $t("welcome.title") }}</h2>
+          <p class="welcome-sub">{{ $t("welcome.sub") }}</p>
+          <div class="persona-grid" role="radiogroup" :aria-label="$t('welcome.persona')">
             <button
               v-for="p in personas"
               :key="p.id"
@@ -1021,10 +1049,10 @@ const Home = {
             type="button"
             class="action-btn primary choose-model-btn"
             @click="openPicker()"
-          >Choose a model to start</button>
+          >{{ $t("welcome.choose-model") }}</button>
           <p class="welcome-note">
-            No server. No account. Works offline. AI can make mistakes, so double-check important facts.
-            <button v-if="lastAppliedModel" type="button" class="link-btn inline" @click="openPicker()">Help me choose a model</button>
+            {{ $t("welcome.note") }}
+            <button v-if="lastAppliedModel" type="button" class="link-btn inline" @click="openPicker()">{{ $t("welcome.help-choose") }}</button>
           </p>
         </div>
         <div
@@ -1045,35 +1073,35 @@ const Home = {
               :open="item.streaming && !item.thinkingDone"
             >
               <summary>
-                <span v-if="item.thinkingDone">Thought process</span>
-                <span v-else class="thinking-live">Thinking…</span>
+                <span v-if="item.thinkingDone">{{ $t("message.thought-process") }}</span>
+                <span v-else class="thinking-live">{{ $t("message.thinking") }}</span>
               </summary>
               <div class="md thinking-body" v-html="item.thinkingHtml"></div>
             </details>
             <div v-if="item.answerHtml" class="md" v-html="item.answerHtml"></div>
             <p v-if="!item.streaming && item.message.notice === 'loop'" class="msg-note">
-              The reply started repeating itself, so it was stopped there.
+              {{ $t("message.note-loop") }}
             </p>
             <p v-if="!item.streaming && item.message.notice === 'continue-failed'" class="msg-note">
-              Couldn't continue: the model didn't add anything new.
+              {{ $t("message.note-continue-failed") }}
             </p>
             <p v-if="!item.streaming && item.message.notice === 'gpu-lost'" class="msg-note">
-              Cut off: the GPU stopped working.
+              {{ $t("message.note-gpu-lost") }}
             </p>
             <p v-if="!item.streaming && item.message.cutOff" class="msg-note">
               {{ cutOffNote(item.message.cutOff) }}
-              <span v-if="item.isLast">Press Continue for the rest.</span>
+              <span v-if="item.isLast">{{ $t("message.press-continue") }}</span>
             </p>
             <div v-if="!item.streaming" class="msg-actions">
               <button
                 type="button"
                 class="msg-action"
                 @click="copyMessage(item)"
-                :title="copiedIndex === item.index ? 'Copied' : 'Copy reply'"
+                :title="$t(copiedIndex === item.index ? 'message.copied' : 'message.copy-reply')"
               >
                 <svg v-if="copiedIndex !== item.index" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                {{ copiedIndex === item.index ? "Copied" : "Copy" }}
+                {{ $t(copiedIndex === item.index ? "message.copied" : "message.copy") }}
               </button>
               <button
                 v-if="item.isLast && item.message.cutOff && !item.message.isError"
@@ -1081,10 +1109,10 @@ const Home = {
                 class="msg-action msg-action-primary"
                 @click="continueReply"
                 :disabled="loading || modelLoading"
-                title="Continue this reply"
+                :title="$t('message.continue-title')"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-                Continue
+                {{ $t("message.continue") }}
               </button>
               <button
                 v-if="item.isLast"
@@ -1092,10 +1120,10 @@ const Home = {
                 class="msg-action"
                 @click="regenerate"
                 :disabled="loading || modelLoading"
-                :title="item.message.isError ? 'Try again' : 'Regenerate reply'"
+                :title="$t(item.message.isError ? 'message.try-again' : 'message.regenerate-title')"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                {{ item.message.isError ? "Retry" : "Regenerate" }}
+                {{ $t(item.message.isError ? "message.retry" : "message.regenerate") }}
               </button>
             </div>
           </template>
@@ -1105,10 +1133,9 @@ const Home = {
       <!-- Documents from earlier versions were shared by all chats -->
       <div v-if="legacyDocs.length" class="legacy-docs-note">
         <span>
-          Documents added in an earlier version ({{ legacyDocs.join(", ") }}) were shared by all chats and are no longer used.
-          Attach the files you need to a chat instead.
+          {{ $t("legacy-docs.note", { files: legacyDocs.join(", ") }) }}
         </span>
-        <button type="button" class="link-btn inline" @click="removeLegacyDocs">Remove them</button>
+        <button type="button" class="link-btn inline" @click="removeLegacyDocs">{{ $t("legacy-docs.remove") }}</button>
       </div>
 
       <div class="footer-container">
@@ -1119,10 +1146,10 @@ const Home = {
           @click="jumpToLatest"
         >
           <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-          {{ loading ? "Follow the reply" : "Jump to latest" }}
+          {{ $t(loading ? "composer.follow-reply" : "composer.jump-latest") }}
         </button>
         <!-- Documents attached to this chat -->
-        <div v-if="attachments.length" class="attachments" aria-label="Documents attached to this chat">
+        <div v-if="attachments.length" class="attachments" :aria-label="$t('composer.attachments')">
           <div
             v-for="a in attachments"
             :key="a.id"
@@ -1133,28 +1160,26 @@ const Home = {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             <span class="attachment-name">{{ a.name }}</span>
             <span class="attachment-meta">{{ attachmentMeta(a) }}</span>
-            <button type="button" class="attachment-remove" @click="removeAttachment(a.id)" :aria-label="'Remove ' + a.name" title="Remove from this chat">×</button>
+            <button type="button" class="attachment-remove" @click="removeAttachment(a.id)" :aria-label="$t('composer.remove-named', { name: a.name })" :title="$t('composer.remove-title')">×</button>
           </div>
         </div>
         <p v-if="speedNote" class="speed-note" :class="{ slow: speedNote.slow }">
           <span>{{ speedNote.text }}</span>
-          <template v-if="speedNote.faster">
-            For quicker replies, try
-            <button type="button" class="link-btn speed-switch" @click="switchToFaster" :disabled="modelLoading || loading">{{ speedNote.fasterName }}</button>
-            (faster, but makes more mistakes).
-          </template>
+          <i18n-t v-if="speedNote.faster" path="speed.try-faster">
+            <template #model><button type="button" class="link-btn speed-switch" @click="switchToFaster" :disabled="modelLoading || loading">{{ speedNote.fasterName }}</button></template>
+          </i18n-t>
         </p>
         <p v-if="accuracyHint" class="accuracy-note" role="note">
-          <span>⚠ Small models like {{ accuracyHint }} often get facts wrong, even when they sound sure. Check anything important.</span>
-          <button type="button" class="accuracy-dismiss" @click="dismissAccuracyHint" aria-label="Hide this hint for this model" title="Hide for this model">×</button>
+          <span>{{ $t("accuracy.hint", { model: accuracyHint }) }}</span>
+          <button type="button" class="accuracy-dismiss" @click="dismissAccuracyHint" :aria-label="$t('accuracy.hide-label')" :title="$t('accuracy.hide-title')">×</button>
         </p>
         <div class="toolbar">
           <select
             :value="currentPersonaId"
             @change="setPersona($event.target.value)"
             class="persona-select"
-            title="Persona for this chat"
-            aria-label="Persona for this chat"
+            :title="$t('composer.persona')"
+            :aria-label="$t('composer.persona')"
           >
             <option v-for="p in personas" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
           </select>
@@ -1163,10 +1188,10 @@ const Home = {
             @change="applySettings()"
             :disabled="modelLoading || loading"
             class="model-select"
-            title="Model"
-            aria-label="Model"
+            :title="$t('composer.model')"
+            :aria-label="$t('composer.model')"
           >
-            <option disabled value="">Select Model</option>
+            <option disabled value="">{{ $t("composer.select-model") }}</option>
             <template v-for="group in modelGroups" :key="group.label">
               <optgroup :label="group.label">
                 <option v-for="model in group.models" :key="model" :value="model">
@@ -1180,22 +1205,22 @@ const Home = {
             class="clear-btn"
             @click="clearConversation"
             :disabled="messages.length === 0"
-            title="Delete this chat"
+            :title="$t('composer.delete-chat')"
           >
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
             </svg>
-            Clear
+            {{ $t("composer.clear") }}
           </button>
 
           <!-- A real button opening a hidden file input: a visible-but-tiny
                input would add the browser's "No file chosen" text to copied
                text and screen readers. -->
-          <button type="button" class="upload-btn" title="Attach a document to this chat (PDF, TXT, Markdown)" @click="$refs.attachInput.click()">
+          <button type="button" class="upload-btn" :title="$t('composer.attach-title')" @click="$refs.attachInput.click()">
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
-            <span>Attach</span>
+            <span>{{ $t("composer.attach") }}</span>
           </button>
           <input ref="attachInput" type="file" class="attach-input" hidden accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" />
 
@@ -1205,7 +1230,7 @@ const Home = {
           <textarea
             ref="promptInput"
             v-model="prompt"
-            aria-label="Message"
+            :aria-label="$t('composer.message')"
             rows="1"
             :placeholder="promptPlaceholder"
             :enterkeyhint="isTouch ? 'enter' : 'send'"
@@ -1218,8 +1243,8 @@ const Home = {
             v-if="loading"
             class="send-btn stop-gen-btn"
             @click="stopGeneration"
-            title="Stop generation"
-            aria-label="Stop generation"
+            :title="$t('composer.stop')"
+            :aria-label="$t('composer.stop')"
           >
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="4" y="4" width="16" height="16" rx="2"/>
@@ -1232,8 +1257,8 @@ const Home = {
             class="send-btn"
             @click="send"
             :disabled="modelLoading || !prompt.trim()"
-            title="Send"
-            aria-label="Send message"
+            :title="$t('composer.send-title')"
+            :aria-label="$t('composer.send')"
           >
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -1253,7 +1278,7 @@ const Home = {
     // Use module-level shared refs so Settings page can read/write the same state
     const loading = sharedLoading;
     const modelLoading = sharedModelLoading;
-    const status = ref("Loading...");
+    const status = ref(t("statusbar.loading"));
     const messages = sharedMessages;
     const messagesContainer = ref(null);
     const streamingText = ref("");
@@ -1277,17 +1302,17 @@ const Home = {
     // Tiny group, which comes last.
     // Tests run on the lower-cased ID, in order; the first match wins.
     const MODEL_GROUPS_DEF = [
-      { label: "Micro (0.5–0.8B)",       test: m => m.includes("0.5b") || m.includes("0.6b") || m.includes("0.8b") },
-      { label: "Lightweight (1–1.7B)",   test: m => !m.includes("tinyllama") && (m.includes("1.1b") || (m.includes("1b") && !m.includes("1.5b")) || m.includes("1.7b") || m.includes("1_6b") || m.includes("1.6b")) },
-      { label: "Small (1.5B)",           test: m => m.includes("1.5b") },
-      { label: "Mid (2–4B)",             test: m => m.includes("2b") || m.includes("3b") || m.includes("4b") },
-      { label: "Upper-mid (3.8B)",       test: m => m.includes("mini") },
-      { label: "Large (7–9B)",           test: m => m.includes("7b") || m.includes("8b") || m.includes("9b") },
+      { key: "micro",       test: m => m.includes("0.5b") || m.includes("0.6b") || m.includes("0.8b") },
+      { key: "lightweight", test: m => !m.includes("tinyllama") && (m.includes("1.1b") || (m.includes("1b") && !m.includes("1.5b")) || m.includes("1.7b") || m.includes("1_6b") || m.includes("1.6b")) },
+      { key: "small",       test: m => m.includes("1.5b") },
+      { key: "mid",         test: m => m.includes("2b") || m.includes("3b") || m.includes("4b") },
+      { key: "upper-mid",   test: m => m.includes("mini") },
+      { key: "large",       test: m => m.includes("7b") || m.includes("8b") || m.includes("9b") },
       // Last, and labelled as such: 135M–360M models, and TinyLlama (1.1B
       // but from 2023, often reciting its instructions), can barely hold a
       // conversation, so nobody should judge the app by them. Kept for
       // testing and very weak devices; the picker never suggests them.
-      { label: "Tiny (for testing; very limited answers)", test: m => m.includes("135m") || m.includes("360m") || m.includes("tinyllama") },
+      { key: "tiny",        test: m => m.includes("135m") || m.includes("360m") || m.includes("tinyllama") },
     ];
 
     const { computed } = Vue;
@@ -1307,11 +1332,11 @@ const Home = {
       const groups = MODEL_GROUPS_DEF.map(g => {
         const matched = visibleModels.value.filter(m => g.test(m.toLowerCase()) && !assigned.has(m));
         matched.forEach(m => assigned.add(m));
-        return { label: g.label, models: matched };
+        return { label: t(`models.group-${g.key}`), models: matched };
       });
       // Catch any unmatched models in an "Other" group
       const other = visibleModels.value.filter(m => !assigned.has(m));
-      if (other.length) groups.push({ label: "Other", models: other });
+      if (other.length) groups.push({ label: t("models.group-other"), models: other });
       return groups.filter(g => g.models.length > 0);
     });
     const conversationRestored = ref(false); // guard: restore once per page load
@@ -1381,7 +1406,7 @@ const Home = {
     // What screen readers hear from the status bar. Download progress
     // changes many times a second, so it is announced once when it starts.
     const announcedStatus = Vue.computed(() =>
-      isDownloading.value ? "Downloading the model…" : status.value);
+      isDownloading.value ? t("statusbar.downloading") : status.value);
 
     // Documents attached to the chat on screen: attachments for the chips,
     // attachmentRecords with the full text (and chunks) for the worker.
@@ -1420,10 +1445,10 @@ const Home = {
     const loadTitle = Vue.computed(() => {
       const name = modelShortName(settings.value.model);
       switch (loadInfo.value?.phase) {
-        case "download": return `Downloading ${name}`;
-        case "cache":    return `Loading ${name} from this device`;
-        case "gpu":      return `Preparing ${name} for your GPU`;
-        default:         return `Loading ${name}`;
+        case "download": return t("load.downloading", { model: name });
+        case "cache":    return t("load.from-device", { model: name });
+        case "gpu":      return t("load.preparing", { model: name });
+        default:         return t("load.loading", { model: name });
       }
     });
 
@@ -1557,7 +1582,7 @@ const Home = {
       currentPersonaId.value = persona.id;
       if (messages.value.length > 0) {
         saveConversation();
-        status.value = `${persona.icon} ${persona.name} persona: applies from your next message`;
+        status.value = t("persona.applies-next", { icon: persona.icon, name: persona.name });
       }
     }
 
@@ -1573,8 +1598,8 @@ const Home = {
     const isTouch = ref(!!touchQuery?.matches);
     touchQuery?.addEventListener?.("change", e => { isTouch.value = e.matches; });
     const promptPlaceholder = Vue.computed(() => isTouch.value
-      ? "Ask something…"
-      : "Ask something… (Enter to send, Shift+Enter for a new line)");
+      ? t("composer.placeholder-touch")
+      : t("composer.placeholder"));
 
     function isComposing(e) {
       return e.isComposing || e.keyCode === 229;
@@ -1688,10 +1713,10 @@ const Home = {
       const code = button.closest(".code-block")?.querySelector("code");
       if (!code) return;
       if (await copyText(code.textContent)) {
-        button.textContent = "Copied";
+        button.textContent = t("message.copied");
         button.classList.add("copied");
         setTimeout(() => {
-          button.textContent = "Copy";
+          button.textContent = t("message.copy");
           button.classList.remove("copied");
         }, 1500);
       }
@@ -1813,10 +1838,14 @@ const Home = {
     }
 
     function attachmentMeta(a) {
-      if (a.status === "reading") return "Reading…";
-      if (a.status === "indexing") return a.total ? `Indexing ${a.current}/${a.total}` : "Indexing…";
-      if (a.status === "error") return "Can't search it";
-      return a.chars >= 1000 ? `${Math.round(a.chars / 1000)}k chars` : `${a.chars} chars`;
+      if (a.status === "reading") return t("attachments.reading");
+      if (a.status === "indexing") {
+        return a.total ? t("attachments.indexing-progress", { current: a.current, total: a.total }) : t("attachments.indexing");
+      }
+      if (a.status === "error") return t("attachments.cant-search");
+      return a.chars >= 1000
+        ? t("attachments.chars-thousands", { count: Math.round(a.chars / 1000) })
+        : t("attachments.chars", { count: a.chars });
     }
 
     // Tell the worker which documents belong to the chat on screen
@@ -1857,7 +1886,11 @@ const Home = {
 
       const maxMB = settings.value.maxFileSizeMB || 50;
       if (file.size > maxMB * 1024 * 1024) {
-        status.value = `⚠ ${file.name} is too large (${(file.size / 1048576).toFixed(1)} MB). Maximum is ${maxMB} MB.`;
+        status.value = t("attachments.too-large", {
+          name: file.name,
+          size: formatNumber(file.size / 1048576, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+          max: maxMB,
+        });
         return;
       }
 
@@ -1873,29 +1906,29 @@ const Home = {
       try {
         text = (await readDocumentText(file)).trim();
       } catch (err) {
-        drop(`⚠ Couldn't read ${file.name}: ${err.message}`);
+        drop(t("attachments.couldnt-read", { name: file.name, error: err.message }));
         return;
       }
       if (!text) {
-        drop(`⚠ No text found in ${file.name} (scanned PDFs without a text layer can't be read)`);
+        drop(t("attachments.no-text", { name: file.name }));
         return;
       }
       if (text.length > MAX_ATTACHMENT_CHARS) {
-        drop(`⚠ ${file.name} is too long (${Math.round(text.length / 1000)}k characters). The maximum is ${MAX_ATTACHMENT_CHARS / 1000}k (~200 pages).`);
+        drop(t("attachments.too-long", { name: file.name, size: Math.round(text.length / 1000), max: MAX_ATTACHMENT_CHARS / 1000 }));
         return;
       }
 
       const record = { id, chatId, name: file.name, text, chars: text.length, ts: Date.now(), chunks: null };
       writeQueue = writeQueue
         .then(async () => (await chatStoreReady).saveAttachment(record))
-        .catch(err => { status.value = `⚠ Couldn't save ${file.name}: ${err.message}`; });
+        .catch(err => { status.value = t("attachments.couldnt-save", { name: file.name, error: err.message }); });
       if (chatId !== currentSessionId.value) return; // chat changed while reading
 
       attachmentRecords = [...attachmentRecords, record];
       attachments.value = attachments.value.map(a => a.id === id ? attachmentView(record) : a);
       saveConversation(); // keeps a chat that so far only has a document
       sendAttachments();
-      status.value = `📎 ${file.name} attached to this chat`;
+      status.value = t("attachments.attached", { name: file.name });
     }
 
     function removeAttachment(id) {
@@ -1946,7 +1979,7 @@ const Home = {
           worker = replaceWorker(onWorkerMessage);
           getWorker().onerror = onWorkerError;
           sharedLoadedKey.value = "";
-          status.value = "The GPU crashed twice on this visit. Stopped to avoid a crash loop.";
+          status.value = t("statusbar.gpu-crashed-twice");
           webgpuError.value = true;
           return;
         }
@@ -1983,7 +2016,7 @@ const Home = {
         case "download-cancelled":
           isDownloading.value = false;
           modelLoading.value = false;
-          status.value = "Download cancelled";
+          status.value = t("statusbar.download-cancelled");
           break;
 
         case "status":
@@ -2019,7 +2052,7 @@ const Home = {
         
         case "thinking":
         
-          status.value = "AI is thinking...";
+          status.value = t("statusbar.thinking");
         
           streamingText.value = "";
         
@@ -2027,7 +2060,7 @@ const Home = {
         
         case "stream":
         
-          status.value = "Generating response...";
+          status.value = t("statusbar.generating");
         
           streamingText.value = data.text;
         
@@ -2057,8 +2090,7 @@ const Home = {
                   
         case "token":
           // The worker counts whitespace-separated words, not model tokens.
-          status.value =
-            `Generating... ~${data.count} words`;
+          status.value = t("statusbar.generating-words", { count: data.count });
           break;
                     
         case "response":
@@ -2096,7 +2128,7 @@ const Home = {
             reply.notice = data.notice || null;   // "loop" | "continue-failed" | "gpu-lost" | null
           }
         
-          status.value = "Ready";
+          status.value = t("status.ready");
         
           loading.value = false;
 
@@ -2136,7 +2168,7 @@ const Home = {
                 settings.value.model = "";
                 refreshSessions();
                 if (!currentSessionId.value) currentSessionId.value = genId();
-                status.value = "Choose a model to start";
+                status.value = t("welcome.choose-model");
                 openPicker({ firstRun: true });
               }
             }
@@ -2181,7 +2213,7 @@ const Home = {
           webgpuError.value = true;
           modelLoading.value = false;
           loading.value = false;
-          status.value = "WebGPU unavailable";
+          status.value = t("statusbar.webgpu-unavailable");
           break;
 
         case "error": {
@@ -2193,10 +2225,12 @@ const Home = {
             if (tail.content && tail.content.trim()) tail.role = "assistant";
             else messages.value.pop();
           }
-          messages.value.push({ role: "assistant", content: "Error: " + friendlyError(data.detail), isError: true });
+          messages.value.push({ role: "assistant", content: t("reply.error", {
+            error: data.code ? t(`errors.${data.code}`, data.params) : friendlyError(data.detail),
+          }), isError: true });
           scrollBottom();
           loading.value = false;
-          status.value = "Something went wrong";
+          status.value = t("statusbar.something-wrong");
           // A failed model load also reports here; don't leave the UI locked.
           modelLoading.value = false;
           isDownloading.value = false;
@@ -2234,8 +2268,8 @@ const Home = {
           if (data.chatId !== currentSessionId.value) break;
           attachments.value = attachments.value.map(a => a.id === data.id
             ? { ...a, status: "error", error: data.error
-              ? `Couldn't prepare this document for search (${data.error}). The beginning of it is still used.`
-              : "Couldn't prepare this document for search. The beginning of it is still used." }
+              ? t("attachments.index-failed-detail", { error: data.error })
+              : t("attachments.index-failed") }
             : a);
           break;
       }
@@ -2243,6 +2277,13 @@ const Home = {
 
     // ── Model health ─────────────────────────────────────────────────────
     const healthModal = ref({ show: false, model: "", reason: "", sample: "", suggestion: "" });
+    // Which sentence explains the problem (catalog keys under "health")
+    const healthBodyKey = Vue.computed(() => {
+      const { reason, sample } = healthModal.value;
+      if (reason === "no-f16") return "health.body-no-f16";
+      if (reason === "degenerate") return "health.body-degenerate";
+      return sample ? "health.body-garbled-sample" : "health.body-garbled";
+    });
 
     // The q4f32 version of a q4f16 model, or else the q4f32 model closest in
     // size, as a replacement that avoids 16-bit GPU math.
@@ -2284,7 +2325,7 @@ const Home = {
           modelLoading.value = false;
           isDownloading.value = false;
           sharedLoadedKey.value = "";
-          status.value = "This model needs 16-bit GPU support, which this browser doesn't offer";
+          status.value = t("statusbar.needs-f16-browser");
         }
         offerReplacement(data.model, data.reason, data.sample);
       }
@@ -2292,9 +2333,9 @@ const Home = {
 
     // Why a reply was cut short, under the reply (Continue gets the rest)
     function cutOffNote(reason) {
-      if (reason === "stall") return "Stopped: the model stopped writing for a minute.";
-      if (reason === "time") return "Cut off at the 20-minute limit for one reply.";
-      return "Cut off at the Max Tokens limit (" + settings.value.max_tokens + ").";
+      if (reason === "stall") return t("reply.cut-off-stall");
+      if (reason === "time") return t("reply.cut-off-time");
+      return t("reply.cut-off-max-tokens", { max: settings.value.max_tokens });
     }
 
     // How fast the current model writes here, once known, with a smaller
@@ -2307,7 +2348,7 @@ const Home = {
       const faster = slow ? fasterModel(model, [...models.value, ...sharedAltModels.value].filter(id => !sharedModelCrashes.value[id])) : "";
       return {
         slow,
-        text: `${friendlyModelName(model)} writes ${formatSpeed(speed.wps)} on this device.`,
+        text: t("speed.note", { model: friendlyModelName(model), speed: formatSpeed(speed.wps) }),
         faster,
         fasterName: faster ? modelShortName(faster) : "",
       };
@@ -2359,33 +2400,27 @@ const Home = {
     // before the first word, stopped before any text, or empty). Show why,
     // instead of junk or an empty bubble. Marked as an error, so it is left
     // out of the model's memory and offers Retry.
-    const FAILED_REPLY_TEXT = {
-      degenerate: "⚠ The reply collapsed into repeated words or unreadable output, so it was stopped.",
-      timeout: "⚠ No reply: the model didn't start answering within the time limit. A smaller model may be faster on this device.",
-      empty: "⚠ The model returned an empty reply.",
-    };
+    // Keys under "reply" in the catalog
+    const FAILED_REPLY_KEYS = { timeout: "reply.failed-timeout", empty: "reply.failed-empty" };
 
     function handleFailedReply(data) {
       const list = messages.value;
       const last = list[list.length - 1];
       const hasBubble = last && last.role === "assistant-stream";
       loading.value = false;
-      status.value = "Ready";
+      status.value = t("status.ready");
 
       if (data.outcome === "stopped") {
         // Stopped before any text: just drop the empty bubble
         if (hasBubble) list.splice(list.length - 1, 1);
-        status.value = "Stopped";
+        status.value = t("statusbar.stopped");
         saveConversation();
         return;
       }
 
-      let text = FAILED_REPLY_TEXT[data.outcome] || FAILED_REPLY_TEXT.empty;
-      if (data.outcome === "degenerate") {
-        text += isF16Model(data.model)
-          ? " This 16-bit (q4f16) model may not run correctly on your GPU; a q4f32 model usually fixes it."
-          : " Try Regenerate, or a larger model.";
-      }
+      const text = data.outcome === "degenerate"
+        ? t(isF16Model(data.model) ? "reply.failed-degenerate-f16" : "reply.failed-degenerate")
+        : t(FAILED_REPLY_KEYS[data.outcome] || FAILED_REPLY_KEYS.empty);
       const msg = { role: "assistant", content: text, isError: true };
       if (hasBubble) list.splice(list.length - 1, 1, msg);
       else list.push(msg);
@@ -2411,8 +2446,8 @@ const Home = {
         lighter: lighterModel(model, modelSizes.value, allModels(), sharedModelCrashes.value),
       };
       status.value = kind === "gpu"
-        ? `Stopped: the GPU stopped working with ${modelShortName(model)}`
-        : `Not loaded: ${modelShortName(model)} closed the page last time`;
+        ? t("crash.status-gpu", { model: modelShortName(model) })
+        : t("crash.status-page", { model: modelShortName(model) });
       refreshSessions();
       if (!currentSessionId.value) currentSessionId.value = genId();
     }
@@ -2463,12 +2498,12 @@ const Home = {
 
     const deviceSummary = computed(() => {
       const { mobile, memoryGB } = deviceInfo();
-      const parts = [mobile ? "Phone or tablet" : "Computer"];
-      if (memoryGB) parts.push(`about ${memoryGB} GB memory`);
+      const parts = [t(mobile ? "picker.device-phone" : "picker.device-computer")];
+      if (memoryGB) parts.push(t("picker.device-memory", { gb: memoryGB }));
       const d = sharedDiagnostics.value;
-      if (!f16Usable()) parts.push("16-bit GPU math not reliable, so these are q4f32 models");
-      else if (d && d.shaderF16 === true) parts.push("16-bit GPU math supported");
-      return "Your device: " + parts.join(" · ");
+      if (!f16Usable()) parts.push(t("picker.device-f16-unreliable"));
+      else if (d && d.shaderF16 === true) parts.push(t("picker.device-f16-ok"));
+      return t("picker.device", { details: parts.join(" · ") });
     });
 
     const pickerOptions = computed(() => {
@@ -2516,7 +2551,7 @@ const Home = {
     function closePicker() {
       picker.value.show = false;
       if (!lastAppliedModel.value && !modelLoading.value) {
-        status.value = "Choose a model to start";
+        status.value = t("welcome.choose-model");
       }
     }
 
@@ -2558,7 +2593,7 @@ const Home = {
 
       // Offline: only models that are already downloaded can load.
       if (!sharedOnline.value && !isModelCached(settings.value.model)) {
-        status.value = "You're offline, and this model isn't downloaded yet. Pick a downloaded model, or connect to download it.";
+        status.value = t("statusbar.offline-not-downloaded");
         settings.value.model = lastAppliedModel.value;
         return;
       }
@@ -2582,11 +2617,12 @@ const Home = {
           const warning = spaceWarning(sizeMb);
           const ok = await askConfirm({
             icon: "⬇",
-            title: "Download Model?",
+            title: t("download.confirm-title"),
             subject: modelShortName(model),
-            message: `About ${formatSize(sizeMb)} will be downloaded and kept in your browser. After that it loads from this device, also offline. You can cancel while it downloads.` +
-              (warning ? ` ⚠ ${warning}` : ""),
-            confirmText: "Download & Load",
+            message: warning
+              ? t("download.confirm-body-warning", { size: formatSize(sizeMb), warning })
+              : t("download.confirm-body", { size: formatSize(sizeMb) }),
+            confirmText: t("download.confirm-ok"),
           });
           // The choice changed meanwhile (another model was picked): leave it.
           if (settings.value.model !== model) return;
@@ -2627,7 +2663,7 @@ const Home = {
           type: "update-config",
           config: liveConfig(),
         });
-        status.value = "Settings applied";
+        status.value = t("statusbar.settings-applied");
         return;
       }
 
@@ -2637,7 +2673,7 @@ const Home = {
       loadInfo.value = { phase: "other", percent: null, doneMb: null, eta: null };
       loadPhaseStart = null;
 
-      status.value = `Loading ${modelShortName(settings.value.model)}…`;
+      status.value = t("statusbar.loading-model", { model: modelShortName(settings.value.model) });
       setPendingWork(settings.value.model, "loading");
     
       getWorker().postMessage({
@@ -2687,7 +2723,7 @@ const Home = {
       worker = replaceWorker(onWorkerMessage);
       getWorker().onerror = onWorkerError;
       sharedLoadedKey.value = "";
-      status.value = "Download cancelled";
+      status.value = t("statusbar.download-cancelled");
 
       // Send init so the worker reports its models list and stays ready
       getWorker().postMessage({ type: "init" });
@@ -2755,9 +2791,9 @@ const Home = {
           }
         });
         saveSettings();
-        status.value = "✓ Settings imported successfully";
+        status.value = t("backup.settings-imported");
       } catch (err) {
-        status.value = `⚠ Import failed: ${err.message}`;
+        status.value = t("backup.import-failed", { error: err.message });
       }
     }
 
@@ -2780,7 +2816,7 @@ const Home = {
       if (messages.value.length > 0 && !sessions.value.some(s => s.id === currentSessionId.value)) {
         allSessions.unshift({
           id: currentSessionId.value,
-          title: titleFromMessages(messages.value) || "Current chat",
+          title: titleFromMessages(messages.value) || t("chats.current"),
           preview: previewFromMessages(messages.value) || "",
           model: settings.value.model || "",
           persona: currentPersonaId.value,
@@ -2793,7 +2829,7 @@ const Home = {
         { version: 1, type: "webllm-sessions", exportedAt: new Date().toISOString(), sessions: allSessions },
         `hearth-chats-${ts}.json`
       );
-      status.value = `✓ Exported ${allSessions.length} session(s)`;
+      status.value = t("backup.exported", { count: allSessions.length });
     }
 
     async function importSessions(event) {
@@ -2844,7 +2880,7 @@ const Home = {
           }
           toAdd.push({
             id:       session.id,
-            title:    session.title   || "Imported chat",
+            title:    session.title   || t("chats.imported"),
             preview:  session.preview || "",
             model:    session.model   || "",
             persona:  session.persona || DEFAULT_PERSONA_ID,
@@ -2870,14 +2906,17 @@ const Home = {
         const added = toAdd.length;
 
         if (added === 0 && skipped > 0) {
-          status.value = `✓ All ${skipped} session(s) already exist — nothing to import`;
+          status.value = t("backup.all-exist", { count: skipped });
         } else if (skipped > 0) {
-          status.value = `✓ Imported ${added} new session(s), skipped ${skipped} duplicate(s)`;
+          status.value = t("backup.imported-skipped", {
+            added: t("backup.new-sessions", { count: added }),
+            skipped: t("backup.duplicates", { count: skipped }),
+          });
         } else {
-          status.value = `✓ Imported ${added} session(s) — open the sidebar to view them`;
+          status.value = t("backup.imported", { count: added });
         }
       } catch (err) {
-        status.value = `⚠ Import failed: ${err.message}`;
+        status.value = t("backup.import-failed", { error: err.message });
       }
     }
     function loadSettings() {
@@ -2946,7 +2985,7 @@ const Home = {
 
     function titleFromMessages(msgs) {
       const first = msgs.find(m => m.role === "user");
-      if (!first) return "New Chat";
+      if (!first) return t("chats.new");
       return first.content.trim().slice(0, 42) + (first.content.length > 42 ? "…" : "");
     }
 
@@ -2988,7 +3027,7 @@ const Home = {
         .then(async () => (await chatStoreReady).save(meta, toSave))
         .catch(err => {
           console.warn("Failed saving chat", err);
-          status.value = `⚠ Couldn't save this chat: ${err.message}`;
+          status.value = t("chats.couldnt-save", { error: err.message });
         });
       return writeQueue;
     }
@@ -3066,10 +3105,10 @@ const Home = {
     function confirmDeleteChat(title) {
       return askConfirm({
         icon: "🗑",
-        title: "Delete this chat?",
+        title: t("chats.delete-title"),
         subject: title || "",
-        message: "Its messages and any attached documents will be removed from this browser. This can't be undone. (Settings → Export Chats keeps a copy.)",
-        confirmText: "Delete chat",
+        message: t("chats.delete-body"),
+        confirmText: t("chats.delete-ok"),
         danger: true,
       });
     }
@@ -3172,10 +3211,10 @@ const Home = {
     getWorker().onmessage = onWorkerMessage;
     function onWorkerError(err) {
       const msg = err.message || err.filename
-        ? `${err.message || "Unknown"} (${err.filename || "?"}:${err.lineno || "?"})`
-        : "Worker failed to load — check browser console for import errors";
+        ? `${err.message || t("common.unknown")} (${err.filename || "?"}:${err.lineno || "?"})`
+        : t("statusbar.worker-load-failed");
       console.error("Worker error:", msg, err);
-      status.value = "⚠ Worker error: " + msg;
+      status.value = t("statusbar.worker-error", { error: msg });
       loading.value = false;
       modelLoading.value = false;
     }
@@ -3278,7 +3317,7 @@ const Home = {
         results.push({
           session: {
             id: currentSessionId.value,
-            title: titleFromMessages(messages.value) || "Current chat",
+            title: titleFromMessages(messages.value) || t("chats.current"),
             ts: Date.now(),
             model: settings.value.model || "",
           },
@@ -3380,6 +3419,7 @@ const Home = {
       lastAppliedModel,
       modelOptionLabel,
       healthModal,
+      healthBodyKey,
       switchToSuggestion,
       crashModal,
       useLighterModel,
@@ -3475,18 +3515,18 @@ const Settings = {
           <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          Back
+          {{ $t("common.back") }}
         </button>
-        <h1 class="settings-title">Settings</h1>
-        <span class="settings-saved">Changes are saved automatically</span>
+        <h1 class="settings-title">{{ $t("settings.title") }}</h1>
+        <span class="settings-saved">{{ $t("settings.saved") }}</span>
       </div>
 
       <div class="settings-body">
 
         <section class="settings-section">
-          <h2 class="section-label">Model</h2>
-          <select v-model="settings.model" @change="applySettings()" :disabled="modelLoading || loading" class="settings-select" aria-label="Model" aria-describedby="model-hint">
-            <option disabled value="">Select Model</option>
+          <h2 class="section-label">{{ $t("settings.model") }}</h2>
+          <select v-model="settings.model" @change="applySettings()" :disabled="modelLoading || loading" class="settings-select" :aria-label="$t('settings.model')" aria-describedby="model-hint">
+            <option disabled value="">{{ $t("composer.select-model") }}</option>
             <template v-for="group in modelGroups" :key="group.label">
               <optgroup :label="group.label">
                 <option v-for="model in group.models" :key="model" :value="model">{{ modelOptionLabel(model) }}</option>
@@ -3494,16 +3534,16 @@ const Settings = {
             </template>
           </select>
           <p class="section-hint" id="model-hint">
-            ✓ = already downloaded. Switching keeps the conversation and uses the new model's recommended reply settings.
+            {{ $t("settings.model-hint") }}
             <span v-if="settings.model" class="model-id">{{ settings.model }}</span>
           </p>
           <button class="action-btn secondary" style="margin-top:10px" @click="$router.push('/'); openPicker()">
-            Help me choose a model
+            {{ $t("welcome.help-choose") }}
           </button>
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label" id="appearance-label">Appearance</h2>
+          <h2 class="section-label" id="appearance-label">{{ $t("settings.appearance") }}</h2>
           <div class="theme-choice" role="radiogroup" aria-labelledby="appearance-label">
             <label v-for="t in themeOptions" :key="t.id" class="theme-option" :class="{ active: themePref === t.id }">
               <input type="radio" name="theme" class="sr-only" :value="t.id" :checked="themePref === t.id" @change="setTheme(t.id)" />
@@ -3515,206 +3555,206 @@ const Settings = {
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">Replies</h2>
+          <h2 class="section-label">{{ $t("settings.replies") }}</h2>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name" id="label-temperature">Temperature</span>
-              <span class="setting-desc">How adventurous replies are. Low = focused and predictable, high = more creative (and more mistakes).</span>
+              <span class="setting-name" id="label-temperature">{{ $t("settings.temperature") }}</span>
+              <span class="setting-desc">{{ $t("settings.temperature-desc") }}</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="0" max="2" step="0.05" v-model.number="settings.temperature" class="slider" aria-label="Temperature" />
-              <span class="setting-value">{{ settings.temperature.toFixed(2) }}</span>
+              <input type="range" min="0" max="2" step="0.05" v-model.number="settings.temperature" class="slider" :aria-label="$t('settings.temperature')" />
+              <span class="setting-value">{{ $n(settings.temperature, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
             </div>
           </div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name">Max Tokens</span>
-              <span class="setting-desc">Longest reply, in tokens (a token is about ¾ of a word). A longer reply stops with a Continue button.</span>
+              <span class="setting-name">{{ $t("settings.max-tokens") }}</span>
+              <span class="setting-desc">{{ $t("settings.max-tokens-desc") }}</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" aria-label="Max Tokens" :aria-valuetext="settings.max_tokens + ' tokens, about ' + approxWords(settings.max_tokens) + ' words'" />
-              <span class="setting-value">{{ settings.max_tokens }}<small class="setting-sub">≈ {{ approxWords(settings.max_tokens) }} words</small></span>
+              <input type="range" min="16" max="2048" step="16" v-model.number="settings.max_tokens" class="slider" :aria-label="$t('settings.max-tokens')" :aria-valuetext="$t('settings.max-tokens-value', { tokens: String(settings.max_tokens), words: String(approxWords(settings.max_tokens)) })" />
+              <span class="setting-value">{{ settings.max_tokens }}<small class="setting-sub">{{ $t("settings.approx-words", { count: String(approxWords(settings.max_tokens)) }) }}</small></span>
             </div>
           </div>
 
           <div class="setting-row" :class="{ pending: contextPending }">
             <div class="setting-info">
-              <span class="setting-name">Context Window</span>
-              <span class="setting-desc">How much of the conversation (and attached documents) the model can see at once. Bigger uses more GPU memory.</span>
+              <span class="setting-name">{{ $t("settings.context-window") }}</span>
+              <span class="setting-desc">{{ $t("settings.context-window-desc") }}</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" aria-label="Context Window" />
+              <input type="range" min="512" max="8192" step="512" v-model.number="settings.contextWindowSize" class="slider" :aria-label="$t('settings.context-window')" />
               <span class="setting-value">{{ settings.contextWindowSize }}</span>
             </div>
             <div v-if="contextPending" class="setting-pending" role="status">
-              <span>Saved. The model needs to reload to use it (a few seconds), otherwise it applies the next time the app starts.</span>
-              <button type="button" class="action-btn primary reload-model-btn" @click="applySettings()" :disabled="modelLoading || loading">Reload model now</button>
+              <span>{{ $t("settings.context-pending") }}</span>
+              <button type="button" class="action-btn primary reload-model-btn" @click="applySettings()" :disabled="modelLoading || loading">{{ $t("settings.reload-model") }}</button>
             </div>
           </div>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name" id="label-thinking">Let reasoning models think first</span>
-              <span class="setting-desc">Qwen3 and Qwen3.5 can reason step by step before answering. It can help with hard questions, but it is slower and uses up the reply length. (DeepSeek-R1 always does it.)</span>
+              <span class="setting-name" id="label-thinking">{{ $t("settings.thinking") }}</span>
+              <span class="setting-desc">{{ $t("settings.thinking-desc") }}</span>
             </div>
             <div class="setting-control">
               <label class="toggle">
                 <input type="checkbox" v-model="settings.thinking" class="thinking-toggle" aria-labelledby="label-thinking" />
-                <span aria-hidden="true">{{ settings.thinking ? "On" : "Off" }}</span>
+                <span aria-hidden="true">{{ $t(settings.thinking ? "common.on" : "common.off") }}</span>
               </label>
             </div>
           </div>
 
           <details class="advanced">
-            <summary>Advanced sampling <span class="advanced-sub">Top P and repetition penalties; most people never need these</span></summary>
+            <summary>{{ $t("settings.advanced") }} <span class="advanced-sub">{{ $t("settings.advanced-sub") }}</span></summary>
 
             <div class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Top P</span>
-                <span class="setting-desc">Nucleus sampling: only consider the most likely words that together make up P of the probability. 1.0 = off.</span>
+                <span class="setting-name">{{ $t("settings.top-p") }}</span>
+                <span class="setting-desc">{{ $t("settings.top-p-desc") }}</span>
               </div>
               <div class="setting-control">
-                <input type="range" min="0.01" max="1" step="0.01" v-model.number="settings.top_p" class="slider" aria-label="Top P" />
-                <span class="setting-value">{{ settings.top_p.toFixed(2) }}</span>
+                <input type="range" min="0.01" max="1" step="0.01" v-model.number="settings.top_p" class="slider" :aria-label="$t('settings.top-p')" />
+                <span class="setting-value">{{ $n(settings.top_p, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
               </div>
             </div>
 
             <div class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Frequency Penalty</span>
-                <span class="setting-desc">Penalises words by how often they have appeared. Reduces word repetition. Range −2 to 2.</span>
+                <span class="setting-name">{{ $t("settings.frequency-penalty") }}</span>
+                <span class="setting-desc">{{ $t("settings.frequency-penalty-desc") }}</span>
               </div>
               <div class="setting-control">
-                <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.frequency_penalty" class="slider" aria-label="Frequency Penalty" />
-                <span class="setting-value">{{ settings.frequency_penalty.toFixed(1) }}</span>
+                <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.frequency_penalty" class="slider" :aria-label="$t('settings.frequency-penalty')" />
+                <span class="setting-value">{{ $n(settings.frequency_penalty, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }}</span>
               </div>
             </div>
 
             <div class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Presence Penalty</span>
-                <span class="setting-desc">Penalises words that have already appeared at all. Encourages new topics. Range −2 to 2.</span>
+                <span class="setting-name">{{ $t("settings.presence-penalty") }}</span>
+                <span class="setting-desc">{{ $t("settings.presence-penalty-desc") }}</span>
               </div>
               <div class="setting-control">
-                <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.presence_penalty" class="slider" aria-label="Presence Penalty" />
-                <span class="setting-value">{{ settings.presence_penalty.toFixed(1) }}</span>
+                <input type="range" min="-2" max="2" step="0.1" v-model.number="settings.presence_penalty" class="slider" :aria-label="$t('settings.presence-penalty')" />
+                <span class="setting-value">{{ $n(settings.presence_penalty, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }}</span>
               </div>
             </div>
 
             <div class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Repetition Penalty</span>
-                <span class="setting-desc">MLC's multiplicative penalty on repeated words. 1.0 = off, above 1 reduces repetition.</span>
+                <span class="setting-name">{{ $t("settings.repetition-penalty") }}</span>
+                <span class="setting-desc">{{ $t("settings.repetition-penalty-desc") }}</span>
               </div>
               <div class="setting-control">
-                <input type="range" min="1" max="2" step="0.05" v-model.number="settings.repetition_penalty" class="slider" aria-label="Repetition Penalty" />
-                <span class="setting-value">{{ settings.repetition_penalty.toFixed(2) }}</span>
+                <input type="range" min="1" max="2" step="0.05" v-model.number="settings.repetition_penalty" class="slider" :aria-label="$t('settings.repetition-penalty')" />
+                <span class="setting-value">{{ $n(settings.repetition_penalty, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
               </div>
             </div>
           </details>
 
           <button type="button" class="action-btn secondary reset-replies-btn" @click="confirmResetSettings">
-            Reset to this model's recommended settings
+            {{ $t("settings.reset-replies") }}
           </button>
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">Personas</h2>
-          <p class="section-hint" style="margin-bottom:12px">A persona sets how the assistant talks. Each chat keeps its own persona; you can switch it from the chat toolbar at any time.</p>
+          <h2 class="section-label">{{ $t("settings.personas") }}</h2>
+          <p class="section-hint" style="margin-bottom:12px">{{ $t("settings.personas-hint") }}</p>
 
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name">Default for new chats</span>
+              <span class="setting-name">{{ $t("settings.default-persona") }}</span>
               <span class="setting-desc">{{ defaultPersona.tagline }}</span>
             </div>
             <div class="setting-control">
-              <select v-model="settings.defaultPersona" class="settings-select persona-default-select" aria-label="Default persona for new chats">
+              <select v-model="settings.defaultPersona" class="settings-select persona-default-select" :aria-label="$t('settings.default-persona-label')">
                 <option v-for="p in personas" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
               </select>
             </div>
           </div>
 
           <details v-if="defaultPersona.prompt" class="persona-prompt-preview">
-            <summary>Show the {{ defaultPersona.name }} instructions</summary>
+            <summary>{{ $t("settings.show-instructions", { name: defaultPersona.name }) }}</summary>
             <pre>{{ defaultPersona.prompt }}</pre>
           </details>
 
-          <h3 class="subsection-label">🛠 Custom persona</h3>
-          <p class="section-hint" style="margin-bottom:10px">Write your own instructions, then pick the Custom persona in a chat. Changes take effect on the next message.</p>
+          <h3 class="subsection-label">{{ $t("settings.custom-persona") }}</h3>
+          <p class="section-hint" style="margin-bottom:10px">{{ $t("settings.custom-persona-hint") }}</p>
           <textarea
             class="system-prompt-editor"
             v-model="settings.system_prompt"
-            placeholder="Enter instructions for the Custom persona..."
+            :placeholder="$t('settings.custom-placeholder')"
             rows="7"
             spellcheck="false"
           ></textarea>
           <button class="action-btn secondary" style="margin-top:8px" @click="resetSystemPrompt">
-            Reset to Friendly instructions
+            {{ $t("settings.reset-custom") }}
           </button>
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">Documents</h2>
+          <h2 class="section-label">{{ $t("settings.documents") }}</h2>
           <div class="setting-row">
             <div class="setting-info">
-              <span class="setting-name">Max Upload Size</span>
-              <span class="setting-desc">Largest file you can attach to a chat (PDF, TXT, Markdown). Text is limited to about 200 pages either way.</span>
+              <span class="setting-name">{{ $t("settings.max-upload") }}</span>
+              <span class="setting-desc">{{ $t("settings.max-upload-desc") }}</span>
             </div>
             <div class="setting-control">
-              <input type="range" min="1" max="200" step="1" v-model.number="settings.maxFileSizeMB" class="slider" aria-label="Max Upload Size" />
-              <span class="setting-value">{{ settings.maxFileSizeMB }} MB</span>
+              <input type="range" min="1" max="200" step="1" v-model.number="settings.maxFileSizeMB" class="slider" :aria-label="$t('settings.max-upload')" />
+              <span class="setting-value">{{ $t("units.mb", { size: settings.maxFileSizeMB }) }}</span>
             </div>
           </div>
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">This device</h2>
-          <p class="section-hint" style="margin-bottom:12px">What the app found about this browser and GPU. Useful when a model gives garbled replies.</p>
+          <h2 class="section-label">{{ $t("device.title") }}</h2>
+          <p class="section-hint" style="margin-bottom:12px">{{ $t("device.hint") }}</p>
           <div class="device-info">
             <div class="device-row">
-              <span class="device-key">App version</span>
+              <span class="device-key">{{ $t("device.app-version") }}</span>
               <span class="device-val">{{ appVersion }}</span>
             </div>
             <div class="device-row">
-              <span class="device-key">WebLLM version</span>
+              <span class="device-key">{{ $t("device.webllm-version") }}</span>
               <span class="device-val">{{ diagnostics?.webllmVersion || "…" }}</span>
             </div>
             <div class="device-row">
-              <span class="device-key">GPU</span>
-              <span class="device-val">{{ diagnostics ? (diagnostics.webgpu ? (diagnostics.gpu || "No GPU adapter found") : "WebGPU not available") : "…" }}</span>
+              <span class="device-key">{{ $t("device.gpu") }}</span>
+              <span class="device-val">{{ diagnostics ? (diagnostics.webgpu ? (diagnostics.gpu || $t("device.no-adapter")) : $t("device.no-webgpu")) : "…" }}</span>
             </div>
             <div class="device-row">
-              <span class="device-key">16-bit GPU support</span>
-              <span class="device-val">{{ diagnostics == null || diagnostics.shaderF16 == null ? "Unknown" : (diagnostics.shaderF16 ? "Yes" : "No") }}</span>
+              <span class="device-key">{{ $t("device.f16-support") }}</span>
+              <span class="device-val">{{ $t(diagnostics == null || diagnostics.shaderF16 == null ? "common.unknown" : (diagnostics.shaderF16 ? "common.yes" : "common.no")) }}</span>
             </div>
             <div class="device-row">
-              <span class="device-key">Chats saved in</span>
+              <span class="device-key">{{ $t("device.chats-saved-in") }}</span>
               <span class="device-val" :class="{ warn: chatStorage.kind === 'localstorage' }">{{ chatStorageText }}</span>
             </div>
             <div class="device-row">
-              <span class="device-key">Storage</span>
+              <span class="device-key">{{ $t("device.storage") }}</span>
               <span class="device-val" :class="{ warn: storageInfo && storageInfo.quotaMb < 2048 }">{{ storageText }}</span>
             </div>
             <div class="device-row">
-              <span class="device-key">Works offline</span>
+              <span class="device-key">{{ $t("device.works-offline") }}</span>
               <span class="device-val" :class="{ warn: offlineReady === false }">{{ offlineText }}</span>
             </div>
             <div class="device-row">
-              <span class="device-key">App</span>
+              <span class="device-key">{{ $t("device.app") }}</span>
               <span class="device-val">
-                <button v-if="installPrompt" class="action-btn primary install-btn" @click="installApp">Install app</button>
-                <template v-else>{{ installedApp ? "Installed" : "Use your browser's \u201cInstall\u201d or \u201cAdd to Home Screen\u201d" }}</template>
+                <button v-if="installPrompt" class="action-btn primary install-btn" @click="installApp">{{ $t("device.install") }}</button>
+                <template v-else>{{ $t(installedApp ? "device.installed" : "device.install-hint") }}</template>
               </span>
             </div>
             <div class="device-row">
-              <span class="device-key">16-bit (q4f16) models</span>
+              <span class="device-key">{{ $t("device.f16-models") }}</span>
               <span class="device-val" :class="{ warn: f16Problem() }">{{ f16Status() }}</span>
             </div>
           </div>
           <div v-if="failedModels.length" class="device-failed">
-            <span class="device-key">Failed the model check here:</span>
+            <span class="device-key">{{ $t("device.failed-check") }}</span>
             <ul>
               <li v-for="f in failedModels" :key="f.id">
                 <code>{{ f.id }}</code>
@@ -3723,44 +3763,44 @@ const Settings = {
             </ul>
           </div>
           <div class="report-problem">
-            <a class="action-btn secondary" :href="reportUrl" target="_blank" rel="noopener">Report a problem</a>
-            <span class="section-hint">Opens a form on GitHub with the details above filled in. Nothing is sent until you submit it there; please don't include private chats.</span>
+            <a class="action-btn secondary" :href="reportUrl" target="_blank" rel="noopener">{{ $t("device.report") }}</a>
+            <span class="section-hint">{{ $t("device.report-hint") }}</span>
           </div>
           <button v-if="checkedCount" class="action-btn secondary" style="margin-top:10px" @click="forgetModelHealth">
-            Forget check results ({{ checkedCount }})
+            {{ $t("device.forget-checks", { count: checkedCount }) }}
           </button>
-          <p class="section-hint" style="margin-top:8px">Offline, chats work with models you have already downloaded; downloading a model, and the first large document you attach (which fetches a small search model), need a connection.</p>
-          <p class="section-hint" style="margin-top:8px">Each model is checked once after its first load on this device. Forgetting the results checks them again, for example after a browser or driver update.</p>
+          <p class="section-hint" style="margin-top:8px">{{ $t("device.offline-note") }}</p>
+          <p class="section-hint" style="margin-top:8px">{{ $t("device.checks-note") }}</p>
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">Export / Import</h2>
-          <p class="section-hint" style="margin-bottom:12px">Transfer your settings and chat history to another browser or device.</p>
+          <h2 class="section-label">{{ $t("backup.title") }}</h2>
+          <p class="section-hint" style="margin-bottom:12px">{{ $t("backup.hint") }}</p>
 
           <div class="transfer-grid">
             <div class="transfer-card">
-              <div class="transfer-card-title">⚙ Settings</div>
-              <div class="transfer-card-desc">Export all settings to a JSON file, or import settings from a previously exported file.</div>
+              <div class="transfer-card-title">{{ $t("backup.settings-title") }}</div>
+              <div class="transfer-card-desc">{{ $t("backup.settings-desc") }}</div>
               <div class="transfer-card-actions">
                 <button class="action-btn secondary" @click="exportSettings">
-                  Export Settings
+                  {{ $t("backup.export-settings") }}
                 </button>
                 <button type="button" class="action-btn secondary" @click="$refs.importSettingsInput.click()">
-                  Import Settings
+                  {{ $t("backup.import-settings") }}
                 </button>
                 <input ref="importSettingsInput" type="file" class="import-settings-input" hidden accept=".json" @change="importSettings" />
               </div>
             </div>
 
             <div class="transfer-card">
-              <div class="transfer-card-title">💬 Chat History</div>
-              <div class="transfer-card-desc">Export all saved sessions to a JSON file, or import sessions from another browser (added alongside existing chats).</div>
+              <div class="transfer-card-title">{{ $t("backup.chats-title") }}</div>
+              <div class="transfer-card-desc">{{ $t("backup.chats-desc") }}</div>
               <div class="transfer-card-actions">
                 <button class="action-btn secondary" @click="exportSessions">
-                  Export Chats
+                  {{ $t("backup.export-chats") }}
                 </button>
                 <button type="button" class="action-btn secondary" @click="$refs.importSessionsInput.click()">
-                  Import Chats
+                  {{ $t("backup.import-chats") }}
                 </button>
                 <input ref="importSessionsInput" type="file" class="import-chats-input" hidden accept=".json" @change="importSessions" />
               </div>
@@ -3769,19 +3809,19 @@ const Settings = {
         </section>
 
         <section class="settings-section">
-          <h2 class="section-label">Current chat</h2>
-          <p class="section-hint" style="margin-bottom:12px">Deletes the chat that is open, with its messages and attached documents. You'll be asked first.</p>
+          <h2 class="section-label">{{ $t("chats.current") }}</h2>
+          <p class="section-hint" style="margin-bottom:12px">{{ $t("settings.current-chat-hint") }}</p>
           <button class="action-btn danger" @click="clearConversation" :disabled="messages.length === 0">
-            Clear Conversation
+            {{ $t("settings.clear-conversation") }}
           </button>
         </section>
 
         <footer class="about-credit">
           <span class="about-name">Hearth {{ appVersion }}</span>
-          <span>Private AI chat that lives in your browser.</span>
+          <span>{{ $t("about.tagline") }}</span>
           <span>
-            <a :href="repoUrl" target="_blank" rel="noopener">Open source</a> ·
-            Powered by <a href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noopener">WebLLM</a>
+            <a :href="repoUrl" target="_blank" rel="noopener">{{ $t("about.open-source") }}</a> ·
+            <i18n-t path="about.powered-by"><template #webllm><a href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noopener">WebLLM</a></template></i18n-t>
           </span>
         </footer>
 
@@ -3794,9 +3834,9 @@ const Settings = {
     // The theme itself is applied by the script in index.html
     // (window.appTheme); this is only the choice.
     const themeOptions = [
-      { id: "system", name: "System", icon: "🖥" },
-      { id: "light",  name: "Light",  icon: "☀️" },
-      { id: "dark",   name: "Dark",   icon: "🌙" },
+      { id: "system", get name() { return t("settings.theme-system"); }, icon: "🖥" },
+      { id: "light",  get name() { return t("settings.theme-light"); },  icon: "☀️" },
+      { id: "dark",   get name() { return t("settings.theme-dark"); },   icon: "🌙" },
     ];
     const themePref = ref(window.appTheme ? window.appTheme.pref() : "dark");
     const themeNow = ref(window.appTheme ? window.appTheme.current() : "dark");
@@ -3808,8 +3848,8 @@ const Settings = {
     window.matchMedia?.("(prefers-color-scheme: light)")
       .addEventListener?.("change", () => { if (window.appTheme) themeNow.value = window.appTheme.current(); });
     const themeHint = Vue.computed(() => themePref.value === "system"
-      ? `Follows this device's setting (${themeNow.value} right now).`
-      : `Always ${themePref.value}, whatever this device is set to.`);
+      ? t("settings.theme-hint-system", { mode: t(`settings.theme-mode-${themeNow.value}`) })
+      : t("settings.theme-hint-fixed", { mode: t(`settings.theme-mode-${themePref.value}`) }));
 
     // A token is roughly ¾ of an English word
     function approxWords(tokens) {
@@ -3828,10 +3868,10 @@ const Settings = {
 
     async function confirmResetSettings() {
       const ok = await askConfirm({
-        title: "Reset reply settings?",
+        title: t("settings.reset-title"),
         subject: modelShortName(sharedSettings.value.model),
-        message: "Temperature, Max Tokens, Context Window and the advanced sampling settings go back to what's recommended for this model. Personas and your custom instructions are kept.",
-        confirmText: "Reset",
+        message: t("settings.reset-body"),
+        confirmText: t("settings.reset-ok"),
       });
       if (ok) sharedResetSettings();
     }
@@ -3851,11 +3891,11 @@ const Settings = {
 
     function f16Status() {
       const d = sharedDiagnostics.value;
-      if (d && d.shaderF16 === false) return "Not supported: use q4f32 models";
+      if (d && d.shaderF16 === false) return t("device.f16-not-supported");
       const f16 = Object.entries(sharedModelHealth.value).filter(([id]) => isF16Model(id));
-      if (f16.some(([, h]) => h && h.ok === false)) return "Garbled output detected: use q4f32 models";
-      if (f16.some(([, h]) => h && h.ok)) return "Working";
-      return "Not checked yet";
+      if (f16.some(([, h]) => h && h.ok === false)) return t("device.f16-garbled");
+      if (f16.some(([, h]) => h && h.ok)) return t("device.f16-working");
+      return t("device.f16-not-checked");
     }
 
     return {
@@ -3903,15 +3943,20 @@ const Settings = {
       storageInfo: sharedStorageInfo,
       storageText: Vue.computed(() => {
         const s = sharedStorageInfo.value;
-        if (!s) return "Unknown";
-        const kept = s.persisted === true ? " · kept by the browser" : s.persisted === false ? " · may be cleared if space runs low" : "";
-        return `${formatSize(s.usageMb) || "0 MB"} used of about ${formatSize(s.quotaMb)} allowed${kept}`;
+        if (!s) return t("common.unknown");
+        const usage = t("device.storage-usage", {
+          used: formatSize(s.usageMb) || t("units.mb", { size: 0 }),
+          allowed: formatSize(s.quotaMb),
+        });
+        if (s.persisted === true) return t("device.storage-kept", { usage });
+        if (s.persisted === false) return t("device.storage-may-clear", { usage });
+        return usage;
       }),
       offlineText: Vue.computed(() => {
-        if (!sharedSwSupported) return "Not supported in this browser";
-        if (sharedOfflineReady.value === true) return "Yes, the app is saved on this device";
-        if (sharedOfflineReady.value === false) return "Not yet: open the app once while online";
-        return "Checking…";
+        if (!sharedSwSupported) return t("device.offline-unsupported");
+        if (sharedOfflineReady.value === true) return t("device.offline-ready");
+        if (sharedOfflineReady.value === false) return t("device.offline-not-yet");
+        return t("device.checking");
       }),
       installPrompt: sharedInstallPrompt,
       installedApp: isInstalledApp(),
@@ -3920,9 +3965,9 @@ const Settings = {
       chatStorageText: Vue.computed(() => {
         const n = sharedSessions.value.length;
         const count = t("chats.count", { count: n });
-        if (sharedChatStorage.value.kind === "indexeddb") return `This browser's database (IndexedDB) · ${count}`;
+        if (sharedChatStorage.value.kind === "indexeddb") return t("device.chats-indexeddb", { count });
         if (sharedChatStorage.value.kind === "localstorage") {
-          return `Local storage, limited to ${FALLBACK_MAX_CHATS} chats of ${FALLBACK_MAX_MESSAGES} messages · ${count}`;
+          return t("device.chats-localstorage", { chats: FALLBACK_MAX_CHATS, messages: FALLBACK_MAX_MESSAGES, count });
         }
         return "…";
       }),
@@ -3957,6 +4002,7 @@ createApp({
     `
   })
   .component("confirm-dialog", ConfirmDialog)
+  .component("i18n-t", I18nT)
   .directive("dialog", dialogDirective)
   .use(i18n)
   .use(router)

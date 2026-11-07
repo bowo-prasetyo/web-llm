@@ -179,3 +179,74 @@ test("translations are saved for offline use", () => {
   expect(sw).toContain('"./i18n.js"');
   for (const code of SUPPORTED_LOCALES) expect(sw).toContain(`"./locales/${code}.js"`);
 });
+
+// ── The app's own use of the catalog ─────────────────────────────────────
+
+const SOURCES = ["app.js", "status.js", "pace.js", "picker.js", "personas.js", "storage.js", "markdown.js", "chatstore.js"];
+
+// Keys written out in full: t("a.b"), $t('a.b'), path="a.b", and both
+// sides of $t(cond ? "a.b" : "a.c")
+function literalKeys(src) {
+  const keys = new Set();
+  const patterns = [
+    /\$?\bt\(\s*["'`]([a-z][\w-]*(?:\.[\w-]+)+)["'`]/g,
+    /\bpath="([a-z][\w-]*(?:\.[\w-]+)+)"/g,
+    /\$?\bt\([^()"'`]*\?\s*["']([a-z][\w-]*(?:\.[\w-]+)+)["']\s*:\s*["']([a-z][\w-]*(?:\.[\w-]+)+)["']/g,
+  ];
+  for (const re of patterns) {
+    for (const m of src.matchAll(re)) for (const k of m.slice(1)) if (k) keys.add(k);
+  }
+  return keys;
+}
+
+test("every key the app uses is in the English catalog", () => {
+  const known = new Set(catalogKeys(en));
+  let found = 0;
+  for (const file of SOURCES) {
+    const src = fs.readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
+    for (const key of literalKeys(src)) {
+      found++;
+      expect(known.has(key), `${file}: "${key}" is not in locales/en.js`).toBe(true);
+    }
+  }
+  expect(found).toBeGreaterThan(300);
+});
+
+test("keys built at run time exist too", () => {
+  const known = new Set(catalogKeys(en));
+  const built = [
+    ...["micro", "lightweight", "small", "mid", "upper-mid", "large", "tiny", "other"].map(g => `models.group-${g}`),
+    ...["gpu", "page"].flatMap(k => ["loading", "answering"].map(p => `crash.body-${k}-${p}`)),
+    ...["light", "dark"].map(m => `settings.theme-mode-${m}`),
+    ...["friendly", "precise", "writer", "coder", "brainstorm", "custom"].flatMap(p => [`personas.${p}.name`, `personas.${p}.tagline`]),
+    "errors.context-too-long",
+  ];
+  for (const key of built) expect(known.has(key), key).toBe(true);
+});
+
+test("the update check fingerprints every script the app is made of", () => {
+  const app = fs.readFileSync(new URL("../../app.js", import.meta.url), "utf8");
+  const sw = fs.readFileSync(new URL("../../sw.js", import.meta.url), "utf8");
+  const appFiles = app.match(/const APP_FILES = \[([\s\S]*?)\];/)[1];
+  for (const [, file] of sw.matchAll(/"(\.\/[\w/.-]+\.js)"/g)) {
+    if (file === "./sw.js") continue;
+    expect(appFiles, `${file} is cached by sw.js but not in APP_FILES`).toContain(`"${file}"`);
+  }
+});
+
+test("the page's templates have no words outside the catalog", () => {
+  // Product names, a URL and a browser address stay as they are
+  const allowed = new Set(["Hearth", "WebGPU", "WebLLM", "Chrome 113+", "Edge", "chrome://flags", "webgpureport.org"]);
+  const src = fs.readFileSync(new URL("../../app.js", import.meta.url), "utf8");
+  const leftovers = [];
+  for (const [, raw] of src.matchAll(/template:\s*`([\s\S]*?)`,?\n/g)) {
+    const tpl = raw.replace(/<!--[\s\S]*?-->/g, "").replace(/<svg[\s\S]*?<\/svg>/g, "").replace(/\{\{[\s\S]*?\}\}/g, "");
+    for (const [, text] of tpl.matchAll(/>([^<>]*[A-Za-z]{2,}[^<>]*)</g)) {
+      if (text.trim() && !allowed.has(text.trim())) leftovers.push(text.trim());
+    }
+    for (const [, attr, value] of tpl.matchAll(/\s(title|aria-label|placeholder|alt|label)="([^"]*[A-Za-z][^"]*)"/g)) {
+      leftovers.push(`${attr}="${value}"`);
+    }
+  }
+  expect(leftovers).toEqual([]);
+});

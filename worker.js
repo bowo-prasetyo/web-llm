@@ -1410,8 +1410,10 @@ self.onmessage = async (event) => {
   } catch (err) {
     postMessage({
       type: "error",
-      // The engine's own message; the page decides what to show
+      // The engine's own message; the page decides what to show. Errors of
+      // our own carry a code (and params) the page translates.
       detail: err?.message || "",
+      ...(err?.code ? { code: err.code, params: err.params || {} } : {}),
     });
   }
 };

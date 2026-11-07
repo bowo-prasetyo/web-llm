@@ -6,8 +6,12 @@
 // Pure functions plus thin wrappers around navigator.storage, shared by
 // app.js and worker.js.
 
-export const STORAGE_FULL_MESSAGE =
-  "Not enough storage space to download this model. Private (incognito) windows have very little storage, so use a normal window. Otherwise free some disk space, or choose a smaller model.";
+import { t } from "./i18n.js";
+
+// What to say when a model doesn't fit (errors["storage-full"])
+export function storageFullMessage() {
+  return t("errors.storage-full");
+}
 
 // True for the errors browsers and WebLLM give when storage is full.
 export function isQuotaError(message) {
@@ -17,7 +21,7 @@ export function isQuotaError(message) {
 // The message to show for an error: storage problems in plain language,
 // anything else unchanged.
 export function friendlyError(message) {
-  return isQuotaError(message) ? STORAGE_FULL_MESSAGE : (message || "");
+  return isQuotaError(message) ? storageFullMessage() : (message || "");
 }
 
 // What the browser reports, in MB: { quotaMb, usageMb }, or null when it

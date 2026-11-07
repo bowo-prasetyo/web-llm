@@ -6,7 +6,8 @@ import { test, expect, check, seedStorage } from "../support/fixtures.js";
 test.use({ fakeWorker: true, downloaded: "SmolLM2-135M-Instruct-q0f32-MLC" });
 
 const checkNow = page => page.evaluate(() => window.webllmCheckForUpdate());
-const PERSONAS_SRC = fs.readFileSync(new URL("../../personas.js", import.meta.url), "utf8");
+// A visible text to change in a simulated deploy: the Friendly tagline
+const CATALOG_SRC = fs.readFileSync(new URL("../../locales/en.js", import.meta.url), "utf8");
 
 async function start(page) {
   await page.goto("/");
@@ -25,9 +26,9 @@ test("a deploy while the tab is open: banner, then Reload loads the new version"
   await page.click('button[title="New chat"]');
   await expect(page.locator(".persona-card:has-text('Friendly')")).not.toContainText("(new)");
 
-  // "Deploy": personas.js changes on the server
-  const updated = PERSONAS_SRC.replace("Everyday help and easygoing chat", "Everyday help and easygoing chat (new)");
-  await context.route(/\/personas\.js$/, r => r.fulfill({ body: updated, contentType: "text/javascript" }));
+  // "Deploy": the English catalog changes on the server
+  const updated = CATALOG_SRC.replace("Everyday help and easygoing chat", "Everyday help and easygoing chat (new)");
+  await context.route(/\/locales\/en\.js$/, r => r.fulfill({ body: updated, contentType: "text/javascript" }));
 
   expect(await checkNow(page)).toBe(true);
   const banner = page.locator(".update-banner");
@@ -62,8 +63,8 @@ test.describe("with the service worker active", () => {
     await expect(page.locator(".status-bar")).toContainText("Model loaded successfully");
     await checkNow(page);
 
-    const updated = PERSONAS_SRC.replace("Everyday help and easygoing chat", "Everyday help and easygoing chat (new)");
-    await context.route(/\/personas\.js$/, r => r.fulfill({ body: updated, contentType: "text/javascript" }));
+    const updated = CATALOG_SRC.replace("Everyday help and easygoing chat", "Everyday help and easygoing chat (new)");
+    await context.route(/\/locales\/en\.js$/, r => r.fulfill({ body: updated, contentType: "text/javascript" }));
     expect(await checkNow(page)).toBe(true);
     await page.locator(".update-banner button:has-text('Reload')").click();
 
@@ -71,7 +72,7 @@ test.describe("with the service worker active", () => {
     await page.click('button[title="New chat"]');
     await expect(page.locator(".persona-card:has-text('Friendly')")).toContainText("(new)");
     const saved = await page.evaluate(async () => {
-      const res = await (await caches.open("webllm-shell-v1")).match(new URL("./personas.js", location.href).href);
+      const res = await (await caches.open("webllm-shell-v1")).match(new URL("./locales/en.js", location.href).href);
       return res ? res.text() : "";
     });
     check(saved.includes("(new)"), "the offline copy was refreshed too");

@@ -2,7 +2,7 @@
 
 Hearth's words live in **`locales/<code>.js`**, one file per language. English (`locales/en.js`) is the source: every other language has the same keys. `i18n.js` looks the words up, and formats numbers and plurals the way each language writes them.
 
-> **Status:** the translation system is in place, but most of the interface is still written directly in `app.js`. Moving those strings into `locales/en.js` happens step by step; until it's done, a new language translates only what is already in the catalog.
+Everything the interface shows is in the catalog: about 400 messages. What stays in English on purpose: the product names (Hearth, WebLLM, WebGPU), model names and IDs, the instructions the personas give the model (small models follow English instructions best, and they already reply in the user's language), and the bug report sent to GitHub.
 
 ## Adding a language
 
@@ -33,6 +33,8 @@ chats: {
 
 **Right-to-left.** Arabic, Hebrew, Persian and Urdu set `<html dir="rtl">` automatically.
 
+**Links, buttons and bold text inside a sentence.** Some messages have a placeholder that the page fills with markup, for example `"Suggested: {model}"`, where `{model}` is the model's name in bold, or `"Powered by {webllm}"`, where `{webllm}` is a link. Keep the placeholder; move it wherever your language needs it. A comment above such a message in `locales/en.js` says what it becomes.
+
 ## For developers
 
 ```js
@@ -42,7 +44,19 @@ t("status.ready-profile", { profile: name });   // in any module
 
 In Vue templates use `$t("key", params)`, `$n(number)` and `$d(date, options)`. Templates re-render when the language changes.
 
+For a sentence with markup inside, keep it one message and give each piece a slot:
+
+```html
+<i18n-t path="health.suggested">
+  <template #model><strong>{{ modelShortName(id) }}</strong></template>
+</i18n-t>
+```
+
+`<i18n-t>` renders no wrapper element unless you pass `tag="span"`; other `{params}` go in `:params`.
+
 - Put whole sentences in the catalog, never pieces glued together in code: word order differs between languages.
 - Use a plural message for anything with a count; never `n === 1 ? "" : "s"`.
 - Pass a number as a number (it gets formatted), and an ID or year as a string (it doesn't).
+- Code that runs in the worker (`worker.js`, `context.js`) doesn't know the page's language: send a code and let the page translate (see `status.js`, and the `code` on errors from `context.js`).
+- `tests/unit/i18n.spec.js` fails if the code uses a key that isn't in `locales/en.js`, or if a template has words outside the catalog.
 - Keep code, model IDs and persona prompts for the model out of the catalog. The model prompts stay in English on purpose: small models follow English instructions best, and they already reply in the user's language.

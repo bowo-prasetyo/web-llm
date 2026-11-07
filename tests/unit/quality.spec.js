@@ -119,3 +119,11 @@ test.describe("word salad", () => {
     expect([...scriptsIn("Sägeo扑救")].sort()).toEqual(["CJK", "Latin"]);
   });
 });
+
+test("words are counted in languages without spaces", () => {
+  expect(countWords("東京は日本の首都です。人口は約1400万人です。")).toBe(12);
+  expect(countWords("我喜欢学习中文")).toBe(4);
+  expect(countWords("กรุงเทพมหานครเป็นเมืองหลวง")).toBe(4);
+  expect(countWords("안녕하세요 반갑습니다")).toBe(2);
+  expect(countWords("Hello there, friend!")).toBe(3);
+});

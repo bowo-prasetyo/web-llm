@@ -24,9 +24,26 @@ function words(text) {
     .match(/[\p{L}\p{N}']+/gu) || [];
 }
 
+// How many words a text has, in any language. Japanese, Chinese and Thai
+// don't put spaces between words, so splitting on spaces would count a
+// whole sentence ("東京は日本の首都です。") as one word; Intl.Segmenter
+// finds the words with the browser's dictionaries (東京 / は / 日本 / …).
+// Without it (old browsers), runs of letters and digits are counted.
+const WORD_SEGMENTER = typeof Intl !== "undefined" && Intl.Segmenter
+  ? new Intl.Segmenter(undefined, { granularity: "word" })
+  : null;
+
+export function segmentWordCount(text) {
+  const t = String(text || "");
+  if (!WORD_SEGMENTER) return (t.match(/[\p{L}\p{N}']+/gu) || []).length;
+  let n = 0;
+  for (const s of WORD_SEGMENTER.segment(t)) if (s.isWordLike) n++;
+  return n;
+}
+
 // Words for the "Generating… ~N words" counter: only ones people can see.
 export function countWords(text) {
-  return words(text).length;
+  return segmentWordCount(visibleText(text));
 }
 
 // ── Word salad ──────────────────────────────────────────────────────────

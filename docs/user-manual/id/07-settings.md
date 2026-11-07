@@ -36,7 +36,7 @@ Memilih model lain juga menerapkan setelan balasan yang disarankan untuk model i
 
 ## Bahasa
 
-Bahasa aplikasi itu sendiri: tombol, menu, dan pesannya. Hearth tersedia dalam bahasa Inggris dan bahasa Indonesia.
+Bahasa aplikasi itu sendiri: tombol, menu, dan pesannya. Hearth tersedia dalam bahasa Inggris, bahasa Indonesia, dan bahasa Jepang (日本語).
 
 * **Otomatis** (bawaan) memakai bahasa browser Anda jika Hearth memilikinya, dan bahasa Inggris jika tidak. Bahasa yang dipilih ditampilkan dalam tanda kurung.
 * Atau pilih bahasa dari daftar. Setiap bahasa ditulis dalam bahasanya sendiri, jadi Anda bisa menemukan bahasa Anda. Bahasa Indonesia tercantum sebagai **Indonesia**.

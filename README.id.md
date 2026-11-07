@@ -24,7 +24,7 @@ Model AI berjalan di perangkat Anda sendiri, jadi tidak ada yang Anda ketik yang
 * **Jawaban yang mudah dibaca.** Balasan diformat dengan judul, daftar, tabel, dan kode yang disorot dengan tombol Salin.
 * **Banyak model.** 55 model terbuka dari 100M sampai 9B parameter, termasuk Qwen3.5, Llama 3, Phi-4-mini, Gemma, dan Mistral. Aplikasi menunjukkan seberapa cepat setiap model menulis di perangkat Anda dan menyarankan model yang lebih kecil jika lambat.
 * **Chat Anda tersimpan.** Banyak chat dengan pencarian, tersimpan otomatis, dengan ekspor dan impor untuk memindahkannya ke browser lain.
-* **Dalam bahasa Anda.** Tampilan aplikasi tersedia dalam bahasa Inggris dan bahasa Indonesia (**Setelan → Bahasa**), dan AI membalas dalam bahasa yang Anda pakai saat menulis.
+* **Dalam bahasa Anda.** Tampilan aplikasi tersedia dalam bahasa Inggris, bahasa Indonesia, dan bahasa Jepang (**Setelan → Bahasa**), dan AI membalas dalam bahasa yang Anda pakai saat menulis.
 
 <img src="docs/screenshot-phone-id.png" alt="Pemilih model saat pertama kali dibuka di ponsel: Chat sehari-hari, Pemrograman, atau Menulis" width="300">
 
@@ -87,7 +87,7 @@ Menemukan masalah? Gunakan **Setelan → Perangkat ini → Laporkan masalah**: t
 * Cache model otomatis — model yang sudah dikonfirmasi langsung dimuat pada kunjungan berikutnya
 * Setelan lokal yang tersimpan (model, temperatur, top-p, penalti, jendela konteks, persona), disimpan saat Anda mengubahnya
 * Tema terang dan gelap: mengikuti perangkat secara bawaan, atau pilih Terang atau Gelap di Setelan → Tampilan
-* Tampilan aplikasi dalam bahasa Inggris dan bahasa Indonesia: mengikuti bahasa browser secara bawaan, atau pilih di Setelan → Bahasa; terjemahan baru bisa ditambahkan (lihat [docs/translating.md](docs/translating.md))
+* Tampilan aplikasi dalam bahasa Inggris, bahasa Indonesia, dan bahasa Jepang: mengikuti bahasa browser secara bawaan, atau pilih di Setelan → Bahasa; terjemahan baru bisa ditambahkan (lihat [docs/translating.md](docs/translating.md))
 * Ukuran unggahan file maksimum yang bisa diatur (1–200 MB, bawaan 50 MB)
 * Ekspor setelan ke file JSON dan impor di browser lain
 * Ekspor semua sesi chat ke file JSON dan impor (gabungkan) di browser lain — tanpa duplikat
@@ -316,9 +316,10 @@ sejauh ini tetap disimpan).
 
 ### Bahasa
 
-* **Otomatis** (bawaan) atau salah satu bahasa yang tersedia: saat ini bahasa Inggris dan bahasa Indonesia. Otomatis memilih bahasa pertama di daftar bahasa browser yang dimiliki aplikasi, dan bahasa Inggris jika tidak ada. Setiap bahasa tercantum dengan namanya sendiri (dari `Intl.DisplayNames`)
+* **Otomatis** (bawaan) atau salah satu bahasa yang tersedia: saat ini bahasa Inggris, bahasa Indonesia, dan bahasa Jepang. Otomatis memilih bahasa pertama di daftar bahasa browser yang dimiliki aplikasi, dan bahasa Inggris jika tidak ada. Setiap bahasa tercantum dengan namanya sendiri (dari `Intl.DisplayNames`)
 * Pergantian langsung berlaku tanpa memuat ulang, termasuk `<html lang dir>` dan judul tab. Pilihan diingat di browser ini (`localStorage`, `webllm-language`) dan dibaca sebelum halaman pertama kali digambar
 * Tanggal dan angka mengikuti bahasa yang dipilih, dengan gaya regional browser jika bahasanya sama (misalnya koma desimal dalam bahasa Indonesia)
+* Kata dihitung dengan `Intl.Segmenter`, sehingga kecepatan menulis dan penghitung "~N kata" tepat untuk bahasa yang ditulis tanpa spasi (Jepang, Tionghoa, Thai)
 * Teks antarmuka ada di `locales/<kode>.js`; [docs/translating.md](docs/translating.md) menjelaskan cara menambahkan bahasa
 
 ### Perangkat ini
@@ -480,7 +481,7 @@ npm run test:e2e      # the app in Chromium
 ```
 
 * **Uji unit** (`tests/unit/`) mencakup `quality.js`, `context.js`, `markdown.js`, `picker.js` (termasuk nama model dan kemajuan pemuatan), `attachments.js`, `pace.js`, `crash.js`, `storage.js`, `personas.js`, `status.js`, `i18n.js` (termasuk pemeriksaan bahwa setiap terjemahan punya semua kunci, placeholder, dan bentuk jamak yang diperlukan), dan tautan di dokumentasi (`docs.spec.js`: setiap tautan dan jangkar di README dan panduan, termasuk terjemahannya, mengarah ke file dan judul yang ada)
-* **Uji browser** (`tests/e2e/`) menjalankan aplikasi sungguhan di Chromium: tema terang dan gelap beserta kontrasnya, daftar chat yang menempel dan ukuran teks, setelan, kemajuan dan pembatalan unduhan, nama model yang mudah dibaca, menggulir selama balasan mengalir, kotak pesan di desktop dan ponsel, konfirmasi unduhan dan penghapusan, fokus keyboard dan nama yang bisa dibaca aplikasi bantu, penyimpanan chat (IndexedDB, migrasi, ekspor/impor, cadangan), dokumen yang dilampirkan ke chat, persona, tampilan dan keamanan balasan, kesehatan model pada GPU 16-bit yang rusak, Lanjutkan dan penjaga pengulangan (dengan `worker.js` sungguhan), batas waktu berbasis kemajuan dan catatan kecepatan menulis, pemilih model, mode offline, spanduk "versi baru tersedia", dan pilihan bahasa (termasuk bahasa Indonesia)
+* **Uji browser** (`tests/e2e/`) menjalankan aplikasi sungguhan di Chromium: tema terang dan gelap beserta kontrasnya, daftar chat yang menempel dan ukuran teks, setelan, kemajuan dan pembatalan unduhan, nama model yang mudah dibaca, menggulir selama balasan mengalir, kotak pesan di desktop dan ponsel, konfirmasi unduhan dan penghapusan, fokus keyboard dan nama yang bisa dibaca aplikasi bantu, penyimpanan chat (IndexedDB, migrasi, ekspor/impor, cadangan), dokumen yang dilampirkan ke chat, persona, tampilan dan keamanan balasan, kesehatan model pada GPU 16-bit yang rusak, Lanjutkan dan penjaga pengulangan (dengan `worker.js` sungguhan), batas waktu berbasis kemajuan dan catatan kecepatan menulis, pemilih model, mode offline, spanduk "versi baru tersedia", dan pilihan bahasa (termasuk bahasa Indonesia dan bahasa Jepang)
 * Pengujian tidak memerlukan jaringan, GPU, atau unduhan model: pustaka CDN dengan versi tetap disajikan dari `node_modules`, dan WebLLM diganti dengan tiruan berskrip (`tests/support/mock-webllm.js`); sebagian uji antarmuka memakai worker palsu (`tests/support/fake-worker.js`) yang membaca daftar modelnya dari `worker.js`
 * **Tangkapan layar dokumentasi** (`docs/screenshot.png`, `docs/screenshot-phone.png`, dan versi bahasa Indonesianya `docs/screenshot-id.png`, `docs/screenshot-phone-id.png`) digambar oleh `npm run screenshots` (`tests/screenshots/docs.spec.js`) dengan tiruan yang sama, jadi bisa digambar ulang setelah perubahan antarmuka apa pun tanpa GPU. Chat yang ditampilkan di tangkapan layar bahasa Inggris adalah percakapan sungguhan dengan Qwen3.5 2B yang disimpan sebagai chat, jadi balasannya adalah kata-kata model itu sendiri; tangkapan layar bahasa Indonesia menampilkan layar pembuka dan pemilih model, yang tidak berisi balasan model. `npm test` tidak menyentuh gambar-gambar ini
 * GitHub Actions menjalankan semuanya pada setiap pull request dan setiap push ke `main` (`.github/workflows/tests.yml`)
@@ -556,7 +557,7 @@ Data yang di-cache bisa mencakup bobot model AI (bisa beberapa GB), dokumen terl
 | `personas.js` | Persona chat bawaan (prompt, ikon, contoh pertanyaan), dipakai bersama oleh antarmuka dan worker |
 | `status.js` | Kode status yang dikirim worker, dan teks yang ditampilkan halaman untuk masing-masing |
 | `i18n.js` | Terjemahan: mencari pesan per kunci, bentuk jamak, format angka dan tanggal, dan memilih bahasa |
-| `locales/` | Teks antarmuka per bahasa (`en.js`, `id.js`); lihat [docs/translating.md](docs/translating.md) |
+| `locales/` | Teks antarmuka per bahasa (`en.js`, `id.js`, `ja.js`); lihat [docs/translating.md](docs/translating.md) |
 | `sw.js` | Service worker: salinan offline aplikasi dan pustakanya |
 | `manifest.webmanifest`, `icons/` | Metadata dan ikon aplikasi yang bisa dipasang (PWA) |
 | `style.css` | Gaya antarmuka (sistem desain amber, tema terang dan gelap) |

@@ -37,7 +37,7 @@ chats: {
 
 ## Translating the documentation
 
-The README and the user manual can be translated too (Indonesian is done):
+The README and the user manual can be translated too (Indonesian is done; Japanese is interface-only so far):
 
 * `README.<code>.md` next to `README.md`, and `docs/user-manual/<code>/` with **every** page of the English manual, same file names.
 * Translate the headings too. Links to a heading (`#…`) follow the translated text, GitHub style: lower case, punctuation dropped, spaces become `-`. Update the links to match.

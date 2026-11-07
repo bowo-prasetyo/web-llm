@@ -44,7 +44,7 @@ Baru memakai aplikasi ini? Bacalah dua bab ini dulu. Keduanya memakan waktu seki
 * **Pilih gaya.** Persona membuat asisten lebih suka mengobrol, lebih singkat, lebih pandai menulis, atau lebih pandai soal kode.
 * **Bawa dokumen Anda.** Lampirkan file ke sebuah chat dan bertanyalah tentang isinya.
 * **Simpan chat Anda.** Setiap chat disimpan otomatis. Cari, ekspor, dan impor chat di perangkat lain.
-* **Dalam bahasa Anda.** Aplikasi tersedia dalam bahasa Inggris dan bahasa Indonesia (**Setelan → Bahasa**). AI membalas dalam bahasa yang Anda pakai saat menulis.
+* **Dalam bahasa Anda.** Aplikasi tersedia dalam bahasa Inggris, bahasa Indonesia, dan bahasa Jepang (**Setelan → Bahasa**). AI membalas dalam bahasa yang Anda pakai saat menulis.
 
 ## Konvensi dalam panduan ini
 

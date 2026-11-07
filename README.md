@@ -22,7 +22,7 @@ The AI model runs on your own device, so nothing you type leaves it. Once a mode
 * **Readable answers.** Replies are formatted with headings, lists, tables and highlighted code with a Copy button.
 * **Many models.** 55 open models from 100M to 9B parameters, including Qwen3.5, Llama 3, Phi-4-mini, Gemma and Mistral. The app shows how fast each one writes on your device and suggests a smaller one when it's slow.
 * **Your chats, kept.** Multiple chats with search, saved automatically, with export and import to move them to another browser.
-* **In your language.** The app is available in English and Indonesian (**Settings → Language**), and the AI replies in the language you write in.
+* **In your language.** The app is available in English, Indonesian and Japanese (**Settings → Language**), and the AI replies in the language you write in.
 
 <img src="docs/screenshot-phone.png" alt="The first-run model picker on a phone: Everyday chat, Coding or Writing" width="300">
 
@@ -84,7 +84,7 @@ Found a problem? Use **Settings → This device → Report a problem**: it opens
 * Automatic model caching — confirmed models load instantly on subsequent visits
 * Persistent local settings (model, temperature, top-p, penalties, context window, personas), saved as you edit them
 * Light and dark themes: follows the device by default, or choose Light or Dark in Settings → Appearance
-* The interface in English and Indonesian: follows the browser's language by default, or choose one in Settings → Language; new translations can be added (see [docs/translating.md](docs/translating.md))
+* The interface in English, Indonesian and Japanese: follows the browser's language by default, or choose one in Settings → Language; new translations can be added (see [docs/translating.md](docs/translating.md))
 * Configurable maximum file upload size (1–200 MB, default 50 MB)
 * Export settings to a JSON file and import on another browser
 * Export all chat sessions to a JSON file and import (merge) on another browser — no duplicates
@@ -312,9 +312,10 @@ conversation so far is kept).
 
 ### Language
 
-* **Automatic** (default) or one of the shipped languages: English and Indonesian for now. Automatic picks the first language in the browser's list that the app has, and English when none matches. Each language is listed in its own words (from `Intl.DisplayNames`)
+* **Automatic** (default) or one of the shipped languages: English, Indonesian and Japanese for now. Automatic picks the first language in the browser's list that the app has, and English when none matches. Each language is listed in its own words (from `Intl.DisplayNames`)
 * Switching applies at once, without a reload, including `<html lang dir>` and the tab title. The choice is remembered in this browser (`localStorage`, `webllm-language`) and read before the page is first drawn
 * Dates and numbers follow the chosen language, in the browser's regional style when it's the same language (for example a decimal comma in Indonesian)
+* Words are counted with `Intl.Segmenter`, so the writing speed and the "~N words" counter are right for languages written without spaces (Japanese, Chinese, Thai)
 * The interface text lives in `locales/<code>.js`; [docs/translating.md](docs/translating.md) explains how to add a language
 
 ### This device
@@ -475,7 +476,7 @@ npm run test:e2e      # the app in Chromium
 ```
 
 * **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js`, `crash.js`, `storage.js`, `personas.js`, `status.js`, `i18n.js` (including a check that every translation has all the keys, placeholders and plural forms it needs), and the documentation's links (`docs.spec.js`: every link and anchor in the READMEs and the manual, translations included, points to a file and heading that exist)
-* **Browser tests** (`tests/e2e/`) run the real app in Chromium: light and dark themes and their contrast, the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, the "new version available" banner, and the language choice (Indonesian included)
+* **Browser tests** (`tests/e2e/`) run the real app in Chromium: light and dark themes and their contrast, the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, the "new version available" banner, and the language choice (Indonesian and Japanese included)
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
 * **Documentation screenshots** (`docs/screenshot.png`, `docs/screenshot-phone.png`, and the Indonesian `docs/screenshot-id.png`, `docs/screenshot-phone-id.png`) are drawn by `npm run screenshots` (`tests/screenshots/docs.spec.js`) with the same mocks, so they can be redrawn after any UI change without a GPU. The chat in the English screenshot is a real Qwen3.5 2B conversation stored as a saved chat, so its replies are the model's own words; the Indonesian ones show the welcome screen and the model picker, which have no model replies. `npm test` leaves the images alone
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
@@ -551,7 +552,7 @@ Cached data may include AI model weights (potentially several GB), attached docu
 | `personas.js` | Built-in chat personas (prompt, icon, starter prompts), shared by the UI and the worker |
 | `status.js` | The status codes the worker sends, and the text the page shows for each |
 | `i18n.js` | Translations: looking messages up by key, plurals, number and date formats, and choosing the language |
-| `locales/` | The interface text per language (`en.js`, `id.js`); see [docs/translating.md](docs/translating.md) |
+| `locales/` | The interface text per language (`en.js`, `id.js`, `ja.js`); see [docs/translating.md](docs/translating.md) |
 | `sw.js` | Service worker: offline copies of the app and its libraries |
 | `manifest.webmanifest`, `icons/` | Installable app (PWA) metadata and icons |
 | `style.css` | UI styling (amber design system, light and dark themes) |

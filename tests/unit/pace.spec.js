@@ -99,3 +99,10 @@ test("models of about 1B parameters or fewer count as small", () => {
     expect(isSmallModel(id), id).toBe(false);
   }
 });
+
+test("writing speed counts Japanese words, not space-separated runs", () => {
+  // One "word" by spaces; 12 words really. Enough for a measurement.
+  const reply = "東京は日本の首都です。人口は約1400万人です。";
+  expect(wordCount(reply)).toBe(12);
+  expect(measureSpeed(wordCount(reply), 2000, 10)).toBe(6);
+});

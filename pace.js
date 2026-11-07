@@ -2,6 +2,7 @@
 // Pure functions (no DOM, no worker state), shared by worker.js and app.js.
 
 import { t } from "./i18n.js";
+import { segmentWordCount } from "./quality.js";
 
 // ── Time limits ───────────────────────────────────────────────────────────
 // A reply is only cut off when it stops making progress, not because it is
@@ -38,7 +39,7 @@ export function withTimeLimits(overrides) {
 export const SLOW_WPS = 2;
 
 export function wordCount(text) {
-  return ((text || "").replace(/<\/?think>/g, " ").match(/\S+/g) || []).length;
+  return segmentWordCount((text || "").replace(/<\/?think>/g, " "));
 }
 
 // Words per second for `words` written in `ms`, or null when the sample is

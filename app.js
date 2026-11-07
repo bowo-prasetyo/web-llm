@@ -637,6 +637,7 @@ const APP_FILES = [
   "./picker.js", "./chatstore.js", "./attachments.js", "./pace.js",
   "./version.js", "./crash.js", "./storage.js", "./status.js", "./i18n.js",
   "./locales/en.js", "./locales/id.js",
+  "./locales/ja.js",
 ];
 const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
 const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;

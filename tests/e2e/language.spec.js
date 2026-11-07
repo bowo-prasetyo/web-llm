@@ -22,7 +22,7 @@ const DE_SRC = `export default ${JSON.stringify(mark(en))};`;
 const JS = "text/javascript; charset=utf-8";
 
 test.beforeEach(async ({ context }) => {
-  expect(I18N_SRC).toContain('"id", "de"]');
+  expect(I18N_SRC).toMatch(/SUPPORTED_LOCALES = \[[^\]]*, "de"\];/);
   await context.route(/\/i18n\.js(\?.*)?$/, r => r.fulfill({ body: I18N_SRC, contentType: JS }));
   await context.route(/\/locales\/de\.js(\?.*)?$/, r => r.fulfill({ body: DE_SRC, contentType: JS }));
 });
@@ -41,7 +41,7 @@ test("the list offers Automatic and each language in its own words", async ({ pa
   await openSettings(page);
   const select = page.locator(".language-select");
   await expect(select).toHaveValue("auto");
-  await expect(select.locator("option")).toHaveText(["Automatic (English)", "English", "Indonesia", "Deutsch"]);
+  await expect(select.locator("option")).toHaveText(["Automatic (English)", "English", "Indonesia", "日本語", "Deutsch"]);
   await expect(select.locator('option[value="de"]')).toHaveAttribute("lang", "de");
   await expect(page.getByRole("combobox", { name: "Language" })).toBeVisible();
   await expect(page.locator("#language-hint a")).toHaveAttribute("href", /docs\/translating\.md$/);
@@ -141,4 +141,43 @@ test("Indonesian can be chosen in an English browser", async ({ page }) => {
   await expect(page.locator(".welcome-title")).toHaveText("Mau ngobrol tentang apa?");
   await expect(page.locator(".send-btn")).toHaveAttribute("aria-label", "Kirim pesan");
   expect(await languagePref(page)).toBe("id");
+});
+
+// ── The Japanese translation ──────────────────────────────────────────────
+
+test.describe("in a Japanese browser", () => {
+  test.use({ locale: "ja-JP" });
+
+  test("the app starts in Japanese", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".status-text")).toContainText("モデルを読み込みました");
+    await expect(page.locator(".welcome-title")).toHaveText("どんなことを話しましょうか？");
+    await expect(page.locator(".persona-card").first()).toContainText("フレンドリー");
+    await expect(page.locator(".send-btn")).toHaveAttribute("aria-label", "メッセージを送信");
+    expect(await html(page)).toEqual({ lang: "ja", dir: "ltr", title: "Hearth · プライベートAIチャット" });
+
+    await page.click(".header-actions .icon-btn:last-child");
+    await expect(page.locator(".settings-title")).toHaveText("設定");
+    await expect(page.locator(".language-select option").first()).toHaveText("自動（日本語）");
+    await page.locator(".language-select").selectOption("en");
+    await expect(page.locator(".settings-title")).toHaveText("Settings");
+  });
+});
+
+test.describe("in Japanese on a phone", () => {
+  test.use({ locale: "ja-JP", viewport: { width: 390, height: 844 } });
+
+  test("a longer header tagline ends with … and the header buttons stay on screen", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".status-text")).toContainText("モデルを読み込みました");
+    const layout = await page.evaluate(() => ({
+      pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      buttons: [...document.querySelectorAll(".header-actions .icon-btn")].map(b => Math.round(b.getBoundingClientRect().right)),
+      tagline: getComputedStyle(document.querySelector(".header-tagline")).textOverflow,
+    }));
+    expect(layout.pageOverflow).toBeLessThanOrEqual(0);
+    for (const right of layout.buttons) expect(right).toBeLessThanOrEqual(390);
+    expect(layout.tagline).toBe("ellipsis");
+    await expect(page.locator('.header-actions [aria-label="設定"]')).toBeInViewport({ ratio: 1 });
+  });
 });

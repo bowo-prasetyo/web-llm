@@ -8,11 +8,16 @@ What changed in each version of Hearth. The version is shown in
 ### Added
 - **Settings → Language**: choose the language of the app, or keep **Automatic** to follow the browser. More languages can be added (see [docs/translating.md](docs/translating.md)).
 - **Bahasa Indonesia**: the whole app in Indonesian. Browsers set to Indonesian get it automatically.
+- **日本語 (Japanese)**: the whole app in Japanese. Browsers set to Japanese get it automatically.
 
 ### Changed
 - Dates in the chat list follow the app's language (in your browser's regional style, such as 7 Nov in a British English browser).
 - Counts read naturally: "Exported 1 session" instead of "1 session(s)".
 - On phones, **Clear** and **Attach** in the chat toolbar show only their icons, so the model menu stays readable.
+- On phones, a header tagline too long for the screen ends with "…" instead of pushing the Settings button off screen.
+
+### Fixed
+- Writing speed and the "~N words" counter count words correctly in Japanese, Chinese and Thai (written without spaces). Before, a whole sentence counted as one word, so speed was rarely measured and, when it was, a smaller model could be suggested for no reason.
 
 ## [1.0.0] - 2026-11-05
 

@@ -6,10 +6,14 @@
 // - the page never has to recognise a state by reading English text
 //   ("Model loaded successfully", "Ready …"), so the wording can change,
 //   or be translated, without breaking model loading;
-// - every sentence the status bar can show lives here, in one place,
-//   ready to become a translation catalog.
+// - every sentence the status bar can show is translatable.
+//
+// The words themselves are in locales/<code>.js under "status" and
+// "fatal" (see i18n.js).
 //
 // Shared by app.js and worker.js. No DOM access.
+
+import { t } from "./i18n.js";
 
 // Status codes: { type: "status", code, params } from the worker.
 export const STATUS = Object.freeze({
@@ -43,45 +47,32 @@ export function isEngineReady(code) {
   return ENGINE_READY.has(code);
 }
 
-const STATUS_TEXT = {
-  [STATUS.MANUAL_MODEL]:       p => `Using manually selected model: ${p.model}`,
-  [STATUS.SAFE_GPU_MODE]:      () => "Using persistent safe GPU mode",
-  [STATUS.GPU_DETECTED]:       p => `GPU detected: ${p.gpu || "Unknown GPU"}`,
-  [STATUS.LOADING_MODEL]:      () => "Loading AI model for device profile...",
-  // WebLLM's own progress text, when it gives one
-  [STATUS.LOAD_PROGRESS]:      p => p.detail || `Loading ${p.percent ?? 0}%`,
-  [STATUS.NEEDS_F16]:          () => "This model needs 16-bit GPU support",
-  [STATUS.CHECKING_MODEL]:     () => "Checking that the model works on this GPU...",
-  [STATUS.MODEL_LOADED]:       () => "Model loaded successfully",
-  [STATUS.READY]:              p => p.profile ? `Ready (${p.profile})` : "Ready",
-  [STATUS.STOPPED]:            () => "Generation stopped",
-  [STATUS.CUT_OFF_TIME_LIMIT]: () => "Response cut off: reply time limit reached",
-  [STATUS.CUT_OFF_STALLED]:    () => "Response cut off: the model stopped producing text",
-  [STATUS.SLOW_GENERATION]:    () => "Generation is taking longer than usual...",
-  [STATUS.ENGINE_RESET]:       () => "The browser reset the model (this happens on phones after the app was in the background). Reloading it…",
-  [STATUS.REINITIALISING]:     () => "Engine not ready, reinitialising...",
-  [STATUS.WAITING_TO_SWITCH]:  () => "Waiting for generation to finish before switching model...",
-  [STATUS.UNLOADING_PREVIOUS]: () => "Unloading previous model...",
-  [STATUS.INITIALIZING_MODEL]: p => `Initializing ${p.model}...`,
-  [STATUS.UNLOADED_IDLE]:      () => "Model unloaded to save memory",
-  [STATUS.LOADING_EMBEDDER]:   () => "Loading embedding model...",
-  [STATUS.EMBEDDER_LOADED]:    () => "Embedding model loaded",
-};
+// Every code the worker can send
+const KNOWN = new Set(Object.values(STATUS));
 
 // The status-bar text for a status code. Unknown codes give "" (a newer
 // worker than page, briefly, during an update).
 export function statusText(code, params = {}) {
-  const text = STATUS_TEXT[code];
-  return text ? text(params || {}) : "";
+  if (!KNOWN.has(code)) return "";
+  const p = params || {};
+  switch (code) {
+    case STATUS.GPU_DETECTED:
+      return t("status.gpu-detected", { gpu: p.gpu || t("status.gpu-unknown") });
+    case STATUS.LOAD_PROGRESS:
+      // WebLLM's own progress text, when it gives one
+      return p.detail || t("status.load-progress", { percent: p.percent ?? 0 });
+    case STATUS.READY:
+      return p.profile ? t("status.ready-profile", { profile: p.profile }) : t("status.ready");
+    default:
+      return t(`status.${code}`, p);
+  }
 }
 
 // { type: "fatal", reason, phase }: the worker stopped and will be replaced.
 // phase is "loading" or "answering".
 export function fatalText(reason, phase) {
   if (reason === "gpu-crash") {
-    return phase === "answering"
-      ? "The GPU stopped working while answering."
-      : "The GPU stopped working while loading the model.";
+    return t(phase === "answering" ? "fatal.gpu-crash-answering" : "fatal.gpu-crash-loading");
   }
-  return "The model stopped unexpectedly.";
+  return t("fatal.unknown");
 }

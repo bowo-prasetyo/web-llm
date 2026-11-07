@@ -4,6 +4,8 @@
 // Each pick names a q4f16 model and its q4f32 twin. q4f16 is smaller and
 // faster but needs working 16-bit GPU math; devices without it get q4f32.
 
+import { t } from "./i18n.js";
+
 export const USES = [
   {
     id: "chat",
@@ -147,10 +149,10 @@ export function estimateRemaining({ startPct, startTime, pct, now }) {
   const moved = pct - startPct;
   if (elapsed < 4 || moved < 2 || pct >= 100) return null;
   const secs = (100 - pct) * elapsed / moved;
-  if (secs < 50) return "less than a minute left";
+  if (secs < 50) return t("eta.under-minute");
   const mins = Math.round(secs / 60);
-  if (mins < 60) return `about ${mins} min left`;
-  const h = Math.floor(mins / 60);
+  if (mins < 60) return t("eta.minutes", { minutes: mins });
+  const hours = Math.floor(mins / 60);
   const rest = mins % 60;
-  return `about ${h} h${rest ? " " + rest + " min" : ""} left`;
+  return rest ? t("eta.hours-minutes", { hours, minutes: rest }) : t("eta.hours", { hours });
 }

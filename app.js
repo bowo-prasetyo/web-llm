@@ -22,6 +22,7 @@ import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pa
 import { APP_VERSION, REPO_URL, problemReportUrl } from "./version.js";
 import { storageEstimate, spaceShortfall, requestPersistence, friendlyError } from "./storage.js";
 import { STATUS, statusText, fatalText, isEngineReady } from "./status.js";
+import { useReactive, pickLocale, t } from "./i18n.js";
 import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, recordCrash, lighterModel } from "./crash.js";
 
 const {
@@ -34,6 +35,14 @@ const {
   createRouter,
   createWebHashHistory
 } = VueRouter;
+
+// Language: the shared translator becomes reactive, so templates using
+// $t() follow a language change. Chosen from the browser's languages
+// among those the app ships (i18n.js SUPPORTED_LOCALES); English until
+// more are added.
+const i18n = useReactive(Vue.reactive);
+await i18n.setLocale(pickLocale(navigator.languages || [navigator.language]));
+i18n.applyToDocument();
 
 let worker = null;
 
@@ -2953,7 +2962,7 @@ const Home = {
       const now = new Date();
       const diffDays = Math.floor((now - d) / 86400000);
       if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      if (diffDays === 1) return "Yesterday";
+      if (diffDays === 1) return t("dates.yesterday");
       if (diffDays < 7)  return d.toLocaleDateString([], { weekday: "short" });
       return d.toLocaleDateString([], { month: "short", day: "numeric" });
     }
@@ -3910,7 +3919,7 @@ const Settings = {
       chatStorage: sharedChatStorage,
       chatStorageText: Vue.computed(() => {
         const n = sharedSessions.value.length;
-        const count = `${n} chat${n === 1 ? "" : "s"}`;
+        const count = t("chats.count", { count: n });
         if (sharedChatStorage.value.kind === "indexeddb") return `This browser's database (IndexedDB) · ${count}`;
         if (sharedChatStorage.value.kind === "localstorage") {
           return `Local storage, limited to ${FALLBACK_MAX_CHATS} chats of ${FALLBACK_MAX_MESSAGES} messages · ${count}`;
@@ -3949,5 +3958,6 @@ createApp({
   })
   .component("confirm-dialog", ConfirmDialog)
   .directive("dialog", dialogDirective)
+  .use(i18n)
   .use(router)
   .mount("#app");

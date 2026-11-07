@@ -1,6 +1,8 @@
 // How fast the model writes, and when a reply has taken too long.
 // Pure functions (no DOM, no worker state), shared by worker.js and app.js.
 
+import { t } from "./i18n.js";
+
 // ── Time limits ───────────────────────────────────────────────────────────
 // A reply is only cut off when it stops making progress, not because it is
 // long: on a slow GPU a healthy reply can take many minutes.
@@ -61,9 +63,8 @@ export function blendSpeed(prev, wps, source) {
 // "less than 1 word/sec", "about 1 word/sec", "about 6 words/sec"
 export function formatSpeed(wps) {
   if (!(wps > 0)) return "";
-  if (wps < 0.95) return "less than 1 word/sec";
-  const n = Math.round(wps);
-  return `about ${n} ${n === 1 ? "word" : "words"}/sec`;
+  if (wps < 0.95) return t("speed.under-one");
+  return t("speed.about", { count: Math.round(wps) });
 }
 
 export function isSlow(wps) {

@@ -66,6 +66,9 @@ test("a large document is indexed, then only the relevant part is used", async (
   await start(page);
   await attachText(page, "manual.txt", LONG_DOC);
   await expect(chips(page).locator(".attachment-meta")).toHaveText(/k chars/, { timeout: 15_000 });
+  // The chip shows "ready" first; the index is saved just after, in the
+  // background (app.js "attachment-indexed"), so wait for the saved copy.
+  await expect.poll(async () => (await readAttachments(page))[0]?.chunks?.length || 0).toBeGreaterThan(1);
   const [stored] = await readAttachments(page);
   check(stored.chunks && stored.chunks.length > 1 && stored.chunks[0].embedding.length === 512, "chunks and embeddings are stored");
 

@@ -511,7 +511,7 @@ const CACHED_KEY = "webllm-cached-models";
 
 // Screens at least this wide show the chat list beside the chat (docked)
 // instead of as a drawer. Keep in sync with the same width in style.css.
-const WIDE_QUERY = "(min-width: 1100px)";
+const WIDE_QUERY = "(min-width: 1024px)";
 // "docked" (default) or "hidden": whether the docked list is shown
 const SIDEBAR_KEY = "webllm-sidebar";
 function loadSidebarPinned() {

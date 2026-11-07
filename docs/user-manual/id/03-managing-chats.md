@@ -8,7 +8,7 @@ Setiap percakapan disimpan otomatis sebagai *chat* tersendiri. Bab ini menunjukk
 
 Daftar chat menampilkan semua chat yang tersimpan. Setiap entri menampilkan judul chat (dibuat otomatis dari pesan pertama Anda), cuplikan singkat, model yang dipakai, ikon persona, dan kapan terakhir dipakai.
 
-**Layar lebar (komputer):** daftar berada di kiri, di samping percakapan.
+**Layar lebar (komputer dan tablet dalam posisi mendatar, lebar 1024px atau lebih):** daftar berada di kiri, di samping percakapan, dan percakapan mengisi sisa jendela, dengan pesan-pesan dalam kolom yang nyaman dibaca.
 
 * Untuk menyembunyikannya, ketuk **☰** di kepala halaman atau **×** di bagian atas daftar. Ketuk **☰** lagi untuk menampilkannya.
 * Aplikasi mengingat apakah Anda suka daftar ini ditampilkan atau disembunyikan.

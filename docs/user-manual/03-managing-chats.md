@@ -8,7 +8,7 @@ Every conversation is saved automatically as a separate *chat*. This chapter sho
 
 The chat list shows all your saved chats. Each entry shows the chat's title (created automatically from your first message), a short preview, the model used, the persona icon, and when it was last used.
 
-**Wide screens (computers):** the list sits on the left, next to the conversation.
+**Wide screens (computers and tablets in landscape, 1024px wide or more):** the list sits on the left, next to the conversation, and the conversation fills the rest of the window, with the messages in a comfortable reading column.
 
 * To hide it, tap **☰** in the header or **×** at the top of the list. Tap **☰** again to show it.
 * The app remembers whether you like it shown or hidden.

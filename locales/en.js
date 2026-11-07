@@ -6,6 +6,11 @@
 // the app; in a few, {name} is a link, button or bold text placed by the
 // page (the <i18n-t> component), so keep it in the sentence.
 export default {
+  app: {
+    // The browser tab's title
+    "title": "Hearth · Private AI chat",
+  },
+
   // Used in many places
   common: {
     "ok":      "OK",
@@ -454,6 +459,13 @@ export default {
     "theme-hint-fixed":        "Always {mode}, whatever this device is set to.",
     "theme-mode-light":        "light",
     "theme-mode-dark":         "dark",
+    "language":                "Language",
+    // {language} is the browser's language, in its own words: "Automatic (English)"
+    "language-auto":           "Automatic ({language})",
+    "language-hint":           "The language of the app. The AI replies in the language you write in.",
+    // {link} is settings.language-help-link, a link to the translation guide
+    "language-help":           "Missing yours? {link}",
+    "language-help-link":      "Help translate Hearth",
     "replies":                 "Replies",
     "temperature":             "Temperature",
     "temperature-desc":        "How adventurous replies are. Low = focused and predictable, high = more creative (and more mistakes).",

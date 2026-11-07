@@ -22,7 +22,10 @@ import { blendSpeed, formatSpeed, isSlow, fasterModel, isSmallModel } from "./pa
 import { APP_VERSION, REPO_URL, problemReportUrl } from "./version.js";
 import { storageEstimate, spaceShortfall, requestPersistence, friendlyError } from "./storage.js";
 import { STATUS, statusText, fatalText, isEngineReady } from "./status.js";
-import { useReactive, pickLocale, t, formatNumber } from "./i18n.js";
+import {
+  useReactive, t, formatNumber, formatDate as localDate,
+  resolveLanguage, browserLanguages, languageName, SUPPORTED_LOCALES,
+} from "./i18n.js";
 import { markPending, clearPending, detectCrash, loadCrashes, forgetCrash, recordCrash, lighterModel } from "./crash.js";
 
 const {
@@ -36,13 +39,37 @@ const {
   createWebHashHistory
 } = VueRouter;
 
-// Language: the shared translator becomes reactive, so templates using
-// $t() follow a language change. Chosen from the browser's languages
-// among those the app ships (i18n.js SUPPORTED_LOCALES); English until
-// more are added.
+// ── Language ──────────────────────────────────────────────────────────────
+// The shared translator becomes reactive, so templates using $t() follow a
+// language change. The choice (Settings → Language) is "auto" (default:
+// the browser's languages, among those the app ships) or a language code.
+// It is read before the first render, so the page never shows another
+// language first.
+const LANGUAGE_KEY = "webllm-language";
+function loadLanguagePref() {
+  let saved = null;
+  try { saved = localStorage.getItem(LANGUAGE_KEY); } catch {}
+  // A language this version doesn't ship (any more) counts as Automatic
+  return SUPPORTED_LOCALES.includes(saved) ? saved : "auto";
+}
 const i18n = useReactive(Vue.reactive);
-await i18n.setLocale(pickLocale(navigator.languages || [navigator.language]));
-i18n.applyToDocument();
+const sharedLanguagePref = Vue.ref(loadLanguagePref());
+
+async function applyLanguage() {
+  await i18n.setLocale(resolveLanguage(sharedLanguagePref.value));
+  i18n.applyToDocument();
+  document.title = t("app.title");
+}
+
+async function setLanguage(pref) {
+  sharedLanguagePref.value = SUPPORTED_LOCALES.includes(pref) ? pref : "auto";
+  try {
+    if (sharedLanguagePref.value === "auto") localStorage.removeItem(LANGUAGE_KEY);
+    else localStorage.setItem(LANGUAGE_KEY, sharedLanguagePref.value);
+  } catch {}
+  await applyLanguage();
+}
+await applyLanguage();
 
 let worker = null;
 
@@ -3000,10 +3027,10 @@ const Home = {
       const d = new Date(ts);
       const now = new Date();
       const diffDays = Math.floor((now - d) / 86400000);
-      if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      if (diffDays === 0) return localDate(d, { hour: "2-digit", minute: "2-digit" });
       if (diffDays === 1) return t("dates.yesterday");
-      if (diffDays < 7)  return d.toLocaleDateString([], { weekday: "short" });
-      return d.toLocaleDateString([], { month: "short", day: "numeric" });
+      if (diffDays < 7)  return localDate(d, { weekday: "short" });
+      return localDate(d, { month: "short", day: "numeric" });
     }
 
     // Save the chat on screen. The sidebar updates at once; the returned
@@ -3555,6 +3582,27 @@ const Settings = {
         </section>
 
         <section class="settings-section">
+          <h2 class="section-label" id="language-label">{{ $t("settings.language") }}</h2>
+          <select
+            class="settings-select language-select"
+            :value="languagePref"
+            @change="setLanguage($event.target.value)"
+            aria-labelledby="language-label"
+            aria-describedby="language-hint"
+          >
+            <option value="auto">{{ $t("settings.language-auto", { language: languageName(browserLanguage) }) }}</option>
+            <!-- Each language in its own words, so people find theirs -->
+            <option v-for="code in languages" :key="code" :value="code" :lang="code">{{ languageName(code) }}</option>
+          </select>
+          <p class="section-hint" id="language-hint">
+            {{ $t("settings.language-hint") }}
+            <i18n-t path="settings.language-help">
+              <template #link><a :href="translateUrl" target="_blank" rel="noopener">{{ $t("settings.language-help-link") }}</a></template>
+            </i18n-t>
+          </p>
+        </section>
+
+        <section class="settings-section">
           <h2 class="section-label">{{ $t("settings.replies") }}</h2>
 
           <div class="setting-row">
@@ -3914,6 +3962,13 @@ const Settings = {
       themeOptions,
       themePref,
       themeHint,
+      languagePref: sharedLanguagePref,
+      languages: SUPPORTED_LOCALES,
+      // The language "Automatic" picks right now
+      browserLanguage: Vue.computed(() => resolveLanguage("auto", browserLanguages())),
+      languageName,
+      setLanguage,
+      translateUrl: `${REPO_URL}/blob/main/docs/translating.md`,
       setTheme,
       contextPending,
       confirmResetSettings,

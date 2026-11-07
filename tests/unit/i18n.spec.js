@@ -4,6 +4,7 @@ import fs from "node:fs";
 import {
   createI18n, pickLocale, textDirection, placeholders, catalogKeys,
   SUPPORTED_LOCALES, DEFAULT_LOCALE, t,
+  resolveLanguage, browserLanguages, languageName, regionalLocale,
 } from "../../i18n.js";
 import en from "../../locales/en.js";
 
@@ -249,4 +250,46 @@ test("the page's templates have no words outside the catalog", () => {
     }
   }
   expect(leftovers).toEqual([]);
+});
+
+// ── Choosing a language (Settings → Language) ─────────────────────────────
+
+test("a saved choice wins; Automatic and unknown choices follow the browser", () => {
+  const shipped = ["en", "de", "id"];
+  expect(resolveLanguage("de", ["id"], shipped)).toBe("de");
+  expect(resolveLanguage("auto", ["id-ID", "en"], shipped)).toBe("id");
+  expect(resolveLanguage(null, ["de-AT"], shipped)).toBe("de");
+  expect(resolveLanguage("fr", ["de"], shipped)).toBe("de");    // no longer shipped
+  expect(resolveLanguage("auto", ["ja"], shipped)).toBe("en");  // nothing matches
+});
+
+test("the browser's languages, most wanted first", () => {
+  expect(browserLanguages({ languages: ["de-DE", "en"], language: "de-DE" })).toEqual(["de-DE", "en"]);
+  expect(browserLanguages({ languages: [], language: "fr" })).toEqual(["fr"]);
+  expect(browserLanguages({})).toEqual([]);
+  expect(browserLanguages(null)).toEqual([]);     // no navigator (worker-like)
+});
+
+test("languages are listed in their own words", () => {
+  expect(languageName("en")).toBe("English");
+  expect(languageName("de")).toBe("Deutsch");
+  expect(languageName("id")).toBe("Indonesia");   // CLDR's own name
+  expect(languageName("ja")).toBe("日本語");
+  expect(languageName("pt-BR")).toMatch(/^Português/);
+  expect(languageName("not a code")).toBe("not a code");
+});
+
+test("dates and numbers use the browser's variant of the same language", () => {
+  expect(regionalLocale("en", ["en-GB", "de"])).toBe("en-GB");
+  expect(regionalLocale("en", ["de-DE"])).toBe("en");
+  expect(regionalLocale("de", ["en-US", "de-CH"])).toBe("de-CH");
+  expect(regionalLocale("pt-BR", [])).toBe("pt-BR");
+
+  const gb = createI18n({ preferred: ["en-GB"] });
+  const us = createI18n({ preferred: ["en-US"] });
+  const day = new Date(2026, 10, 7);
+  expect(gb.formatDate(day, { month: "short", day: "numeric" })).toBe("7 Nov");
+  expect(us.formatDate(day, { month: "short", day: "numeric" })).toBe("Nov 7");
+  // The words stay English either way
+  expect(gb.t("dates.yesterday")).toBe("Yesterday");
 });

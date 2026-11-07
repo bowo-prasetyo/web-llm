@@ -1,6 +1,6 @@
 # Hearth — Panduan Pengguna
 
-[English](../README.md) · **Bahasa Indonesia**
+[English](../README.md) · **Bahasa Indonesia** · [日本語](../ja/README.md)
 
 Selamat datang! Panduan ini menjelaskan cara memakai **Hearth**, chat AI pribadi yang tinggal di browser web Anda. Anda tidak perlu akun, tidak perlu memasang apa pun, dan tidak ada yang Anda ketik yang dikirim ke server.
 

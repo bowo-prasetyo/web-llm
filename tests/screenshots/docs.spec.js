@@ -82,48 +82,64 @@ test.describe("phone", () => {
   });
 });
 
-// ── Indonesian (README.id.md and docs/user-manual/id/) ────────────────────
-// The browser is set to Indonesian, so the app picks it by itself. No model
-// reply is shown (the welcome screen of a new chat, and the picker), so
-// nothing here puts words in a model's mouth: the chat titles are what a
+// ── Translations (README.<code>.md and docs/user-manual/<code>/) ─────────────
+// The browser is set to the language, so the app picks it by itself. No
+// model reply is shown (the welcome screen of a new chat, and the picker),
+// so nothing here puts words in a model's mouth: the chat titles are what a
 // person typed, and the previews are left empty.
-test.describe("Indonesian", () => {
-  test.use({ locale: "id-ID" });
+const TRANSLATED = [
+  {
+    code: "id", locale: "id-ID",
+    loaded: "Model berhasil dimuat", welcome: "Mau ngobrol tentang apa?", question: "Paling sering Anda pakai untuk apa?",
+    titles: ["Apa itu LLM?", "Email sopan untuk menolak undangan rapat", "Fungsi debounce di JavaScript", "Ide proyek sampingan akhir pekan"],
+  },
+  {
+    code: "ja", locale: "ja-JP",
+    loaded: "モデルを読み込みました", welcome: "どんなことを話しましょうか？", question: "主に何に使いますか？",
+    titles: ["LLMとは？", "会議の誘いを丁寧に断るメール", "JavaScriptのdebounce関数", "週末のサイドプロジェクトのアイデア"],
+  },
+];
 
-  const chatsId = [
-    { id: "llm", title: "Apa itu LLM?", persona: "friendly", ts: at(0, 5, 19) },
-    { id: "email", title: "Email sopan untuk menolak undangan rapat", persona: "writer", ts: at(0, 4, 19) },
-    { id: "debounce", title: "Fungsi debounce di JavaScript", persona: "coder", ts: at(1, 4, 2) },
-    { id: "ideas", title: "Ide proyek sampingan akhir pekan", persona: "brainstorm", ts: at(3, 10, 40) },
-  ].map(c => ({ ...c, preview: "", messages: [], model: M }));
+for (const lang of TRANSLATED) {
+  test.describe(`in ${lang.locale}`, () => {
+    test.use({ locale: lang.locale });
 
-  test("README and manual: the welcome screen on a computer, in Indonesian", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.clock.setFixedTime(NOW);
-    await seedStorage(page, {
-      "webllm-settings": { model: M, defaultPersona: "friendly", settingsVersion: 2 },
-      "webllm-cached-models": [M],
-      "webllm-model-health": { [M]: { ok: true } },
-      ...legacyChatItems(chatsId),
-    });
-    await page.goto("/");
-    await expect(page.locator(".status-bar")).toContainText("Model berhasil dimuat");
-    await page.click(".header-actions .icon-btn:first-child"); // Chat baru
-    await expect(page.locator(".welcome-title")).toHaveText("Mau ngobrol tentang apa?");
-    await expect(page.locator(".session-item")).toHaveCount(4);
-    await page.mouse.move(0, 899);
-    await sleep(300);
-    await page.screenshot({ path: DOCS + "screenshot-id.png" });
-  });
+    const chatsHere = ["llm", "email", "debounce", "ideas"].map((id, i) => ({
+      id,
+      title: lang.titles[i],
+      persona: ["friendly", "writer", "coder", "brainstorm"][i],
+      ts: [at(0, 5, 19), at(0, 4, 19), at(1, 4, 2), at(3, 10, 40)][i],
+      preview: "", messages: [], model: M,
+    }));
 
-  test.describe("phone", () => {
-    test.use({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
-
-    test("README and manual: the first-run model picker on a phone, in Indonesian", async ({ page }) => {
+    test(`README and manual: the welcome screen on a computer (${lang.code})`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.clock.setFixedTime(NOW);
+      await seedStorage(page, {
+        "webllm-settings": { model: M, defaultPersona: "friendly", settingsVersion: 2 },
+        "webllm-cached-models": [M],
+        "webllm-model-health": { [M]: { ok: true } },
+        ...legacyChatItems(chatsHere),
+      });
       await page.goto("/");
-      await expect(page.getByText("Paling sering Anda pakai untuk apa?")).toBeVisible();
-      await sleep(400);
-      await page.screenshot({ path: DOCS + "screenshot-phone-id.png" });
+      await expect(page.locator(".status-bar")).toContainText(lang.loaded);
+      await page.click(".header-actions .icon-btn:first-child"); // new chat
+      await expect(page.locator(".welcome-title")).toHaveText(lang.welcome);
+      await expect(page.locator(".session-item")).toHaveCount(4);
+      await page.mouse.move(0, 899);
+      await sleep(300);
+      await page.screenshot({ path: DOCS + `screenshot-${lang.code}.png` });
+    });
+
+    test.describe("phone", () => {
+      test.use({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
+
+      test(`README and manual: the first-run model picker on a phone (${lang.code})`, async ({ page }) => {
+        await page.goto("/");
+        await expect(page.getByText(lang.question)).toBeVisible();
+        await sleep(400);
+        await page.screenshot({ path: DOCS + `screenshot-phone-${lang.code}.png` });
+      });
     });
   });
-});
+}

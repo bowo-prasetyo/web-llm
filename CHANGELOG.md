@@ -9,6 +9,7 @@ What changed in each version of Hearth. The version is shown in
 - **Settings → Language**: choose the language of the app, or keep **Automatic** to follow the browser. More languages can be added (see [docs/translating.md](docs/translating.md)).
 - **Bahasa Indonesia**: the whole app in Indonesian. Browsers set to Indonesian get it automatically.
 - **日本語 (Japanese)**: the whole app in Japanese. Browsers set to Japanese get it automatically.
+- The README and the user manual in Indonesian ([README.id.md](README.id.md), [docs/user-manual/id/](docs/user-manual/id/README.md)) and Japanese ([README.ja.md](README.ja.md), [docs/user-manual/ja/](docs/user-manual/ja/README.md)).
 
 ### Changed
 - Dates in the chat list follow the app's language (in your browser's regional style, such as 7 Nov in a British English browser).

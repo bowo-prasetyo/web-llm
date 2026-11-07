@@ -27,7 +27,7 @@ import en from "./locales/en.js";
 export const DEFAULT_LOCALE = "en";
 
 // Languages the app ships, as BCP 47 codes. Each needs locales/<code>.js.
-export const SUPPORTED_LOCALES = ["en"];
+export const SUPPORTED_LOCALES = ["en", "id"];
 
 // Written right to left
 const RTL_LANGUAGES = new Set(["ar", "fa", "he", "ps", "sd", "ug", "ur", "yi"]);

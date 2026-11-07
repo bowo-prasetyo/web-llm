@@ -636,7 +636,7 @@ const APP_FILES = [
   "./personas.js", "./markdown.js", "./quality.js", "./context.js",
   "./picker.js", "./chatstore.js", "./attachments.js", "./pace.js",
   "./version.js", "./crash.js", "./storage.js", "./status.js", "./i18n.js",
-  "./locales/en.js",
+  "./locales/en.js", "./locales/id.js",
 ];
 const UPDATE_CHECK_EVERY_MS = 30 * 60 * 1000;
 const UPDATE_CHECK_MIN_GAP_MS = 5 * 60 * 1000;
@@ -1237,7 +1237,7 @@ const Home = {
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
             </svg>
-            {{ $t("composer.clear") }}
+            <span class="toolbar-label">{{ $t("composer.clear") }}</span>
           </button>
 
           <!-- A real button opening a hidden file input: a visible-but-tiny
@@ -1247,7 +1247,7 @@ const Home = {
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
-            <span>{{ $t("composer.attach") }}</span>
+            <span class="toolbar-label">{{ $t("composer.attach") }}</span>
           </button>
           <input ref="attachInput" type="file" class="attach-input" hidden accept=".pdf,.txt,.md,.markdown,text/plain,text/markdown,application/pdf" @change="attachFile" />
 

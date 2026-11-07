@@ -33,6 +33,7 @@ const SHELL_FILES = [
   "./status.js",
   "./i18n.js",
   "./locales/en.js",
+  "./locales/id.js",
   "./fonts/dm-mono-300-latin-ext.woff2",
   "./fonts/dm-mono-300-latin.woff2",
   "./fonts/dm-mono-400-italic-latin-ext.woff2",

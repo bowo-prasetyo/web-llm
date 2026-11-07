@@ -108,7 +108,7 @@ Found a problem? Use **Settings → This device → Report a problem**: it opens
 * Honest about small models: Friendly and Precise chats on models of about 1B parameters or fewer show a hint that they often get facts wrong (hidden per model with ×), and the picker's Fast size says so too
 * Six chat personas (Friendly, Precise, Writer, Coder, Brainstorm, Custom), chosen per chat and switchable mid-conversation
 * Welcome screen for new chats with persona cards and starter prompts
-* Responsive UI: on wide screens (1100px and up) the chat list sits beside the chat and can be hidden; narrower screens get a slide-in drawer; on phones Enter starts a new line and the Send button sends, and the message box grows as you type
+* Responsive UI: on wide screens (1024px and up) the chat list sits beside the chat and can be hidden; narrower screens get a slide-in drawer; on phones Enter starts a new line and the Send button sends, and the message box grows as you type
 
 ## Supported Models
 
@@ -339,7 +339,7 @@ All settings are saved automatically in `localStorage` as you change them and su
 
 ## Multi-session Chat
 
-* On wide screens (1100px and up) the chat list is shown beside the chat. The **☰ menu button** (or **×** in the list) hides and shows it, and the app remembers your choice
+* On wide screens (1024px and up) the chat list is shown beside the chat. The **☰ menu button** (or **×** in the list) hides and shows it, and the app remembers your choice
 * On narrower screens, tap the **☰ menu button** in the header to open the list as a drawer over the chat
 * Tap **+ New Chat** to start a fresh conversation — the current session auto-saves first
 * Previously saved chats are listed with auto-generated title, preview, model, and timestamp

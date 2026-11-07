@@ -82,6 +82,67 @@ test.describe("wide screens", () => {
   });
 });
 
+// ── Full-width frame, readable column ────────────────────────────────────
+// The header, status line and message bar fill the window (right of the
+// docked list); messages, the composer and Settings stay in a centred
+// column. Measured at common laptop widths (1366 and 1920 at 125% zoom,
+// 1280, 1920).
+const box = (page, sel) => page.locator(sel).first().boundingBox();
+const near = (a, b, d = 2) => Math.abs(a - b) <= d;
+
+for (const width of [1093, 1280, 1536, 1920]) {
+  test(`fills a ${width}px window, text in a readable column`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await ready(page);
+    await send(page, "a question");
+    await expect(page.locator(".sidebar")).toHaveClass(/docked/); // also at 1093 (1366 at 125%)
+    const list = await box(page, ".sidebar");
+    const right = width - (list.x + list.width); // space right of the list
+
+    // The frame spans all of it: no empty bands at the sides
+    for (const sel of [".container", ".header", ".status-bar", ".footer-container"]) {
+      const b = await box(page, sel);
+      check(near(b.x, list.x + list.width) && near(b.width, right), `${sel} fills the space right of the list (${width}px)`);
+    }
+
+    // Messages and the composer: a centred column, at most --chat-w wide
+    const msgs = await page.locator(".messages").evaluate(el => {
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return { left: r.left + parseFloat(cs.paddingLeft), right: r.right - parseFloat(cs.paddingRight) };
+    });
+    const footer = await box(page, ".footer");
+    const toolbar = await box(page, ".toolbar");
+    const mid = list.x + list.width + right / 2;
+    check(msgs.right - msgs.left <= 840, `messages column at most 840px (${Math.round(msgs.right - msgs.left)})`);
+    check(near((msgs.left + msgs.right) / 2, mid), "messages column centred");
+    check(footer.width <= 840 && near(footer.x + footer.width / 2, mid), "message box centred in the same column");
+    check(near(toolbar.x, footer.x) && near(toolbar.width, footer.width), "toolbar lines up with the message box");
+    if (right > 900) check(msgs.left - (list.x + list.width) > 20, "wide window: space beside the column is inside the frame");
+
+    // A user's message ends at the column's right edge
+    const user = await box(page, ".message.user");
+    check(near(user.x + user.width, msgs.right), "your messages align to the column");
+
+    // Settings: full-width header, centred column
+    await page.click('button[title="Settings"]');
+    const head = await box(page, ".settings-header");
+    check(near(head.x, 0) && near(head.width, width), "Settings header spans the window");
+    const section = await box(page, ".settings-section");
+    check(section.width <= 760 && near(section.x + section.width / 2, width / 2), "Settings content is a centred column");
+  });
+}
+
+test("below 1024px the list is a drawer and the chat uses the whole window", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await ready(page);
+  await expect(page.locator(".sidebar")).not.toHaveClass(/docked/);
+  const c = await box(page, ".container");
+  check(near(c.x, 0) && near(c.width, 1000), "the chat spans the window");
+  const footer = await box(page, ".footer");
+  check(footer.width <= 840 && near(footer.x + footer.width / 2, 500), "message box in a centred column");
+});
+
 test("the header says what the app is", async ({ page }) => {
   await ready(page);
   await expect(page.locator("h1.header-title")).toHaveText("Hearth");

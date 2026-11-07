@@ -11,6 +11,7 @@ What changed in each version of Hearth. The version is shown in
 - **日本語 (Japanese)**: the whole app in Japanese. Browsers set to Japanese get it automatically.
 
 ### Changed
+- On computers, Hearth fills the window: the header, status line and message bar span the whole width instead of a narrow strip in the middle, while messages stay in a comfortable reading column (Settings too). The chat list now sits beside the chat from 1024px wide, so it also does on laptops with display scaling (such as 1366px at 125%).
 - Dates in the chat list follow the app's language (in your browser's regional style, such as 7 Nov in a British English browser).
 - Counts read naturally: "Exported 1 session" instead of "1 session(s)".
 - On phones, **Clear** and **Attach** in the chat toolbar show only their icons, so the model menu stays readable.

@@ -25,6 +25,8 @@ Everything on one page. Print it or keep it open in a tab.
 | **×** on a document chip | Above the message box | Remove that document from this chat |
 | **Thought process** | Above a reply from a thinking model | Show or hide the model's reasoning |
 
+On phones, **Clear** and **Attach** show only their icons.
+
 ## Keyboard shortcuts
 
 | Keys | Computer | Phone / tablet |
@@ -49,6 +51,7 @@ Everything on one page. Print it or keep it open in a tab.
 | Get better answers | Choose a bigger model (**Settings → Help me choose a model** → Smart) |
 | Allow longer replies | **Settings → Replies → Max Tokens** |
 | Fix gibberish replies | Tap **Switch model** in the warning, or pick a **32-bit** model |
+| Change the app's language | **Settings → Language** |
 | Back up my chats | **Settings → Export Chats** |
 | Move chats to another device | Export Chats here → **Import Chats** there |
 | Install the app | **Settings → This device → Install app** (iPhone/iPad: Safari **Share → Add to Home Screen**) |

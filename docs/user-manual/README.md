@@ -1,5 +1,7 @@
 # Hearth — User Manual
 
+**English** · [Bahasa Indonesia](id/README.md)
+
 Welcome! This manual explains how to use **Hearth**, a private AI chat that lives in your web browser. You don't need an account, you don't need to install anything, and nothing you type is sent to a server.
 
 **Open the app:** [bowo-prasetyo.github.io/web-llm](https://bowo-prasetyo.github.io/web-llm/)

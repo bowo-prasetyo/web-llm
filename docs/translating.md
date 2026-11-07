@@ -35,6 +35,19 @@ chats: {
 
 **Links, buttons and bold text inside a sentence.** Some messages have a placeholder that the page fills with markup, for example `"Suggested: {model}"`, where `{model}` is the model's name in bold, or `"Powered by {webllm}"`, where `{webllm}` is a link. Keep the placeholder; move it wherever your language needs it. A comment above such a message in `locales/en.js` says what it becomes.
 
+## Translating the documentation
+
+The README and the user manual can be translated too (Indonesian is done):
+
+* `README.<code>.md` next to `README.md`, and `docs/user-manual/<code>/` with **every** page of the English manual, same file names.
+* Translate the headings too. Links to a heading (`#…`) follow the translated text, GitHub style: lower case, punctuation dropped, spaces become `-`. Update the links to match.
+* Use the app's own words for anything on screen (`locales/<code>.js`), so readers find what the manual describes.
+* Keep code, commands, file names and model names as they are. Say at the top that the English version wins if they differ.
+* Add a link to your language at the top of `README.md` and of `docs/user-manual/README.md`.
+* Screenshots of the app in your language: add a scene to `tests/screenshots/docs.spec.js` (`npm run screenshots`). Only show model replies that a model really wrote.
+
+`npm run test:unit` checks every link and heading anchor in the docs (`tests/unit/docs.spec.js`) and that your manual has every page.
+
 ## For developers
 
 ```js

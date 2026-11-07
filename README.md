@@ -2,7 +2,7 @@
 
 # Hearth
 
-**English** · [Bahasa Indonesia](README.id.md)
+**English** · [Bahasa Indonesia](README.id.md) · [日本語](README.ja.md)
 
 **Private AI chat that lives in your browser.** No server. No account. Works offline.
 
@@ -32,7 +32,7 @@ The AI model runs on your own device, so nothing you type leaves it. Once a mode
 2. Choose what you'll mostly use it for (everyday chat, coding or writing) and a size (Fast, Balanced or Smart).
 3. Wait for the one-time download (from about 0.4 GB for the smallest pick to 4.8 GB for the largest), then start chatting. Next time it loads from your device.
 
-New to the app? The **[User Manual](docs/user-manual/README.md)** ([Bahasa Indonesia](docs/user-manual/id/README.md)) walks through everything step by step, in plain language: chatting, personas, documents, choosing a model, settings, offline use and backups, and troubleshooting.
+New to the app? The **[User Manual](docs/user-manual/README.md)** ([Bahasa Indonesia](docs/user-manual/id/README.md), [日本語](docs/user-manual/ja/README.md)) walks through everything step by step, in plain language: chatting, personas, documents, choosing a model, settings, offline use and backups, and troubleshooting.
 
 ## What stays on your device, and what is downloaded
 
@@ -478,7 +478,7 @@ npm run test:e2e      # the app in Chromium
 * **Unit tests** (`tests/unit/`) cover `quality.js`, `context.js`, `markdown.js`, `picker.js` (including model names and load progress), `attachments.js`, `pace.js`, `crash.js`, `storage.js`, `personas.js`, `status.js`, `i18n.js` (including a check that every translation has all the keys, placeholders and plural forms it needs), and the documentation's links (`docs.spec.js`: every link and anchor in the READMEs and the manual, translations included, points to a file and heading that exist)
 * **Browser tests** (`tests/e2e/`) run the real app in Chromium: light and dark themes and their contrast, the docked chat list and text sizes, settings, download progress and cancel, readable model names, scrolling while a reply streams, the message box on desktop and phones, download and delete confirmations, keyboard focus and accessible names, chat storage (IndexedDB, migration, export/import, fallback), documents attached to chats, personas, reply rendering and safety, model health on broken 16-bit GPUs, Continue and the repeat guard (with the real `worker.js`), progress-based time limits and the writing-speed note, the model picker, offline mode, the "new version available" banner, and the language choice (Indonesian and Japanese included)
 * The tests need no network, GPU or model downloads: the pinned CDN libraries are served from `node_modules`, and WebLLM is replaced by a scripted mock (`tests/support/mock-webllm.js`); some UI tests use a fake worker (`tests/support/fake-worker.js`) that reads its model lists from `worker.js`
-* **Documentation screenshots** (`docs/screenshot.png`, `docs/screenshot-phone.png`, and the Indonesian `docs/screenshot-id.png`, `docs/screenshot-phone-id.png`) are drawn by `npm run screenshots` (`tests/screenshots/docs.spec.js`) with the same mocks, so they can be redrawn after any UI change without a GPU. The chat in the English screenshot is a real Qwen3.5 2B conversation stored as a saved chat, so its replies are the model's own words; the Indonesian ones show the welcome screen and the model picker, which have no model replies. `npm test` leaves the images alone
+* **Documentation screenshots** (`docs/screenshot.png`, `docs/screenshot-phone.png`, the Indonesian `docs/screenshot-id.png`, `docs/screenshot-phone-id.png`, and the Japanese `docs/screenshot-ja.png`, `docs/screenshot-phone-ja.png`) are drawn by `npm run screenshots` (`tests/screenshots/docs.spec.js`) with the same mocks, so they can be redrawn after any UI change without a GPU. The chat in the English screenshot is a real Qwen3.5 2B conversation stored as a saved chat, so its replies are the model's own words; the Indonesian and Japanese ones show the welcome screen and the model picker, which have no model replies. `npm test` leaves the images alone
 * GitHub Actions runs everything on every pull request and on pushes to `main` (`.github/workflows/tests.yml`)
 * When you change a pinned library version, update every place it appears together: `index.html` (Vue, Vue Router, marked, DOMPurify, highlight.js, PDF.js), `worker.js` (WebLLM and its `WEBLLM_VERSION` constant, Transformers.js), `sw.js`, `package.json`, `tests/support/fixtures.js` and the library list in `tests/e2e/offline.spec.js`. `grep -rn "<old version>" --exclude-dir=node_modules .` finds them all
 

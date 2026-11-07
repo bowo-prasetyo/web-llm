@@ -81,3 +81,49 @@ test.describe("phone", () => {
     await page.screenshot({ path: DOCS + "screenshot-phone.png" });
   });
 });
+
+// ── Indonesian (README.id.md and docs/user-manual/id/) ────────────────────
+// The browser is set to Indonesian, so the app picks it by itself. No model
+// reply is shown (the welcome screen of a new chat, and the picker), so
+// nothing here puts words in a model's mouth: the chat titles are what a
+// person typed, and the previews are left empty.
+test.describe("Indonesian", () => {
+  test.use({ locale: "id-ID" });
+
+  const chatsId = [
+    { id: "llm", title: "Apa itu LLM?", persona: "friendly", ts: at(0, 5, 19) },
+    { id: "email", title: "Email sopan untuk menolak undangan rapat", persona: "writer", ts: at(0, 4, 19) },
+    { id: "debounce", title: "Fungsi debounce di JavaScript", persona: "coder", ts: at(1, 4, 2) },
+    { id: "ideas", title: "Ide proyek sampingan akhir pekan", persona: "brainstorm", ts: at(3, 10, 40) },
+  ].map(c => ({ ...c, preview: "", messages: [], model: M }));
+
+  test("README and manual: the welcome screen on a computer, in Indonesian", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.clock.setFixedTime(NOW);
+    await seedStorage(page, {
+      "webllm-settings": { model: M, defaultPersona: "friendly", settingsVersion: 2 },
+      "webllm-cached-models": [M],
+      "webllm-model-health": { [M]: { ok: true } },
+      ...legacyChatItems(chatsId),
+    });
+    await page.goto("/");
+    await expect(page.locator(".status-bar")).toContainText("Model berhasil dimuat");
+    await page.click(".header-actions .icon-btn:first-child"); // Chat baru
+    await expect(page.locator(".welcome-title")).toHaveText("Mau ngobrol tentang apa?");
+    await expect(page.locator(".session-item")).toHaveCount(4);
+    await page.mouse.move(0, 899);
+    await sleep(300);
+    await page.screenshot({ path: DOCS + "screenshot-id.png" });
+  });
+
+  test.describe("phone", () => {
+    test.use({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
+
+    test("README and manual: the first-run model picker on a phone, in Indonesian", async ({ page }) => {
+      await page.goto("/");
+      await expect(page.getByText("Paling sering Anda pakai untuk apa?")).toBeVisible();
+      await sleep(400);
+      await page.screenshot({ path: DOCS + "screenshot-phone-id.png" });
+    });
+  });
+});

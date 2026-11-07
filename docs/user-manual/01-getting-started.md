@@ -91,7 +91,7 @@ The reply appears word by word. That's it, you're chatting!
 | **Status bar** | Short messages, such as "loading" or "ready". Shows an **Offline** badge when you have no internet. |
 | **Chat list** (left on wide screens; slides in on phones) | All your saved chats, with a search box. |
 | **Conversation** (middle) | Your messages and the assistant's replies. |
-| **Toolbar** (above the message box) | Persona menu, model menu, **Clear**, and **Attach**. |
+| **Toolbar** (above the message box) | Persona menu, model menu, **Clear**, and **Attach**. On phones, **Clear** and **Attach** show only their icons. |
 | **Message box** (bottom) | Where you type. The **Send** button sits to its right. |
 
 ## What's next?

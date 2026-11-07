@@ -13,6 +13,7 @@ Open Settings by tapping **⚙** in the top-right corner of the header. Tap **Ba
 | Section | What's in it |
 |---|---|
 | [Model](#model) | Which AI model to use, and **Help me choose a model** |
+| [Appearance](#appearance) | Light or dark theme |
 | [Language](#language) | The language of the app's buttons and messages |
 | [Replies](#replies) | Creativity, reply length, memory, and thinking |
 | [Personas](#personas) | Default persona and your Custom instructions |
@@ -27,6 +28,11 @@ Open Settings by tapping **⚙** in the top-right corner of the header. Tap **Ba
 * **Help me choose a model**: opens the two-question picker.
 
 Picking a different model also applies that model's recommended reply settings. See [Choosing a model](06-models.md) for help.
+
+## Appearance
+
+* **System** (the default) follows your device's light or dark setting, and changes when it does.
+* **Light** or **Dark** always uses that theme, whatever the device is set to.
 
 ## Language
 

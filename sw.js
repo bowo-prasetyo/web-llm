@@ -30,6 +30,7 @@ const SHELL_FILES = [
   "./version.js",
   "./crash.js",
   "./storage.js",
+  "./status.js",
   "./fonts/dm-mono-300-latin-ext.woff2",
   "./fonts/dm-mono-300-latin.woff2",
   "./fonts/dm-mono-400-italic-latin-ext.woff2",

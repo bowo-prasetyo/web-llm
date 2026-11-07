@@ -1,7 +1,7 @@
 // storage.js: telling people when a model won't fit in the browser's storage.
 import { test, expect } from "@playwright/test";
 import {
-  STORAGE_FULL_MESSAGE, isQuotaError, friendlyError, storageEstimate,
+  storageFullMessage, isQuotaError, friendlyError, storageEstimate,
   spaceShortfall, requestPersistence,
 } from "../../storage.js";
 
@@ -14,8 +14,8 @@ test("storage-full errors are recognised", () => {
 });
 
 test("the plain-language message replaces only storage errors", () => {
-  expect(friendlyError("Quota exceeded.")).toBe(STORAGE_FULL_MESSAGE);
-  expect(STORAGE_FULL_MESSAGE).toContain("Private (incognito) windows have very little storage");
+  expect(friendlyError("Quota exceeded.")).toBe(storageFullMessage());
+  expect(storageFullMessage()).toContain("Private (incognito) windows have very little storage");
   expect(friendlyError("Something else")).toBe("Something else");
 });
 

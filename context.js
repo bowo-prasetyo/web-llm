@@ -35,10 +35,15 @@ export function fitToContext({ history, prompt, augmentedPrompt, contextWindow, 
   }
 
   if (!fits(finalPrompt === prompt ? 0 : ragExtra)) {
-    throw new Error(
+    // English for logs. The page shows errors["context-too-long"]: this
+    // runs in the worker, which doesn't know the page's language.
+    const err = new Error(
       "Your message is too long for this model's context window " +
       `(${contextWindow} tokens). Shorten it, or raise Context Window in Settings.`
     );
+    err.code = "context-too-long";
+    err.params = { tokens: String(contextWindow) };
+    throw err;
   }
 
   return { history: [...sys, ...rest], augmentedPrompt: finalPrompt, droppedContext };

@@ -71,9 +71,9 @@ test("after one online visit, the app works with no network", async ({ page, con
 
 test("updated app files arrive on the next online visit", async ({ page, context }) => {
   await visitOnline(page);
-  const updated = fs.readFileSync(new URL("../../personas.js", import.meta.url), "utf8")
+  const updated = fs.readFileSync(new URL("../../locales/en.js", import.meta.url), "utf8")
     .replace("Everyday help and easygoing chat", "Everyday help and easygoing chat (updated)");
-  await context.route(/\/personas\.js$/, r => r.fulfill({ body: updated, contentType: "text/javascript" }));
+  await context.route(/\/locales\/en\.js$/, r => r.fulfill({ body: updated, contentType: "text/javascript" }));
   await page.reload();
   await expect(page.locator(".status-bar")).toContainText("Model loaded successfully");
   await page.click('button[title="New chat"]');

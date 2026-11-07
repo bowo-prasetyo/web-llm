@@ -9,6 +9,8 @@
 // Nothing here touches the DOM or window at import time, so worker.js can
 // import stripThinking too.
 
+import { t } from "./i18n.js";
+
 // ── Thinking blocks ─────────────────────────────────────────────────────
 
 const OPEN = "<think>";
@@ -88,10 +90,10 @@ function codeBlock(text, lang, highlight) {
   } else {
     body = escapeHtml(text);
   }
-  const label = language ? escapeHtml(language) : "code";
+  const label = escapeHtml(language || t("message.code-label"));
   const cls = language ? ` class="hljs language-${escapeHtml(language)}"` : ` class="hljs"`;
   return `<div class="code-block"><div class="code-head"><span class="code-lang">${label}</span>` +
-    `<button type="button" class="code-copy" aria-label="Copy code">Copy</button></div>` +
+    `<button type="button" class="code-copy" aria-label="${escapeHtml(t("message.copy-code"))}">${escapeHtml(t("message.copy"))}</button></div>` +
     `<pre><code${cls}>${body}</code></pre></div>`;
 }
 

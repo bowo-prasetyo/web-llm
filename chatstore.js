@@ -16,6 +16,8 @@
 // the same API runs on localStorage with the old limits, so the app still
 // works.
 
+import { t } from "./i18n.js";
+
 const DB_NAME = "webllm-chats";
 const DB_VERSION = 2; // 2: attachments
 
@@ -217,7 +219,7 @@ class LocalStorageStore {
 
 function legacyTitle(messages) {
   const first = messages.find(m => m.role === "user");
-  if (!first) return "Chat";
+  if (!first) return t("chats.legacy");
   const text = String(first.content || "").trim();
   return text.slice(0, 42) + (text.length > 42 ? "…" : "");
 }

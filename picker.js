@@ -4,36 +4,36 @@
 // Each pick names a q4f16 model and its q4f32 twin. q4f16 is smaller and
 // faster but needs working 16-bit GPU math; devices without it get q4f32.
 
-import { t } from "./i18n.js";
+import { t, formatNumber } from "./i18n.js";
 
 export const USES = [
   {
     id: "chat",
     icon: "💬",
-    title: "Everyday chat",
-    desc: "Questions, explanations, ideas and conversation",
+    get title() { return t("picker.use-chat"); },
+    get desc() { return t("picker.use-chat-desc"); },
     persona: "friendly",
   },
   {
     id: "code",
     icon: "💻",
-    title: "Coding",
-    desc: "Write, explain and fix code",
+    get title() { return t("picker.use-code"); },
+    get desc() { return t("picker.use-code-desc"); },
     persona: "coder",
   },
   {
     id: "write",
     icon: "✍️",
-    title: "Writing",
-    desc: "Draft, rewrite and polish emails and texts",
+    get title() { return t("picker.use-write"); },
+    get desc() { return t("picker.use-write-desc"); },
     persona: "writer",
   },
 ];
 
 export const TIERS = [
-  { id: "fast",     title: "Fast",     desc: "Quickest replies, smallest download. More likely to get facts wrong." },
-  { id: "balanced", title: "Balanced", desc: "Noticeably better answers. Best for most laptops." },
-  { id: "smart",    title: "Smart",    desc: "Best answers, large download. Needs a strong GPU (4–8 GB)." },
+  { id: "fast",     get title() { return t("picker.tier-fast"); },     get desc() { return t("picker.tier-fast-desc"); } },
+  { id: "balanced", get title() { return t("picker.tier-balanced"); }, get desc() { return t("picker.tier-balanced-desc"); } },
+  { id: "smart",    get title() { return t("picker.tier-smart"); },    get desc() { return t("picker.tier-smart-desc"); } },
 ];
 
 // Qwen3.5, the newest generation WebLLM 0.2.84 supports (also what Kovrune
@@ -111,7 +111,9 @@ export function modelPrecision(id) {
 // "2.2 GB", "945 MB"
 export function formatSize(mb) {
   if (!mb) return "";
-  return mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : Math.round(mb) + " MB";
+  return mb >= 1024
+    ? t("units.gb", { size: formatNumber(mb / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
+    : t("units.mb", { size: String(Math.round(mb)) });
 }
 
 // ── Model loading progress ──────────────────────────────────────────────

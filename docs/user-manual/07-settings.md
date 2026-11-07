@@ -36,7 +36,7 @@ Picking a different model also applies that model's recommended reply settings. 
 
 ## Language
 
-The language of the app itself: its buttons, menus and messages. Hearth is available in English and Indonesian (Bahasa Indonesia).
+The language of the app itself: its buttons, menus and messages. Hearth is available in English, Indonesian (Indonesia in the list) and Japanese (日本語).
 
 * **Automatic** (the default) uses your browser's language when Hearth has it, and English otherwise. The language it picked is shown in brackets.
 * Or pick a language from the list. Each one is written in its own language, so you can find yours.

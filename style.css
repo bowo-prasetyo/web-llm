@@ -339,6 +339,7 @@ html, body, #app {
 .header-actions {
   display: flex;
   gap: 6px;
+  flex-shrink: 0; /* the buttons always fit; the name and tagline give way */
 }
 
 .icon-btn {
@@ -835,6 +836,7 @@ html, body, #app {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 /* Overlay behind sidebar on mobile */
@@ -2248,6 +2250,10 @@ label.action-btn:focus-within {
   font-size: var(--fs-meta);
   color: var(--text-3);
   white-space: nowrap;
+  /* A longer tagline (in some languages) ends with "…" instead of pushing
+     the header buttons off screen */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 @media (max-width: 380px) {
   .header-tagline { display: none; }

@@ -666,5 +666,5 @@ Aplikasi ini dirilis di bawah [Lisensi MIT](LICENSE). Font DM Sans dan DM Mono b
 
 ## Dibantu oleh
 
-* [Claude AI](https://claude.ai)
+* [Claude Code](https://claude.ai/code)
 * [ChatGPT](https://chatgpt.com)

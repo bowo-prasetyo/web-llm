@@ -661,5 +661,5 @@ The app is released under the [MIT License](LICENSE). The DM Sans and DM Mono fo
 
 ## Assisted By
 
-* [Claude AI](https://claude.ai)
-* [ChatGPT](https://chatgpt.com)
+* [Claude Code](https://claude.ai/code)
+* [ChatGPT](https://chatgpt.com/)

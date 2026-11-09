@@ -662,5 +662,5 @@ WebLLMのストリーミング生成（温度 · top-p · 頻度/存在/繰り�
 
 ## 協力
 
-* [Claude AI](https://claude.ai)
+* [Claude Code](https://claude.ai/code)
 * [ChatGPT](https://chatgpt.com)
